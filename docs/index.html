@@ -288,8 +288,15 @@
     .t-info   { color: var(--text2); }
     .t-cyan   { color: var(--cyan); }
     .t-save   { color: var(--green); font-weight: 600; }
-    .s-used   { color: var(--cyan); }
-    .s-free   { color: var(--text3); }
+    .s-used, .s-free {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border-radius: 3px;
+      font-size: 0;
+      vertical-align: middle;
+    }
+    .s-used   { background: var(--cyan); box-shadow: 0 0 4px rgba(0,200,240,.3); }
+    .s-free   { background: var(--bg3); border: 1px solid var(--border); }
 
     .cursor {
       display: inline-block;
@@ -1166,13 +1173,16 @@ const HERO_LINES = [
   { html: '', delay: 300 },
   { html: '<span class="t-dim">$</span> <span class="t-cmd">cce</span>', delay: 500 },
   { html: '', delay: 200 },
-  { html: '<span class="t-dim">╭──────────── Code Context Engine v0.3.1 ────────────╮</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>             <span class="t-cyan" style="font-weight:700">⬡  C C E  ⬡</span>              <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>             <span style="font-weight:700">my-project</span>              <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">├────────────────────┬─────────────────────┤</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span> <span class="t-ok">●</span> Indexed  <span class="t-cyan">1,247</span> <span class="t-dim">│</span> <span class="t-cyan">cce status</span>  <span class="t-dim">info</span>    <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span> <span class="t-ok">●</span> Savings  <span class="t-save">70%</span>   <span class="t-dim">│</span> <span class="t-cyan">cce savings</span> <span class="t-dim">tokens</span>  <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">╰────────────────────┴─────────────────────╯</span>', delay: 80 },
+  { html: '<span class="t-dim">╭────────────────── Code Context Engine v0.3.1 ──────────────────╮</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span>                    <span class="t-cyan" style="font-weight:700">⬡  C C E  ⬡</span>                     <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span>                    <span style="font-weight:700">my-project</span>                     <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span>       <span class="t-dim">standard profile  ·  ~/my-project</span>        <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">├───────────────────────────┬────────────────────────────────┤</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span> <span class="t-info">Status</span>                    <span class="t-dim">│</span> <span class="t-info">Getting started</span>               <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Indexed   <span class="t-cyan">1,247</span> chunks <span class="t-dim">│</span>  <span class="t-cyan">cce status</span>  <span class="t-dim">full diagnostics</span> <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Compress  <span class="t-dim">truncation</span>   <span class="t-dim">│</span>  <span class="t-cyan">cce savings</span> <span class="t-dim">token savings</span>    <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Savings   <span class="t-save">70%</span>          <span class="t-dim">│</span>  <span class="t-cyan">cce list</span>    <span class="t-dim">all commands</span>     <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">╰───────────────────────────┴────────────────────────────────╯</span>', delay: 80 },
 ];
 
 let _termTimers = [];
@@ -1230,17 +1240,16 @@ function replayTerminal() {
 function buildSavingsDemo() {
   const el = document.getElementById('savings-demo');
   const U = '⛁', F = '⛶';
-  const usedPct = 0.29;
   const ROWS = 6, COLS = 10;
-  const filled = Math.round(usedPct * ROWS * COLS);
+  const filledPerRow = 3;
 
   const labels = [
-    { text: 'my-project · 438 queries', cls: '' },
+    { text: 'my-project · 38 queries', cls: '' },
     { text: '14.2k served · 26.0k chunks raw · 48.0k full-file baseline', cls: 'muted' },
     { text: '', cls: '' },
     { text: 'Token savings (split)', cls: '' },
-    { text: '⛁ Retrieval:    46%  vs reading full files', cls: '' },
-    { text: '⛶ Compression:  45%  chunk → summary', cls: 'highlight' },
+    { html: '<span class="s-used"></span> Retrieval:    46%  vs reading full files', cls: '' },
+    { html: '<span class="s-free"></span> Compression:  45%  chunk → summary', cls: 'highlight' },
   ];
 
   for (let r = 0; r < ROWS; r++) {
@@ -1249,9 +1258,8 @@ function buildSavingsDemo() {
 
     let cells = '  ';
     for (let c = 0; c < COLS; c++) {
-      const idx = r * COLS + c;
-      const ch = idx < filled ? U : F;
-      const cls = idx < filled ? 's-used' : 's-free';
+      const ch = c < filledPerRow ? U : F;
+      const cls = c < filledPerRow ? 's-used' : 's-free';
       cells += `<span class="${cls}">${ch}</span>`;
       if (c < COLS - 1) cells += ' ';
     }
@@ -1262,7 +1270,11 @@ function buildSavingsDemo() {
 
     const labelEl = document.createElement('span');
     labelEl.className = 'grid-label ' + (labels[r].cls || '');
-    labelEl.textContent = '   ' + labels[r].text;
+    if (labels[r].html) {
+      labelEl.innerHTML = '   ' + labels[r].html;
+    } else {
+      labelEl.textContent = '   ' + (labels[r].text || '');
+    }
 
     row.appendChild(gridEl);
     row.appendChild(labelEl);
