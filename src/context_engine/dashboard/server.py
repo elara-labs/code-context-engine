@@ -188,6 +188,109 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
     async def get_sessions() -> list:
         return _read_sessions()
 
+    # ── memory.db API (PR 5) ────────────────────────────────────────────────
+    # These endpoints expose the per-project memory.db introduced in PRs 1–4.
+    # All queries open a fresh connection (cheap on SQLite WAL) so the
+    # dashboard process never holds a long-lived handle that would block the
+    # MCP server's writes.
+
+    def _open_memory_conn():
+        from context_engine.memory import db as memory_db
+        path = memory_db.memory_db_path(storage_base)
+        if not path.exists():
+            return None
+        return memory_db.connect(path)
+
+    @app.get("/api/memory/sessions")
+    async def memory_sessions_list(limit: int = 50) -> list:
+        """Sessions list: most-recent first. Limited to `limit` rows."""
+        conn = _open_memory_conn()
+        if conn is None:
+            return []
+        try:
+            rows = list(conn.execute(
+                "SELECT id, project, started_at, ended_at, status, "
+                "prompt_count, rollup_summary FROM sessions "
+                "ORDER BY started_at_epoch DESC LIMIT ?",
+                (max(1, min(limit, 500)),),
+            ))
+        finally:
+            conn.close()
+        return [dict(r) for r in rows]
+
+    @app.get("/api/memory/sessions/{session_id}/timeline")
+    async def memory_session_timeline(session_id: str) -> dict:
+        """A single session's turn summaries plus header metadata."""
+        conn = _open_memory_conn()
+        if conn is None:
+            return {"session": None, "turns": []}
+        try:
+            session_row = conn.execute(
+                "SELECT id, project, started_at, ended_at, status, "
+                "prompt_count, rollup_summary FROM sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+            if session_row is None:
+                return {"session": None, "turns": []}
+            turn_rows = list(conn.execute(
+                "SELECT prompt_number, summary, tier, created_at_epoch "
+                "FROM turn_summaries WHERE session_id = ? "
+                "ORDER BY prompt_number ASC",
+                (session_id,),
+            ))
+        finally:
+            conn.close()
+        return {
+            "session": dict(session_row),
+            "turns": [dict(r) for r in turn_rows],
+        }
+
+    @app.get("/api/memory/decisions")
+    async def memory_decisions_search(
+        q: str = "", source: str | None = None, limit: int = 50
+    ) -> list:
+        """FTS5 search over decisions, optionally filtered by source."""
+        conn = _open_memory_conn()
+        if conn is None:
+            return []
+        limit = max(1, min(limit, 500))
+        try:
+            params: list = []
+            sql = (
+                "SELECT d.id, d.session_id, d.decision, d.reason, d.source, "
+                "d.created_at FROM decisions d "
+            )
+            if q.strip():
+                sql += (
+                    "JOIN decisions_fts ON decisions_fts.rowid = d.id "
+                    "WHERE decisions_fts MATCH ? "
+                )
+                # Wrap in a phrase quote so FTS5's tokeniser treats user
+                # input as literal text — without this, characters like '-'
+                # parse as operators (`bge-small` becomes "bge AND NOT
+                # small") and queries silently miss real hits.
+                params.append('"' + q.strip().replace('"', '""') + '"')
+            else:
+                sql += "WHERE 1=1 "
+            if source in {"manual", "auto", "migrated"}:
+                sql += "AND d.source = ? "
+                params.append(source)
+            sql += "ORDER BY d.created_at_epoch DESC LIMIT ?"
+            params.append(limit)
+            try:
+                rows = list(conn.execute(sql, params))
+            except Exception:
+                # FTS5 syntax errors on weird queries — fall back to unranked.
+                rows = list(conn.execute(
+                    "SELECT id, session_id, decision, reason, source, "
+                    "created_at FROM decisions ORDER BY created_at_epoch "
+                    "DESC LIMIT ?",
+                    (limit,),
+                ))
+        finally:
+            conn.close()
+        return [dict(r) for r in rows]
+
     @app.get("/api/savings")
     async def get_savings() -> dict:
         stats = _read_stats()

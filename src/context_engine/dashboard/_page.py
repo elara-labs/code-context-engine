@@ -565,6 +565,11 @@ body { background: var(--bg2); color: var(--text); font-family: var(--sans); fon
       <span class="nav-count" id="nav-sessions-count">\u2014</span>
     </button>
 
+    <button class="nav-item" onclick="showPage('memory')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9 1.65 1.65 0 0 0 4.27 7.18l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Memory
+    </button>
+
     <div class="nav-section-label" style="margin-top:4px">Analytics</div>
 
     <button class="nav-item" onclick="showPage('savings')">
@@ -812,6 +817,63 @@ body { background: var(--bg2); color: var(--text); font-family: var(--sans); fon
       </div>
     </div>
 
+    <!-- ═══════════════════ MEMORY ═══════════════════ -->
+    <div class="page" id="page-memory">
+      <div class="page-hdr">
+        <div class="page-hdr-left">
+          <div class="page-hdr-title">Memory</div>
+          <div class="page-hdr-sub">Cross-session memory store (memory.db) — sessions, timelines, decisions</div>
+        </div>
+        <div class="page-hdr-right">
+          <div class="comp-grid" style="display:flex; gap:6px">
+            <button class="comp-btn comp-btn-active" id="mem-tab-sessions" onclick="memShowTab('sessions')">Sessions</button>
+            <button class="comp-btn" id="mem-tab-decisions" onclick="memShowTab('decisions')">Decisions</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sessions list + drill-down view (kept side by side; the drill panel
+           appears when a session is selected). -->
+      <div class="memory-pane" id="mem-pane-sessions">
+        <div class="data-table">
+          <div class="table-head"><div>Session</div><div>Started</div><div>Status</div><div>Prompts</div><div>Rollup</div></div>
+          <div id="mem-sessions-rows"></div>
+        </div>
+
+        <div class="panel" id="mem-timeline-panel" style="margin-top:14px; display:none">
+          <div class="panel-head">
+            <div class="panel-title" id="mem-timeline-title">Session timeline</div>
+          </div>
+          <div class="panel-body" id="mem-timeline-body"></div>
+        </div>
+      </div>
+
+      <!-- Decisions search -->
+      <div class="memory-pane" id="mem-pane-decisions" style="display:none">
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Decisions search</div>
+          </div>
+          <div class="panel-body">
+            <div style="display:flex; gap:8px; margin-bottom:10px">
+              <input id="mem-decision-q" type="text" placeholder="search decisions (FTS5)…" style="flex:1; padding:6px 10px; background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:4px">
+              <select id="mem-decision-source" style="padding:6px 10px; background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:4px">
+                <option value="">all sources</option>
+                <option value="manual">manual</option>
+                <option value="auto">auto</option>
+                <option value="migrated">migrated</option>
+              </select>
+              <button class="comp-btn" onclick="memDecisionSearch()">search</button>
+            </div>
+            <div class="data-table">
+              <div class="table-head"><div>Decision</div><div>Reason</div><div>Source</div><div>When</div></div>
+              <div id="mem-decision-rows"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -821,7 +883,7 @@ body { background: var(--bg2); color: var(--text); font-family: var(--sans); fon
 var API = '';
 var allFiles = [];
 var currentLevel = 'standard';
-var PAGES = ['overview','files','sessions','savings'];
+var PAGES = ['overview','files','sessions','memory','savings'];
 
 // Pick up an optional bearer token from the URL (?token=...). The server
 // only enforces it on mutating endpoints when CCE_DASHBOARD_TOKEN is set;
@@ -981,7 +1043,111 @@ function showPage(name) {
   });
   if (name==='files')    loadFiles();
   if (name==='sessions') loadSessions();
+  if (name==='memory')   loadMemorySessions();
   if (name==='savings')  loadSavings();
+}
+
+// ── Memory page (PR 5) ───────────────────────────
+
+function memShowTab(tab) {
+  document.getElementById('mem-pane-sessions').style.display  = tab==='sessions'  ? '' : 'none';
+  document.getElementById('mem-pane-decisions').style.display = tab==='decisions' ? '' : 'none';
+  document.getElementById('mem-tab-sessions').classList.toggle('comp-btn-active', tab==='sessions');
+  document.getElementById('mem-tab-decisions').classList.toggle('comp-btn-active', tab==='decisions');
+  if (tab==='decisions') memDecisionSearch();
+}
+
+function _esc(s) {
+  return String(s||'').replace(/[&<>"']/g, function(c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
+async function loadMemorySessions() {
+  try {
+    var r = await fetch(API+'/api/memory/sessions');
+    var rows = await r.json();
+    var box = document.getElementById('mem-sessions-rows');
+    if (!rows.length) {
+      box.innerHTML = '<div class="empty">No sessions captured yet. Start a Claude Code session in this project — hooks will populate the timeline.</div>';
+      return;
+    }
+    box.innerHTML = rows.map(function(s) {
+      var rollup = (s.rollup_summary || '').slice(0, 80);
+      return ''
+        + '<div class="table-row" onclick="loadMemoryTimeline(\''+_esc(s.id)+'\')" style="cursor:pointer">'
+        +   '<div><code>'+_esc(s.id)+'</code></div>'
+        +   '<div>'+_esc(s.started_at||'')+'</div>'
+        +   '<div>'+_esc(s.status||'')+'</div>'
+        +   '<div>'+_esc(s.prompt_count||0)+'</div>'
+        +   '<div>'+_esc(rollup)+(rollup && s.rollup_summary && s.rollup_summary.length>80?'…':'')+'</div>'
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    document.getElementById('mem-sessions-rows').innerHTML =
+      '<div class="empty">Memory store unavailable.</div>';
+  }
+}
+
+async function loadMemoryTimeline(sessionId) {
+  try {
+    var r = await fetch(API+'/api/memory/sessions/'+encodeURIComponent(sessionId)+'/timeline');
+    var data = await r.json();
+    var panel = document.getElementById('mem-timeline-panel');
+    var title = document.getElementById('mem-timeline-title');
+    var body  = document.getElementById('mem-timeline-body');
+    panel.style.display = '';
+    title.textContent = 'Session ' + sessionId;
+    if (!data.session || !data.turns.length) {
+      body.innerHTML = '<div class="empty">No turn summaries yet for this session.</div>';
+      return;
+    }
+    var rollup = data.session.rollup_summary
+      ? '<div style="margin-bottom:10px; padding:8px; background:var(--panel2); border-radius:4px"><strong>rollup:</strong> '+_esc(data.session.rollup_summary)+'</div>'
+      : '';
+    var turns = data.turns.map(function(t) {
+      return ''
+        + '<div style="padding:6px 0; border-bottom:1px solid var(--border)">'
+        +   '<div style="font-size:11px; color:var(--muted)">turn '+t.prompt_number+' · ['+_esc(t.tier)+']</div>'
+        +   '<div>'+_esc(t.summary)+'</div>'
+        + '</div>';
+    }).join('');
+    body.innerHTML = rollup + turns;
+  } catch(e) {
+    document.getElementById('mem-timeline-body').innerHTML =
+      '<div class="empty">Failed to load timeline.</div>';
+  }
+}
+
+async function memDecisionSearch() {
+  var q = (document.getElementById('mem-decision-q').value || '').trim();
+  var src = document.getElementById('mem-decision-source').value || '';
+  var url = API+'/api/memory/decisions';
+  var params = [];
+  if (q) params.push('q='+encodeURIComponent(q));
+  if (src) params.push('source='+encodeURIComponent(src));
+  if (params.length) url += '?' + params.join('&');
+  try {
+    var r = await fetch(url);
+    var rows = await r.json();
+    var box = document.getElementById('mem-decision-rows');
+    if (!rows.length) {
+      box.innerHTML = '<div class="empty">No decisions match.</div>';
+      return;
+    }
+    box.innerHTML = rows.map(function(d) {
+      return ''
+        + '<div class="table-row">'
+        +   '<div>'+_esc(d.decision)+'</div>'
+        +   '<div>'+_esc(d.reason)+'</div>'
+        +   '<div><span class="tag tag-'+_esc(d.source)+'">'+_esc(d.source)+'</span></div>'
+        +   '<div>'+_esc(d.created_at||'')+'</div>'
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    document.getElementById('mem-decision-rows').innerHTML =
+      '<div class="empty">Decisions search failed.</div>';
+  }
 }
 
 function toast(msg) {
