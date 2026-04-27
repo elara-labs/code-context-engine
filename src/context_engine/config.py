@@ -5,7 +5,14 @@ from pathlib import Path
 import yaml
 
 
-DEFAULT_GLOBAL_PATH = Path.home() / ".claude-context-engine" / "config.yaml"
+_NEW_HOME = Path.home() / ".cce"
+_OLD_HOME = Path.home() / ".claude-context-engine"
+
+# Use the old directory if it exists and the new one does not, so existing
+# installs keep working without a manual migration step.
+_CCE_HOME = _OLD_HOME if (_OLD_HOME.exists() and not _NEW_HOME.exists()) else _NEW_HOME
+
+DEFAULT_GLOBAL_PATH = _CCE_HOME / "config.yaml"
 PROJECT_CONFIG_NAME = ".context-engine.yaml"
 
 DEFAULT_IGNORE = [
@@ -64,7 +71,7 @@ class Config:
     indexer_ignore: list[str] = field(default_factory=lambda: list(DEFAULT_IGNORE))
 
     # Storage
-    storage_path: str = str(Path.home() / ".claude-context-engine" / "projects")
+    storage_path: str = str(_CCE_HOME / "projects")
 
     def detect_resource_profile(self) -> str:
         try:

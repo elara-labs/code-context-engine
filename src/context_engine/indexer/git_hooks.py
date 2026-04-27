@@ -5,7 +5,8 @@ import stat
 import sys
 from pathlib import Path
 
-HOOK_MARKER = "# claude-context-engine hook"
+HOOK_MARKER = "# cce hook"
+_OLD_HOOK_MARKER = "# claude-context-engine hook"
 HOOK_NAMES = ["post-commit", "post-checkout", "post-merge"]
 
 
@@ -19,7 +20,7 @@ def _resolve_cce_binary() -> str:
     candidate = Path(sys.executable).parent / "cce"
     if candidate.exists():
         return str(candidate)
-    which = shutil.which("cce") or shutil.which("claude-context-engine")
+    which = shutil.which("cce") or shutil.which("code-context-engine")
     if which:
         return which
     # Last-resort: rely on PATH at hook-run time.
@@ -50,7 +51,7 @@ def _install_single_hook(hook_path: Path) -> None:
     script = _hook_script()
     if hook_path.exists():
         existing = hook_path.read_text()
-        if HOOK_MARKER in existing:
+        if HOOK_MARKER in existing or _OLD_HOOK_MARKER in existing:
             return
         new_content = existing.rstrip() + "\n\n" + script
     else:

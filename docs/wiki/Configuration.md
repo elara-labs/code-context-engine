@@ -6,7 +6,7 @@ CCE works with zero configuration out of the box. This page covers all available
 
 ## Global Configuration
 
-File: `~/.claude-context-engine/config.yaml`
+File: `~/.cce/config.yaml`
 
 This file is created automatically on first use. Override any value you want to change.
 
@@ -161,4 +161,4 @@ cce services start dashboard --port 9090
 cce dashboard --port 9090
 ```
 
-PID and port files are stored in `~/.claude-context-engine/pids/`.
+PID and port files are stored in `~/.cce/pids/`.

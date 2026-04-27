@@ -18,7 +18,7 @@ def test_install_hooks_creates_post_commit(git_repo):
     assert hook_path.exists()
     assert os.access(hook_path, os.X_OK)
     content = hook_path.read_text()
-    assert "claude-context-engine" in content
+    assert "cce hook" in content
 
 
 def test_install_hooks_creates_post_checkout(git_repo):
@@ -40,7 +40,7 @@ def test_install_hooks_preserves_existing(git_repo):
     install_hooks(project_dir=str(git_repo))
     content = existing_hook.read_text()
     assert "existing" in content
-    assert "claude-context-engine" in content
+    assert "cce hook" in content
 
 
 def test_install_hooks_returns_empty_for_non_git(tmp_path):

@@ -1,2 +1,2 @@
 #!/bin/sh
-claude-context-engine init
+cce init

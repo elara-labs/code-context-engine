@@ -64,6 +64,32 @@ Drill-down:         "Show full calculate_shipping" ->   600 tokens
 Without CCE:        Read payments.py + shipping.py ->  45k tokens
 ```
 
+## When does `context_search` activate?
+
+CCE indexes your code as vector embeddings. When Claude receives a question, it decides whether to call `context_search` based on whether the question is about your codebase. This means:
+
+**Code queries work great.** These reference functions, files, patterns, or architecture in your project. The embeddings match and CCE returns the right chunks.
+
+```
+"how does the payment flow work?"          ✅  matches payment-related code chunks
+"where is the auth middleware defined?"    ✅  matches auth module and middleware functions
+"find all API endpoints"                   ✅  matches route definitions and controllers
+"what calls calculate_shipping?"           ✅  matches the function and its callers
+"show me the database schema"              ✅  matches models and migrations
+```
+
+**General questions skip CCE.** If you ask something that is not about your codebase, Claude answers directly without calling `context_search`. There is nothing to look up in the index for these.
+
+```
+"explain the difference between REST and GraphQL"    ⏭️  general knowledge, no code lookup
+"what is a good naming convention for variables?"    ⏭️  opinion/style, no code lookup
+"write me a Python script to resize images"          ⏭️  new code, not searching existing code
+```
+
+**The key insight:** `context_search` is a code retrieval tool, not a general Q&A tool. It shines when your question maps to something that exists in your codebase. Ask about your code and CCE finds the relevant pieces. Ask a general programming question and Claude simply answers from its own knowledge, which is the right behavior.
+
+If you want Claude to use CCE for a general question, frame it around your project: instead of "what is dependency injection?" try "how does this project handle dependency injection?"
+
 ## Overview
 
 | Problem | Without CCE | With CCE |
@@ -186,7 +212,7 @@ Downloaded once on first `cce init`, stored in the fastembed cache:
 
 ### Index per project
 
-Stored in `~/.claude-context-engine/projects/<name>/`. Size depends on project scale:
+Stored in `~/.cce/projects/<name>/`. Size depends on project scale:
 
 | Project scale | Approximate index size |
 |---------------|----------------------|
@@ -347,6 +373,9 @@ Run `cce list` to see all commands:
     cce commands add-rule '<rule>'      Add a project rule
     cce commands set-pref <key> <val>   Set a preference
     cce commands add <hook> '<cmd>'     Add to before_push / before_commit / on_start
+
+  ── Lifecycle ─────────────────────────────────────
+    cce uninstall                       Remove CCE from project (hooks, MCP, CLAUDE.md)
 ```
 
 ### `cce status`
@@ -354,7 +383,7 @@ Run `cce list` to see all commands:
 ```
   ── Status · my-project ──────────────────────────
 
-    ● Storage       /Users/you/.claude-context-engine/projects
+    ● Storage       /Users/you/.cce/projects
     ● Compression   standard
     ● Profile       standard
     ● Embedding     BAAI/bge-small-en-v1.5
@@ -386,6 +415,24 @@ cce dashboard                      # open in browser
 cce dashboard --port 8080
 cce dashboard --no-browser
 ```
+
+### `cce uninstall`
+
+Removes CCE from the current project. Cleans up git hooks, the `.mcp.json` entry, the CLAUDE.md block, and the local `.cce/` directory.
+
+```
+  ── Uninstall · my-project ────────────────────────
+
+    ✗ Removed 3 git hooks
+    ✗ Removed context-engine from .mcp.json
+    ✗ Removed CCE block from CLAUDE.md
+    ✗ Removed .cce/ directory
+
+    Index data in ~/.cce is preserved.
+    Run cce clear to remove index data too.
+```
+
+Your index data in `~/.cce/projects/<name>/` is kept so you can re-initialize later without a full re-index. Run `cce clear` to remove that too.
 
 ---
 
@@ -433,7 +480,7 @@ Code blocks, file paths, commands, and error messages are never compressed.
 
 CCE works with zero configuration. Override what you need.
 
-**Global config** — `~/.claude-context-engine/config.yaml`:
+**Global config** — `~/.cce/config.yaml`:
 
 ```yaml
 compression:

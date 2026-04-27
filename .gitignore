@@ -47,7 +47,7 @@ CLAUDE.md
 .context-engine.yaml
 .claude/settings.local.json
 
-# CCE — index data (stored in ~/.claude-context-engine/ but guard here too)
+# CCE — index data (stored in ~/.cce/ but guard here too)
 *.lance/
 .claude-context-engine/
 

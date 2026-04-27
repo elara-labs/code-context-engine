@@ -139,7 +139,7 @@ Store them outside the project tree — never commit the env file.
   the same project will both try to write the index — the pipeline lock
   prevents corruption inside a single process but does not coordinate across
   processes. Run one server per project per machine.
-- No automatic backup of `~/.claude-context-engine/projects/<name>/`. If you
+- No automatic backup of `~/.cce/projects/<name>/`. If you
   need durability, snapshot that directory in your normal backup flow — every
   file inside is replaceable from a fresh `cce index --full`, except for
   `sessions/*.json` which contain unique decisions and code-area notes.

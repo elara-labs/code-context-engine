@@ -67,6 +67,6 @@ def resolve_cce_binary() -> str:
     if found:
         return found
     arg0 = Path(sys.argv[0]).resolve()
-    if arg0.name in ("cce", "claude-context-engine"):
+    if arg0.name in ("cce", "code-context-engine"):
         return str(arg0)
     return "cce"

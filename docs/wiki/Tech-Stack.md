@@ -204,7 +204,7 @@ rows = conn.execute("""
 
 sqlite-vec is ~2 MB, runs as a SQLite extension (in-process), uses WAL mode for concurrent reads/writes, and delivers the same search quality as LanceDB at 54% smaller install size.
 
-**Storage location:** `~/.claude-context-engine/projects/<name>/vectors/`
+**Storage location:** `~/.cce/projects/<name>/vectors/`
 
 ---
 
@@ -253,7 +253,7 @@ Every `context_search` runs BM25 and vector search in parallel, then merges resu
 
 **Why SQLite for both:** The graph is sparse (most functions call fewer than 10 others) and only needs simple `SELECT` queries — no multi-hop traversal. FTS5 is built into SQLite, so it is zero additional dependencies. Both stores live in the same local directory. No server. No migration tooling needed.
 
-**Storage location:** `~/.claude-context-engine/projects/<name>/graph/` and `fts/`
+**Storage location:** `~/.cce/projects/<name>/graph/` and `fts/`
 
 ---
 
@@ -381,7 +381,7 @@ Every `cce` subcommand is a Click command or group. Click handles argument parsi
 import yaml
 ```
 
-Reads `~/.claude-context-engine/config.yaml` (global config) and `.context-engine.yaml` (per-project config). The config system merges them with project settings taking priority.
+Reads `~/.cce/config.yaml` (global config) and `.context-engine.yaml` (per-project config). The config system merges them with project settings taking priority.
 
 **2. Project commands** — `src/context_engine/project_commands.py`
 
@@ -395,7 +395,7 @@ Reads `.cce/commands.yaml` if present — a file users can create to define cust
 
 Serializes config and commands for display in the terminal.
 
-**Why YAML over TOML or JSON:** YAML supports inline comments, which matters for config files users are meant to hand-edit. The generated `~/.claude-context-engine/config.yaml` includes comments explaining each option. TOML also supports comments but YAML is more familiar to most developers for config files. JSON does not support comments.
+**Why YAML over TOML or JSON:** YAML supports inline comments, which matters for config files users are meant to hand-edit. The generated `~/.cce/config.yaml` includes comments explaining each option. TOML also supports comments but YAML is more familiar to most developers for config files. JSON does not support comments.
 
 ---
 

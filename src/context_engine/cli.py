@@ -1381,7 +1381,7 @@ def uninstall() -> None:
     hooks_dir = project_dir / ".git" / "hooks"
     removed_hooks = 0
     if hooks_dir.exists():
-        for hook_name in ["post-commit", "pre-push", "post-merge"]:
+        for hook_name in ["post-commit", "post-checkout", "post-merge"]:
             hook_file = hooks_dir / hook_name
             if hook_file.exists():
                 content = hook_file.read_text()
@@ -1458,7 +1458,7 @@ def uninstall() -> None:
         lines.append(f"    {DOT} {dim('No .cce/ directory')}")
 
     lines.append("")
-    lines.append(f"    {dim('Index data in ~/.claude-context-engine is preserved.')}")
+    lines.append(f"    {dim('Index data in ~/.cce is preserved.')}")
     lines.append(f"    {dim('Run')} {click.style('cce clear', fg='cyan')} {dim('to remove index data too.')}")
     lines.append("")
     animate(lines)

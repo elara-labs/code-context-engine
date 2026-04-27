@@ -1,7 +1,7 @@
 """Service management for CCE — Ollama and Dashboard start/stop/status.
 
 PID files live in <storage_base>/pids/ where storage_base is resolved
-from config.yaml (defaults to ~/.claude-context-engine):
+from config.yaml (defaults to ~/.cce):
   ollama.pid       PID of the ollama process CCE started
   dashboard.pid    PID of the dashboard process CCE started
   dashboard.port   Port the dashboard is running on
@@ -28,7 +28,8 @@ def _storage_base() -> Path:
         return Path(config.storage_path).parent
     except Exception as exc:
         log.debug("Could not load config for storage base, using default: %s", exc)
-        return Path.home() / ".claude-context-engine"
+        from context_engine.config import _CCE_HOME
+        return _CCE_HOME
 
 
 def _pid_dir() -> Path:

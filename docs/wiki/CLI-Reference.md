@@ -64,6 +64,9 @@ Shows every available command grouped by category:
     cce commands list                   Show all rules, preferences, and hooks
     cce commands add-rule '<rule>'      Add a project rule
     cce commands set-pref <key> <val>   Set a preference
+
+  ── Lifecycle ─────────────────────────────────────
+    cce uninstall                       Remove CCE from project (hooks, MCP, CLAUDE.md)
 ```
 
 ---
@@ -181,7 +184,7 @@ cce status
 ```
   ── Status · my-project ──────────────────────────
 
-    ● Storage       /Users/you/.claude-context-engine/projects
+    ● Storage       /Users/you/.cce/projects
     ● Compression   standard
     ● Profile       standard
     ● Embedding     BAAI/bge-small-en-v1.5
@@ -530,6 +533,42 @@ cce commands remove before_push 'composer test'
 cce commands remove-rule 'Use UUID for primary keys'
 cce commands remove-pref database
 ```
+
+---
+
+## cce uninstall
+
+Remove CCE from the current project. Reverses everything `cce init` did: git hooks, `.mcp.json` entry, the CCE block in `CLAUDE.md`, and the local `.cce/` directory.
+
+```bash
+cce uninstall
+```
+
+**Expected output:**
+
+```
+  ── Uninstall · my-project ────────────────────────
+
+    ✗ Removed 3 git hooks
+    ✗ Removed context-engine from .mcp.json
+    ✗ Removed CCE block from CLAUDE.md
+    ✗ Removed .cce/ directory
+
+    Index data in ~/.cce is preserved.
+    Run cce clear to remove index data too.
+```
+
+**What it removes:**
+
+- Git hooks (`post-commit`, `post-checkout`, `post-merge`) that contain CCE markers
+- The `context-engine` entry from `.mcp.json`
+- The CCE instruction block from `CLAUDE.md` (detects versioned, legacy heading, and `CCE:BEGIN`/`CCE:END` marker formats)
+- The `.cce/` directory (local project cache)
+
+**What it keeps:**
+
+- Index data in `~/.cce/projects/<name>/` so you can re-initialize without a full re-index
+- Run `cce clear` afterwards to remove the index data too
 
 ---
 
