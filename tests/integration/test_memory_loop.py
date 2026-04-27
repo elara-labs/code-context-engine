@@ -197,3 +197,34 @@ def test_prune_consolidates_old_sessions_into_decisions_log(tmp_path):
         f"expected archived decision to be surfaced via get_recent_decisions; "
         f"sample: {surfaced[:5]}"
     )
+
+
+@pytest.mark.asyncio
+async def test_session_recall_searches_decisions_log_archive(project_and_storage):
+    """`session_recall` (i.e. _search_sessions) must include consolidated
+    decisions from decisions_log.json — otherwise pruning silently drops the
+    archive from recall, contradicting the prune CLI's docstring claim that
+    "Decisions remain searchable via session_recall after pruning"."""
+    project_dir, storage_root = project_and_storage
+
+    sessions_dir = storage_root / project_dir.name / "sessions"
+    sessions_dir.mkdir(parents=True)
+
+    # No on-disk per-session files — only the consolidated archive — so we
+    # know the recall hit comes from decisions_log.json, not from a still-
+    # present session file. Use very-distinct text so the substring fallback
+    # would also have a chance if vector recall returned nothing.
+    archive = [
+        {
+            "decision": "Use RS256 JWT signing for service-to-service auth",
+            "reason": "Asymmetric keys mean services can verify without sharing secrets",
+            "timestamp": 1.0,
+        }
+    ]
+    (sessions_dir / "decisions_log.json").write_text(json.dumps(archive))
+
+    server = _build_server(project_dir, storage_root)
+    matches = server._search_sessions("token signing algorithm")
+    assert any("RS256" in m for m in matches), (
+        f"expected archived decision to surface via session_recall; got {matches}"
+    )
