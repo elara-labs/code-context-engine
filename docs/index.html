@@ -603,10 +603,11 @@
       margin-top: 48px;
       border: 1px solid var(--border);
       border-radius: 16px;
-      overflow: hidden;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
-    table { width: 100%; border-collapse: collapse; }
+    table { width: 100%; border-collapse: collapse; min-width: 600px; }
 
     th {
       padding: 14px 24px;
@@ -755,14 +756,26 @@
       .features-grid { grid-template-columns: repeat(2, 1fr); }
       .wrap { padding: 0 24px; }
       footer { flex-direction: column; gap: 16px; padding: 24px; text-align: center; }
+      .terminal-body { overflow-x: auto; }
     }
 
     @media (max-width: 640px) {
+      nav { padding: 12px 16px; gap: 8px; flex-wrap: wrap; }
+      .nav-name { font-size: 13px; }
+      .nav-link { padding: 5px 8px; font-size: 12px; }
+      .nav-pip { padding: 5px 10px; font-size: 12px; }
+      .hero { padding: 40px 16px 32px; overflow: hidden; }
+      .hero-left { min-width: 0; }
       .hero-title { font-size: 36px; }
+      .hero-desc { font-size: 15px; max-width: 100%; }
       h2 { font-size: 30px; }
       .cta-title { font-size: 36px; }
       .features-grid { grid-template-columns: 1fr; }
       .stat-duo { grid-template-columns: 1fr; }
+      .wrap { padding: 0 16px; }
+      .install-row { max-width: 100%; }
+      .install-text { font-size: 12px; }
+      .savings-body { overflow-x: auto; font-size: 12px; }
     }
   </style>
 </head>
