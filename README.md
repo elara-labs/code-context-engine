@@ -356,26 +356,60 @@ Run `cce list` to see all commands:
 
   ── Status & Savings ──────────────────────────────
     cce status                          Index health, config, embedding model, Ollama status
+    cce status --json                   Machine-readable output
     cce savings                         Token savings report with visual grid
     cce savings --all                   Savings across every indexed project
+    cce savings --json                  Machine-readable savings output
 
   ── Index Management ──────────────────────────────
     cce clear                           Clear all index data (asks for confirmation)
+    cce clear --yes                     Skip confirmation
     cce prune                           Remove data for deleted projects
+    cce prune --dry-run                 Preview without deleting
 
   ── Services ──────────────────────────────────────
     cce services                        Show status of Ollama, dashboard, MCP
     cce services start                  Start Ollama + dashboard
+    cce services start ollama           Start only Ollama
+    cce services start dashboard        Start dashboard on default port
     cce services stop                   Stop everything CCE started
+
+  ── Dashboard ─────────────────────────────────────
+    cce dashboard                       Open web dashboard in browser
+    cce dashboard --port 8080           Custom port
+    cce dashboard --no-browser          Server only, no browser open
 
   ── Project Commands ──────────────────────────────
     cce commands list                   Show all rules, preferences, and hooks
     cce commands add-rule '<rule>'      Add a project rule
+    cce commands remove-rule '<rule>'   Remove a rule
     cce commands set-pref <key> <val>   Set a preference
+    cce commands remove-pref <key>      Remove a preference
     cce commands add <hook> '<cmd>'     Add to before_push / before_commit / on_start
+    cce commands remove <hook> '<cmd>'  Remove from a hook
+    cce commands add-custom <n> '<c>'   Add a named custom command
+
+  ── Search ────────────────────────────────────────
+    cce search '<query>'                Run a test query and update savings stats
+    cce search '<query>' --top-k 10     Return more results
+
+  ── Shortcuts ─────────────────────────────────────
+    cce start                           Start all services (Ollama + dashboard)
+    cce stop                            Stop all services
+    cce start ollama                    Start only Ollama
+    cce stop dashboard                  Stop only dashboard
 
   ── Lifecycle ─────────────────────────────────────
+    cce init                            Install CCE in project
+    cce upgrade                         Upgrade CCE and refresh project config
+    cce upgrade --check                 Check install method without upgrading
     cce uninstall                       Remove CCE from project (hooks, MCP, CLAUDE.md)
+    cce serve                           Start MCP server (used by Claude Code)
+
+  ── Other ─────────────────────────────────────────
+    cce list                            This command
+    cce --version                       Show version
+    cce --help                          Show help
 ```
 
 ### `cce status`

@@ -49,24 +49,64 @@ Shows every available command grouped by category:
     cce init                            Index project, install git hooks, write .mcp.json
     cce index                           Re-index changed files
     cce index --full                    Force full re-index of every file
+    cce index --path <file>             Index one file or directory
 
   ── Status & Savings ──────────────────────────────
-    cce status                          Index health, config, embedding, Ollama
+    cce status                          Index health, config, embedding model, Ollama status
+    cce status --json                   Machine-readable output
     cce savings                         Token savings report with visual grid
     cce savings --all                   Savings across every indexed project
+    cce savings --json                  Machine-readable savings output
+
+  ── Index Management ──────────────────────────────
+    cce clear                           Clear all index data (asks for confirmation)
+    cce clear --yes                     Skip confirmation
+    cce prune                           Remove data for deleted projects
+    cce prune --dry-run                 Preview without deleting
 
   ── Services ──────────────────────────────────────
     cce services                        Show status of Ollama, dashboard, MCP
     cce services start                  Start Ollama + dashboard
+    cce services start ollama           Start only Ollama
+    cce services start dashboard        Start dashboard on default port
     cce services stop                   Stop everything CCE started
+
+  ── Dashboard ─────────────────────────────────────
+    cce dashboard                       Open web dashboard in browser
+    cce dashboard --port 8080           Custom port
+    cce dashboard --no-browser          Server only, no browser open
 
   ── Project Commands ──────────────────────────────
     cce commands list                   Show all rules, preferences, and hooks
     cce commands add-rule '<rule>'      Add a project rule
+    cce commands remove-rule '<rule>'   Remove a rule
     cce commands set-pref <key> <val>   Set a preference
+    cce commands remove-pref <key>      Remove a preference
+    cce commands add <hook> '<cmd>'     Add to before_push / before_commit / on_start
+    cce commands remove <hook> '<cmd>'  Remove from a hook
+    cce commands add-custom <n> '<c>'   Add a named custom command
+
+  ── Search ────────────────────────────────────────
+    cce search '<query>'                Run a test query and update savings stats
+    cce search '<query>' --top-k 10     Return more results
+
+  ── Shortcuts ─────────────────────────────────────
+    cce start                           Start all services (Ollama + dashboard)
+    cce stop                            Stop all services
+    cce start ollama                    Start only Ollama
+    cce stop dashboard                  Stop only dashboard
 
   ── Lifecycle ─────────────────────────────────────
+    cce init                            Install CCE in project
+    cce upgrade                         Upgrade CCE and refresh project config
+    cce upgrade --check                 Check install method without upgrading
     cce uninstall                       Remove CCE from project (hooks, MCP, CLAUDE.md)
+    cce serve                           Start MCP server (used by Claude Code)
+
+  ── Other ─────────────────────────────────────────
+    cce list                            This command
+    cce --version                       Show version
+    cce --help                          Show help
 ```
 
 ---
@@ -238,15 +278,15 @@ cce savings
 **Expected output:**
 
 ```
-     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶   my-project · 42 queries
-     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶   18.4k / 58.0k tokens used (32%)
-     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶
-     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶   Token savings
-     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶   ⛁ With CCE:     18,400 tokens  (32%)
-     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶   ⛶ Tokens saved:  39,600 tokens  (68%)
+     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   my-project · 42 queries
+     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   14.2k served · 26.0k chunks raw · 48.0k full-file baseline
+     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶
+     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   Token savings (split)
+     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ Retrieval:    46%  vs reading full files
+     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛶ Compression:  45%  chunk → summary
 ```
 
-The filled grid cells (`⛁`) represent tokens used. Empty cells (`⛶`) represent tokens saved.
+The filled grid cells (`⛁`) represent tokens used. Empty cells (`⛶`) represent tokens saved. CCE reports retrieval savings (targeted chunks vs full files) and compression savings (summarized chunks vs raw chunks) separately.
 
 **Variants:**
 
@@ -264,10 +304,11 @@ cce savings --json
 {
   "project": "my-project",
   "queries": 42,
-  "served_tokens": 18400,
-  "full_file_tokens": 58000,
-  "tokens_saved": 39600,
-  "savings_pct": 68
+  "served_tokens": 14200,
+  "raw_tokens": 26000,
+  "full_file_tokens": 48000,
+  "retrieval_savings_pct": 46,
+  "compression_savings_pct": 45
 }
 ```
 
@@ -569,6 +610,109 @@ cce uninstall
 
 - Index data in `~/.cce/projects/<name>/` so you can re-initialize without a full re-index
 - Run `cce clear` afterwards to remove the index data too
+
+---
+
+## cce upgrade
+
+Upgrade code-context-engine to the latest version. Automatically detects whether you installed via uv, pipx, or pip and runs the correct upgrade command. After upgrading, refreshes git hooks, MCP config, CLAUDE.md, and the SessionStart hook in the current project.
+
+```bash
+cce upgrade
+```
+
+**Expected output:**
+
+```
+  ── Upgrade ───────────────────────────────────────
+    Current version: 0.3.1
+    Install method:  uv
+    Running:         uv tool upgrade code-context-engine
+
+  ✓ Upgraded 0.3.1 → 0.3.2
+
+  Refreshing project config...
+  ✓ MCP server config is current
+  ✓ CLAUDE.md upgraded to current CCE instructions
+  ✓ Git hooks refreshed
+
+  Done!  Restart Claude Code to pick up changes.
+```
+
+**When already on the latest version:**
+
+```
+  ✓ Already on latest version (0.3.1)
+```
+
+**Check without upgrading:**
+
+```bash
+cce upgrade --check
+```
+
+```
+  ── Upgrade ───────────────────────────────────────
+    Current version: 0.3.1
+    Install method:  uv
+
+    To upgrade: uv tool upgrade code-context-engine
+```
+
+This is useful to see which package manager CCE was installed with before running the upgrade.
+
+---
+
+## cce search
+
+Run a test query against the index and display results. Also updates the savings stats, which fixes the "0 queries" issue when no MCP queries have been made yet.
+
+```bash
+cce search 'how does authentication work'
+```
+
+**Expected output:**
+
+```
+  ── Search · how does authentication work ────────
+
+    1. auth/session.py:34-68
+       def validate_token(token: str) -> User | None:
+    2. auth/middleware.py:12-45
+       class AuthMiddleware:
+    3. utils/jwt.py:8-28
+       def decode_jwt(token: str) -> dict | None:
+    4. config/redis.py:1-15
+       REDIS_SESSION_TTL = 86400
+    5. CLAUDE.md:1-74
+       <!-- cce-block-version: 2 -->
+
+    ✓ 5 results  1201 tokens served vs 3800 full file tokens
+```
+
+**Variants:**
+
+```bash
+# Return more results
+cce search 'payment processing' --top-k 10
+```
+
+This is useful for verifying the index is working, testing query quality, and populating the savings dashboard before opening a Claude Code session.
+
+---
+
+## cce start / cce stop
+
+Shortcuts for `cce services start` and `cce services stop`.
+
+```bash
+cce start                # Start all services (Ollama + dashboard)
+cce stop                 # Stop all services
+cce start ollama         # Start only Ollama
+cce stop dashboard       # Stop only dashboard
+```
+
+These behave identically to the `cce services start` and `cce services stop` commands.
 
 ---
 

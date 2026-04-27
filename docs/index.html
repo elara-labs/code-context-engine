@@ -1223,11 +1223,11 @@ function buildSavingsDemo() {
 
   const labels = [
     { text: 'my-project · 438 queries', cls: '' },
-    { text: '142.0k / 486.0k tokens used (29%)', cls: 'muted' },
+    { text: '14.2k served · 26.0k chunks raw · 48.0k full-file baseline', cls: 'muted' },
     { text: '', cls: '' },
-    { text: 'Token savings', cls: '' },
-    { text: '⛁ With CCE:     142,000 tokens  (29%)', cls: '' },
-    { text: '⛶ Tokens saved:  344,000 tokens  (71%)', cls: 'highlight' },
+    { text: 'Token savings (split)', cls: '' },
+    { text: '⛁ Retrieval:    46%  vs reading full files', cls: '' },
+    { text: '⛶ Compression:  45%  chunk → summary', cls: 'highlight' },
   ];
 
   for (let r = 0; r < ROWS; r++) {

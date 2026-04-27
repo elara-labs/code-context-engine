@@ -279,6 +279,7 @@ The full list of tools CCE exposes through MCP:
 |------|-------------|
 | `context_search` | Hybrid vector + BM25 search with graph expansion |
 | `expand_chunk` | Retrieve full content for a compressed or overflow chunk |
+| `related_context` | Find related code via graph edges (calls, imports) |
 | `session_recall` | Recall past architectural decisions |
 | `record_decision` | Save a decision for future sessions |
 | `record_code_area` | Record which files were worked on and why |

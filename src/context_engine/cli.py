@@ -820,6 +820,8 @@ def list_commands() -> None:
         ]),
         ("Lifecycle", [
             ("cce init", "Install CCE in project"),
+            ("cce upgrade", "Upgrade CCE and refresh project config"),
+            ("cce upgrade --check", "Check install method without upgrading"),
             ("cce uninstall", "Remove CCE from project (hooks, MCP, CLAUDE.md)"),
             ("cce serve", "Start MCP server (used by Claude Code)"),
         ]),
@@ -1502,6 +1504,113 @@ def stop(service: str) -> None:
         lines.append(f"    {prefix} {msg}")
     lines.append("")
     animate(lines)
+
+
+@main.command()
+@click.option("--check", is_flag=True, help="Check for updates without installing")
+@click.pass_context
+def upgrade(ctx: click.Context, check: bool) -> None:
+    """Upgrade code-context-engine to the latest version and refresh project config."""
+    import importlib.metadata
+    import subprocess
+    from context_engine.cli_style import section, animate
+
+    current = importlib.metadata.version("code-context-engine")
+    lines = ["", section("Upgrade")]
+    lines.append(f"    Current version: {click.style(current, fg='cyan', bold=True)}")
+
+    # Detect install method from the cce binary path
+    cce_bin = Path(sys.argv[0]).resolve()
+    cce_str = str(cce_bin)
+
+    installer = None
+    upgrade_cmd: list[str] = []
+
+    if "/uv/" in cce_str or ".local/share/uv" in cce_str:
+        installer = "uv"
+        upgrade_cmd = ["uv", "tool", "upgrade", "code-context-engine"]
+    elif "/pipx/" in cce_str:
+        installer = "pipx"
+        upgrade_cmd = ["pipx", "upgrade", "code-context-engine"]
+    else:
+        # Check if inside a uv tool environment by looking at the venv path
+        venv_path = str(Path(sys.prefix).resolve())
+        if "uv/tools" in venv_path:
+            installer = "uv"
+            upgrade_cmd = ["uv", "tool", "upgrade", "code-context-engine"]
+        elif "pipx/venvs" in venv_path:
+            installer = "pipx"
+            upgrade_cmd = ["pipx", "upgrade", "code-context-engine"]
+        else:
+            installer = "pip"
+            upgrade_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "code-context-engine"]
+
+    lines.append(f"    Install method:  {click.style(installer, fg='cyan')}")
+
+    if check:
+        lines.append("")
+        lines.append(f"    To upgrade: {click.style(' '.join(upgrade_cmd), fg='cyan')}")
+        lines.append("")
+        animate(lines)
+        return
+
+    lines.append(f"    Running:         {_dim(' '.join(upgrade_cmd))}")
+    animate(lines)
+    click.echo("")
+
+    result = subprocess.run(upgrade_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        click.echo(f"  {CROSS} {click.style('Upgrade failed', fg='red')}")
+        if result.stderr:
+            for err_line in result.stderr.strip().splitlines()[-5:]:
+                click.echo(f"    {_dim(err_line)}")
+        click.echo("")
+        sys.exit(1)
+
+    # Show what pip/uv printed (version info)
+    output = (result.stdout or result.stderr or "").strip()
+    for out_line in output.splitlines()[-3:]:
+        click.echo(f"    {_dim(out_line)}")
+
+    new_version = current  # fallback
+    try:
+        # Re-read version from the just-upgraded package
+        importlib.metadata.invalidate_caches()
+        dist = importlib.metadata.distribution("code-context-engine")
+        new_version = dist.metadata["Version"]
+    except Exception:
+        pass
+
+    click.echo("")
+    if new_version != current:
+        _ok(f"Upgraded {click.style(current, fg='white')} → {click.style(new_version, fg='green', bold=True)}")
+    else:
+        _ok(f"Already on latest version ({click.style(current, fg='cyan')})")
+
+    # Refresh project config if in an initialized project
+    project_dir = Path.cwd()
+    mcp_path = project_dir / ".mcp.json"
+    if mcp_path.exists():
+        click.echo("")
+        click.echo(f"  {click.style('Refreshing project config', fg='cyan')}...")
+        configured = _configure_mcp(project_dir)
+        if configured:
+            _ok("MCP server paths updated in " + click.style(".mcp.json", fg="cyan"))
+        else:
+            _ok("MCP server config is current")
+        _ensure_claude_md(project_dir)
+        _ensure_session_hook(project_dir)
+        from context_engine.indexer.git_hooks import install_hooks
+        if (project_dir / ".git").exists():
+            install_hooks(str(project_dir))
+            _ok("Git hooks refreshed")
+
+    click.echo("")
+    click.echo(
+        click.style("  Done!", fg="green", bold=True) +
+        click.style("  Restart Claude Code to pick up changes.", fg="white")
+    )
+    click.echo("")
 
 
 def savings_shortcut() -> None:
