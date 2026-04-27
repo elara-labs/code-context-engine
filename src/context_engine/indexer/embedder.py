@@ -8,6 +8,7 @@ re-embedded across index runs (inspired by Cursor's content-hash cache).
 """
 import logging
 import os
+import sys
 from functools import lru_cache
 
 from fastembed import TextEmbedding
@@ -19,9 +20,23 @@ log = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 
-# Number of parallel threads for embedding. Auto-detect based on CPU cores,
-# capped at 4 to avoid memory pressure.
-_PARALLEL = min(os.cpu_count() or 2, 4)
+# Number of parallel embedding workers. fastembed's `parallel>1` path spawns
+# multiprocessing.forkserver workers around onnxruntime, which deadlocks on
+# macOS (workers idle on SimpleQueue.get, main blocks in asyncio poll). Default
+# to single-process there; allow override via CCE_EMBED_PARALLEL.
+def _resolve_parallel() -> int:
+    override = os.environ.get("CCE_EMBED_PARALLEL")
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:
+            pass
+    if sys.platform == "darwin":
+        return 1
+    return min(os.cpu_count() or 2, 4)
+
+
+_PARALLEL = _resolve_parallel()
 
 
 class Embedder:
