@@ -1838,6 +1838,56 @@ def sessions_prune(ctx: click.Context, threshold: int, keep: int) -> None:
         )
 
 
+@sessions.command(name="migrate")
+@click.option(
+    "--no-archive",
+    is_flag=True,
+    default=False,
+    help="Don't archive consumed JSON files into migrated.zip after import.",
+)
+@click.pass_context
+def sessions_migrate(ctx: click.Context, no_archive: bool) -> None:
+    """Import legacy per-session JSON files into the per-project memory.db.
+
+    Idempotent: rerun is a no-op once everything has been imported. Imported
+    decisions and code areas are tagged with source='migrated' so future
+    session_recall can rank them appropriately.
+    """
+    from context_engine.memory import db as memory_db, migrate as memory_migrate
+
+    config = ctx.obj["config"]
+    project_name = Path.cwd().name
+    storage_base = Path(config.storage_path) / project_name
+    db_path = memory_db.memory_db_path(storage_base)
+
+    conn = memory_db.connect(db_path)
+    try:
+        summary = memory_migrate.migrate(
+            conn,
+            project_name=project_name,
+            storage_base=storage_base,
+            archive=not no_archive,
+        )
+    finally:
+        conn.close()
+
+    if not summary.sources_scanned:
+        click.echo(f"  {DOT} No legacy session directories found.")
+        return
+
+    click.echo(f"  {CHECK} Scanned: {len(summary.sources_scanned)} source dir(s)")
+    if summary.files_imported == 0 and summary.files_skipped > 0:
+        click.echo(f"  {DOT} {summary.files_skipped} file(s) already imported. Nothing to do.")
+        return
+    click.echo(
+        f"  {CHECK} Imported {summary.files_imported} file(s) → "
+        f"{summary.decisions_imported} decision(s), "
+        f"{summary.code_areas_imported} code area(s)."
+    )
+    if summary.files_archived:
+        click.echo(f"  {CHECK} Archived {summary.files_archived} file(s) to migrated.zip")
+
+
 async def _run_index(
     config,
     project_dir: str,
