@@ -20,6 +20,7 @@ from context_engine.integration.git_context import (
     get_working_state,
 )
 from context_engine.integration.session_capture import SessionCapture
+from context_engine.memory import db as memory_db
 
 log = logging.getLogger(__name__)
 
@@ -123,6 +124,8 @@ class ContextEngineMCP:
         "expand_chunk",
         "related_context",
         "session_recall",
+        "session_timeline",
+        "session_event",
         "record_decision",
         "record_code_area",
         "index_status",
@@ -155,10 +158,33 @@ class ContextEngineMCP:
         )
 
         # Session capture — persists decisions and code-area notes across runs.
+        # Both the legacy JSON path and the new memory.db path are written to
+        # for record_decision / record_code_area; recall queries both. Once a
+        # release cycle of dual-write confirms parity, the JSON write side
+        # can be retired.
         self._session_capture = SessionCapture(
             sessions_dir=str(self._storage_base / "sessions")
         )
         self._session_id = self._session_capture.start_session(project_name)
+        try:
+            self._memory_conn = memory_db.connect(
+                memory_db.memory_db_path(self._storage_base)
+            )
+            # Ensure the sessions row exists so dual-writes don't trip the FK.
+            # The SessionStart hook normally creates this, but the MCP server
+            # may start in environments without hook coverage (e.g. tests).
+            import time as _t
+            _epoch = int(_t.time())
+            self._memory_conn.execute(
+                "INSERT OR IGNORE INTO sessions (id, project, started_at_epoch, "
+                "started_at, status) VALUES (?, ?, ?, ?, 'active')",
+                (self._session_id, project_name, _epoch,
+                 _t.strftime("%Y-%m-%dT%H:%M:%S", _t.gmtime(_epoch))),
+            )
+            self._memory_conn.commit()
+        except Exception as exc:
+            log.warning("memory.db open failed; recall will fall back to JSON: %s", exc)
+            self._memory_conn = None
         # Cheap maintenance on start: if the project has accumulated more than
         # _PRUNE_THRESHOLD session files, consolidate the oldest decisions
         # into decisions_log.json and remove the source files. No-op when
@@ -314,11 +340,43 @@ class ContextEngineMCP:
                 ),
                 Tool(
                     name="session_recall",
-                    description="Recall past decisions and code-area notes recorded in this or prior sessions",
+                    description=(
+                        "Recall past decisions, prompts, and turn summaries via topic search. "
+                        "Returns compact-index hits across the whole project history."
+                    ),
                     inputSchema={
                         "type": "object",
                         "properties": {"topic": {"type": "string"}},
                         "required": ["topic"],
+                    },
+                ),
+                Tool(
+                    name="session_timeline",
+                    description=(
+                        "List the turn summaries for a session, oldest first. "
+                        "Layer 2 of progressive disclosure — drill into a session_id "
+                        "returned by session_recall."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "session_id": {"type": "string"},
+                            "limit": {"type": "integer", "default": 20},
+                        },
+                        "required": ["session_id"],
+                    },
+                ),
+                Tool(
+                    name="session_event",
+                    description=(
+                        "Return the raw input/output payload for a single tool_event. "
+                        "Layer 3 of progressive disclosure — drill into an event_id "
+                        "from session_timeline."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {"event_id": {"type": "integer"}},
+                        "required": ["event_id"],
                     },
                 ),
                 Tool(
@@ -393,6 +451,10 @@ class ContextEngineMCP:
                     return await self._handle_related_context(arguments)
                 elif name == "session_recall":
                     return await self._handle_session_recall(arguments)
+                elif name == "session_timeline":
+                    return self._handle_session_timeline(arguments)
+                elif name == "session_event":
+                    return self._handle_session_event(arguments)
                 elif name == "record_decision":
                     return self._handle_record_decision(arguments)
                 elif name == "record_code_area":
@@ -579,6 +641,21 @@ class ContextEngineMCP:
             return [TextContent(type="text", text="decision is required.")]
         self._session_capture.record_decision(self._session_id, decision, reason)
         self._persist_current_session()
+        # Dual-write into memory.db so the new recall path (FTS5) sees it too.
+        if self._memory_conn is not None:
+            try:
+                import time as _time
+                epoch = int(_time.time())
+                self._memory_conn.execute(
+                    "INSERT INTO decisions (session_id, decision, reason, source, "
+                    "created_at_epoch, created_at) "
+                    "VALUES (?, ?, ?, 'manual', ?, ?)",
+                    (self._session_id, decision, reason, epoch,
+                     _time.strftime("%Y-%m-%dT%H:%M:%S", _time.gmtime(epoch))),
+                )
+                self._memory_conn.commit()
+            except Exception:
+                log.exception("memory.db decision dual-write failed")
         return [
             TextContent(
                 type="text",
@@ -595,12 +672,99 @@ class ContextEngineMCP:
             self._session_id, file_path, description
         )
         self._persist_current_session()
+        if self._memory_conn is not None:
+            try:
+                import time as _time
+                epoch = int(_time.time())
+                self._memory_conn.execute(
+                    "INSERT INTO code_areas (session_id, file_path, description, "
+                    "source, created_at_epoch) VALUES (?, ?, ?, 'manual', ?)",
+                    (self._session_id, file_path, description, epoch),
+                )
+                self._memory_conn.commit()
+            except Exception:
+                log.exception("memory.db code_area dual-write failed")
         return [
             TextContent(
                 type="text",
                 text=f"✓ Code area noted: {file_path} — {description}",
             )
         ]
+
+    def _handle_session_timeline(self, args):
+        session_id = (args.get("session_id") or "").strip()
+        limit = int(args.get("limit") or 20)
+        if not session_id:
+            return [TextContent(type="text", text="session_id is required.")]
+        if self._memory_conn is None:
+            return [TextContent(type="text", text="Memory store not available.")]
+        try:
+            rows = list(self._memory_conn.execute(
+                "SELECT prompt_number, summary, tier FROM turn_summaries "
+                "WHERE session_id = ? ORDER BY prompt_number ASC LIMIT ?",
+                (session_id, limit),
+            ))
+        except Exception as exc:
+            return [TextContent(type="text", text=f"timeline query failed: {exc}")]
+        if not rows:
+            return [TextContent(
+                type="text",
+                text=f"No turn summaries for session {session_id} yet.",
+            )]
+        meta = self._memory_conn.execute(
+            "SELECT project, started_at, ended_at, status, prompt_count, "
+            "rollup_summary FROM sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+        header = []
+        if meta:
+            header.append(f"session: {session_id} · {meta['project']} · {meta['status']}")
+            header.append(f"started: {meta['started_at']}  ended: {meta['ended_at'] or '—'}")
+            if meta["rollup_summary"]:
+                header.append(f"rollup: {meta['rollup_summary']}")
+        body = "\n".join(
+            f"  turn {r['prompt_number']:>3} [{r['tier']}] {r['summary']}"
+            for r in rows
+        )
+        return [TextContent(
+            type="text",
+            text="\n".join(header) + ("\n\n" + body if header else body),
+        )]
+
+    def _handle_session_event(self, args):
+        try:
+            event_id = int(args.get("event_id"))
+        except (TypeError, ValueError):
+            return [TextContent(type="text", text="event_id must be an integer.")]
+        if self._memory_conn is None:
+            return [TextContent(type="text", text="Memory store not available.")]
+        row = self._memory_conn.execute(
+            "SELECT te.tool_name, te.session_id, te.prompt_number, te.created_at, "
+            "p.raw_input, p.raw_output FROM tool_events te "
+            "LEFT JOIN tool_event_payloads p ON p.id = te.payload_id "
+            "WHERE te.id = ?",
+            (event_id,),
+        ).fetchone()
+        if row is None:
+            return [TextContent(
+                type="text",
+                text=f"No event with id={event_id}.",
+            )]
+        if row["raw_input"] is None and row["raw_output"] is None:
+            return [TextContent(
+                type="text",
+                text=(
+                    f"Event {event_id} ({row['tool_name']}) was retained as a summary "
+                    "only — its raw payload aged out of the retention window."
+                ),
+            )]
+        body = (
+            f"event {event_id} · {row['tool_name']} · session {row['session_id']} · "
+            f"turn {row['prompt_number']} · {row['created_at']}\n\n"
+            f"input:\n{row['raw_input']}\n\n"
+            f"output:\n{row['raw_output']}"
+        )
+        return [TextContent(type="text", text=body)]
 
     async def _handle_index_status(self):
         queries = self._stats["queries"]
@@ -761,6 +925,48 @@ class ContextEngineMCP:
             if text not in seen:
                 seen.add(text)
                 candidates.append(text)
+
+        # Fold in memory.db rows: decisions/code_areas (manual or migrated),
+        # plus the index of turn_summaries. Tagged with [layer:..|sid:..] so
+        # the agent knows where to drill from session_recall results — those
+        # tags map onto session_timeline / session_event drill-downs.
+        if self._memory_conn is not None:
+            try:
+                for row in self._memory_conn.execute(
+                    "SELECT decision, reason, source, session_id "
+                    "FROM decisions ORDER BY created_at_epoch DESC LIMIT 200"
+                ):
+                    text = (
+                        f"[decision src={row['source']}|sid:{row['session_id'] or '-'}] "
+                        f"{row['decision']} — {row['reason']}"
+                    )
+                    if text not in seen:
+                        seen.add(text)
+                        candidates.append(text)
+                for row in self._memory_conn.execute(
+                    "SELECT file_path, description, source, session_id "
+                    "FROM code_areas ORDER BY created_at_epoch DESC LIMIT 200"
+                ):
+                    text = (
+                        f"[code_area src={row['source']}|sid:{row['session_id'] or '-'}] "
+                        f"{row['file_path']} — {row['description']}"
+                    )
+                    if text not in seen:
+                        seen.add(text)
+                        candidates.append(text)
+                for row in self._memory_conn.execute(
+                    "SELECT session_id, prompt_number, summary "
+                    "FROM turn_summaries ORDER BY created_at_epoch DESC LIMIT 200"
+                ):
+                    text = (
+                        f"[turn sid:{row['session_id']}|n:{row['prompt_number']}] "
+                        f"{row['summary']}"
+                    )
+                    if text not in seen:
+                        seen.add(text)
+                        candidates.append(text)
+            except Exception:
+                log.exception("memory.db recall query failed; using JSON only")
 
         if not candidates:
             return []
