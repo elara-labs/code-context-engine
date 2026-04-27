@@ -40,10 +40,10 @@ def test_embedding_dimensions_match(embedder, sample_chunks):
     assert len(sample_chunks[0].embedding) == len(query_vec)
 
 
-def test_resolve_parallel_macos_defaults_to_one(monkeypatch):
+def test_resolve_parallel_macos_defaults_to_none(monkeypatch):
     monkeypatch.delenv("CCE_EMBED_PARALLEL", raising=False)
     monkeypatch.setattr("sys.platform", "darwin")
-    assert _resolve_parallel() == 1
+    assert _resolve_parallel() is None
 
 
 def test_resolve_parallel_linux_uses_cpu_count(monkeypatch):

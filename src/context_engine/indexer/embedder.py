@@ -20,11 +20,15 @@ log = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 
-# Number of parallel embedding workers. fastembed's `parallel>1` path spawns
-# multiprocessing.forkserver workers around onnxruntime, which deadlocks on
-# macOS (workers idle on SimpleQueue.get, main blocks in asyncio poll). Default
-# to single-process there; allow override via CCE_EMBED_PARALLEL.
-def _resolve_parallel() -> int:
+# Passed straight to fastembed's `parallel` argument:
+#   None → no data-parallel mp; use onnxruntime's own threading
+#   N>0  → spawn N forkserver workers around onnxruntime
+#
+# Even parallel=1 takes the multiprocessing path — and that path deadlocks on
+# macOS (workers idle on SimpleQueue.get while the main thread sits in
+# asyncio.poll, leaving `cce init` stuck after the file-scan progress bar
+# hits 100%). Default to None on darwin; allow override via CCE_EMBED_PARALLEL.
+def _resolve_parallel() -> int | None:
     override = os.environ.get("CCE_EMBED_PARALLEL")
     if override:
         try:
@@ -32,11 +36,11 @@ def _resolve_parallel() -> int:
         except ValueError:
             pass
     if sys.platform == "darwin":
-        return 1
+        return None
     return min(os.cpu_count() or 2, 4)
 
 
-_PARALLEL = _resolve_parallel()
+_PARALLEL: int | None = _resolve_parallel()
 
 
 class Embedder:
