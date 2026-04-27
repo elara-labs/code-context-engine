@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/elara-labs/code-context-engine/main/docs/logo.svg" alt="Code Context Engine" width="160">
+  <img src="docs/logo.svg" alt="Code Context Engine" width="160">
 </p>
 
 <h1 align="center">Code Context Engine</h1>
@@ -223,7 +223,7 @@ cce dashboard --port 8080      # custom port
 cce dashboard --no-browser     # server only, no browser open
 ```
 
-![CCE Dashboard](https://raw.githubusercontent.com/elara-labs/code-context-engine/main/docs/dashboard.png)
+![CCE Dashboard](docs/dashboard.png)
 
 ---
 
