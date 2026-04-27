@@ -240,6 +240,7 @@ async def run_indexing(
     target_path: str | None = None,
     log_fn=None,
     progress_fn=None,
+    embed_progress_fn=None,
 ) -> IndexResult:
     """Run the indexing pipeline. Returns a structured `IndexResult`.
 
@@ -247,6 +248,8 @@ async def run_indexing(
     `full=True` ignores the manifest and re-indexes everything visible.
     `log_fn(msg)` is called for verbose progress output if provided.
     `progress_fn(current, total)` is called after each batch with file counts.
+    `embed_progress_fn(current, total)` is called as embedding proceeds with
+    chunk counts (only for cache misses; cache hits return instantly).
     """
     project_dir = Path(project_dir)
     project_name = project_dir.name
@@ -262,6 +265,7 @@ async def run_indexing(
             target_path=target_path,
             log_fn=log_fn,
             progress_fn=progress_fn,
+            embed_progress_fn=embed_progress_fn,
         )
 
 
@@ -274,6 +278,7 @@ async def _run_indexing_locked(
     target_path: str | None,
     log_fn,
     progress_fn=None,
+    embed_progress_fn=None,
 ) -> IndexResult:
     backend = LocalBackend(base_path=str(storage_base))
     chunker = Chunker()
@@ -456,7 +461,7 @@ async def _run_indexing_locked(
         try:
             embedder = Embedder(model_name=config.embedding_model, cache=cache)
             try:
-                embedder.embed(all_chunks)
+                embedder.embed(all_chunks, progress_fn=embed_progress_fn)
             except Exception as exc:
                 msg = f"Embedding failed: {exc}"
                 result.errors.append(msg)

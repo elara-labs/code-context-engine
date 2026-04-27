@@ -1852,28 +1852,43 @@ async def _run_index(
     from context_engine.cli_style import success, warn, dim, value, CHECK, CROSS
 
     _showed_progress = False
+    _showed_embed_progress = False
     _bar_width = 30
+
+    def _render_bar(current: int, total: int, label: str) -> None:
+        filled = int(_bar_width * current / total) if total else 0
+        bar = (
+            click.style("█" * filled, fg="cyan") +
+            click.style("░" * (_bar_width - filled), fg="bright_black")
+        )
+        pct = click.style(f"{int(100 * current / total) if total else 0}%", fg="bright_black")
+        count = click.style(f"{current}/{total}", fg="white", bold=True)
+        click.echo(f"\r    {bar}  {count} {label}  {pct}", nl=False)
 
     def progress_fn(current: int, total: int) -> None:
         nonlocal _showed_progress
         if not verbose and sys.stdout.isatty():
-            filled = int(_bar_width * current / total) if total else 0
-            bar = (
-                click.style("█" * filled, fg="cyan") +
-                click.style("░" * (_bar_width - filled), fg="bright_black")
-            )
-            pct = click.style(f"{int(100 * current / total) if total else 0}%", fg="bright_black")
-            count = click.style(f"{current}/{total}", fg="white", bold=True)
-            click.echo(f"\r    {bar}  {count} files  {pct}", nl=False)
+            _render_bar(current, total, "files")
             _showed_progress = True
+
+    def embed_progress_fn(current: int, total: int) -> None:
+        nonlocal _showed_embed_progress, _showed_progress
+        if not verbose and sys.stdout.isatty():
+            # First tick: close out the file bar (if any) with a newline so the
+            # embed bar starts on its own line instead of overwriting it.
+            if not _showed_embed_progress and _showed_progress:
+                click.echo()
+            _render_bar(current, total, "chunks embedded")
+            _showed_embed_progress = True
 
     result = await run_indexing(
         config, project_dir, full=full, target_path=target_path,
         log_fn=log_fn, progress_fn=progress_fn,
+        embed_progress_fn=embed_progress_fn,
     )
 
-    if _showed_progress:
-        click.echo()  # newline after progress bar
+    if _showed_progress or _showed_embed_progress:
+        click.echo()  # newline after progress bar(s)
 
     for err in result.errors:
         click.echo(f"  {CROSS} {warn(f'Error: {err}')}", err=True)

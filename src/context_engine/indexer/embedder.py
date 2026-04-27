@@ -66,14 +66,24 @@ class Embedder:
                 f"Original error: {exc}"
             ) from exc
 
-    def embed(self, chunks: list[Chunk], batch_size: int = 64) -> None:
+    def embed(
+        self,
+        chunks: list[Chunk],
+        batch_size: int = 64,
+        progress_fn=None,
+    ) -> None:
         """Embed chunks in-place. With a cache attached, only chunks whose
-        content hash is not already in the cache go through the model."""
+        content hash is not already in the cache go through the model.
+
+        `progress_fn(current, total)` is called as embedding proceeds, where
+        `total` is the count of chunks that actually needed embedding (cache
+        misses). Cache hits return instantly and don't trigger callbacks.
+        """
         if not chunks:
             return
 
         if self._cache is None:
-            self._embed_all(chunks, batch_size)
+            self._embed_all(chunks, batch_size, progress_fn=progress_fn)
             return
 
         # Hash + batched lookup: one SQL roundtrip for the whole batch
@@ -90,7 +100,7 @@ class Embedder:
 
         if miss_indices:
             miss_chunks = [chunks[i] for i in miss_indices]
-            self._embed_all(miss_chunks, batch_size)
+            self._embed_all(miss_chunks, batch_size, progress_fn=progress_fn)
             # Persist newly-computed embeddings back to the cache.
             new_entries = [
                 (hashes[i], chunks[i].embedding)
@@ -108,16 +118,30 @@ class Embedder:
                 cache_hits, cache_total, cache_hits / cache_total * 100,
             )
 
-    def _embed_all(self, chunks: list[Chunk], batch_size: int = 64) -> None:
-        """Embed all chunks via the model (no cache)."""
+    def _embed_all(
+        self,
+        chunks: list[Chunk],
+        batch_size: int = 64,
+        progress_fn=None,
+    ) -> None:
+        """Embed all chunks via the model (no cache).
+
+        Iterates fastembed's generator one item at a time so we can tick a
+        progress callback. The model still embeds in batches internally; we
+        just observe one yielded vector at a time.
+        """
         texts = [c.content for c in chunks]
-        embeddings = list(self._model.embed(
+        total = len(texts)
+        if progress_fn:
+            progress_fn(0, total)
+        for i, emb in enumerate(self._model.embed(
             texts,
             batch_size=batch_size,
             parallel=_PARALLEL,
-        ))
-        for chunk, emb in zip(chunks, embeddings):
-            chunk.embedding = emb.tolist()
+        )):
+            chunks[i].embedding = emb.tolist()
+            if progress_fn and ((i + 1) % batch_size == 0 or i + 1 == total):
+                progress_fn(i + 1, total)
 
     @lru_cache(maxsize=256)
     def embed_query(self, query: str) -> tuple:
