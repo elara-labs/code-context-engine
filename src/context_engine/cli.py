@@ -17,11 +17,14 @@ def _configure_mcp(project_dir: Path) -> bool:
     Returns True if the entry was added. Uses an atomic write so a crash or
     partial write can't destroy pre-existing MCP server entries in the file.
     """
-    from context_engine.utils import atomic_write_text
+    from context_engine.utils import atomic_write_text, resolve_cce_binary
 
     mcp_path = project_dir / ".mcp.json"
-    cce_bin = Path(sys.executable).parent / "cce"
-    command = str(cce_bin) if cce_bin.exists() else "cce"
+    # `sys.executable` is wrong for non-venv installs (pipx, Homebrew, pip
+    # --user) — its parent has the python interpreter, not necessarily `cce`.
+    # `resolve_cce_binary` matches the same fallbacks the SessionStart hook
+    # uses so MCP and the hook agree on which `cce` to call.
+    command = resolve_cce_binary()
 
     entry = {"command": command, "args": ["serve", "--project-dir", str(project_dir)]}
 

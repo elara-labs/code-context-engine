@@ -273,7 +273,17 @@ class ContextEngineMCP:
             return [
                 Tool(
                     name="context_search",
-                    description="Search project context — code, docs, session history",
+                    description=(
+                        "PREFERRED tool for ANY question about this project's "
+                        "code, structure, or behavior. Use INSTEAD OF Read, "
+                        "Grep, or Glob when exploring the codebase, locating "
+                        "functions, or answering 'how does X work / where is "
+                        "Y' questions. Returns the most relevant code chunks "
+                        "with confidence scores from a hybrid vector + BM25 "
+                        "index, so you do not pay tokens for files you do not "
+                        "need. Read should be reserved for opening a known "
+                        "file path you intend to edit."
+                    ),
                     inputSchema={
                         "type": "object",
                         "properties": {
