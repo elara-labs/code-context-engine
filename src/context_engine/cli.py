@@ -35,7 +35,13 @@ def _configure_mcp(project_dir: Path) -> bool:
 
     servers = data.setdefault("mcpServers", {})
     if "context-engine" in servers:
-        return False  # already configured
+        existing = servers["context-engine"]
+        if existing.get("command") == command and existing.get("args") == entry["args"]:
+            return False  # already configured and up to date
+        # Update stale command path or args (e.g. after package rename).
+        servers["context-engine"] = entry
+        atomic_write_text(mcp_path, json.dumps(data, indent=2) + "\n")
+        return True
 
     servers["context-engine"] = entry
     atomic_write_text(mcp_path, json.dumps(data, indent=2) + "\n")
