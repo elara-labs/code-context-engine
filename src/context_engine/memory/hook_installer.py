@@ -1,0 +1,156 @@
+"""Install/uninstall the 5 Claude Code lifecycle hooks for memory capture.
+
+Two pieces of state to manage:
+
+1. The shell script `cce_hook.sh` lives at `~/.cce/hooks/cce_hook.sh`. It's
+   tiny (~20 lines) and reads stdin → POSTs to the local memory hook server.
+
+2. The project-level `<project>/.claude/settings.json` gets entries under
+   `hooks.<HookName>` pointing to the script. Existing CCE entries (and any
+   user-added entries) are preserved.
+
+Install is idempotent: re-running adds nothing new if the entries already
+exist. Uninstall removes only the entries we added (matched by command
+substring).
+"""
+from __future__ import annotations
+
+import json
+import logging
+import stat
+from pathlib import Path
+
+log = logging.getLogger(__name__)
+
+HOOK_SCRIPT_NAME = "cce_hook.sh"
+HOOK_DIR = Path.home() / ".cce" / "hooks"
+HOOK_PATH = HOOK_DIR / HOOK_SCRIPT_NAME
+
+# Marker substring used to identify hooks we own — survives subsequent
+# format/path tweaks as long as the script name stays.
+HOOK_MARKER = HOOK_SCRIPT_NAME
+
+LIFECYCLE_HOOKS = [
+    "SessionStart",
+    "UserPromptSubmit",
+    "PostToolUse",
+    "Stop",
+    "SessionEnd",
+]
+
+_HOOK_SCRIPT_BODY = """#!/bin/sh
+# CCE memory hook — installed by `cce init`. Forwards Claude Code hook
+# payloads (JSON on stdin) to the local memory capture server.
+#
+# Failure is silent — capture is best-effort and must never block the
+# user's flow. The hook name is passed as $1 (first argument).
+set -u
+
+HOOK_NAME="${1:-unknown}"
+PORT_FILE="${HOME}/.cce/projects/$(basename "${PWD}")/serve.port"
+[ -r "${PORT_FILE}" ] || exit 0
+PORT="$(cat "${PORT_FILE}" 2>/dev/null)"
+[ -n "${PORT}" ] || exit 0
+
+curl -sf -m 1 -X POST -H "Content-Type: application/json" \\
+    --data-binary @- "http://127.0.0.1:${PORT}/hooks/${HOOK_NAME}" \\
+    >/dev/null 2>&1 || true
+exit 0
+"""
+
+
+def install_hook_script(target: Path = HOOK_PATH) -> bool:
+    """Write `cce_hook.sh` to ~/.cce/hooks/. Returns True if created/updated."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    existing = target.read_text() if target.exists() else None
+    if existing == _HOOK_SCRIPT_BODY:
+        return False
+    target.write_text(_HOOK_SCRIPT_BODY)
+    target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return True
+
+
+def install_settings(project_dir: Path) -> dict:
+    """Wire all 5 lifecycle hooks into <project>/.claude/settings.json.
+
+    Idempotent. Preserves any existing user hooks. Returns a summary dict
+    with `added` (hook names we wrote) and `skipped` (hook names already
+    present).
+    """
+    settings_dir = project_dir / ".claude"
+    settings_path = settings_dir / "settings.json"
+    settings_dir.mkdir(parents=True, exist_ok=True)
+
+    data: dict = {}
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text() or "{}")
+            if not isinstance(data, dict):
+                data = {}
+        except json.JSONDecodeError:
+            log.warning("Existing settings.json is invalid JSON; rewriting.")
+            data = {}
+
+    hooks = data.setdefault("hooks", {})
+    added: list[str] = []
+    skipped: list[str] = []
+
+    for hook_name in LIFECYCLE_HOOKS:
+        bucket = hooks.setdefault(hook_name, [])
+        if _has_cce_hook(bucket):
+            skipped.append(hook_name)
+            continue
+        bucket.append({
+            "matcher": "",
+            "hooks": [{
+                "type": "command",
+                "command": f"{HOOK_PATH} {hook_name}",
+            }],
+        })
+        added.append(hook_name)
+
+    settings_path.write_text(json.dumps(data, indent=2) + "\n")
+    return {"added": added, "skipped": skipped, "settings_path": str(settings_path)}
+
+
+def uninstall_settings(project_dir: Path) -> dict:
+    """Remove our 5 hook entries from settings.json. Idempotent."""
+    settings_path = project_dir / ".claude" / "settings.json"
+    if not settings_path.exists():
+        return {"removed": [], "settings_path": str(settings_path)}
+    try:
+        data = json.loads(settings_path.read_text() or "{}")
+    except json.JSONDecodeError:
+        return {"removed": [], "settings_path": str(settings_path)}
+    if not isinstance(data, dict):
+        return {"removed": [], "settings_path": str(settings_path)}
+
+    hooks = data.get("hooks") or {}
+    removed: list[str] = []
+    for hook_name in LIFECYCLE_HOOKS:
+        bucket = hooks.get(hook_name)
+        if not bucket:
+            continue
+        kept = [entry for entry in bucket if not _has_cce_hook([entry])]
+        if len(kept) != len(bucket):
+            removed.append(hook_name)
+        if kept:
+            hooks[hook_name] = kept
+        else:
+            del hooks[hook_name]
+
+    if removed:
+        if not hooks:
+            data.pop("hooks", None)
+        settings_path.write_text(json.dumps(data, indent=2) + "\n")
+    return {"removed": removed, "settings_path": str(settings_path)}
+
+
+def _has_cce_hook(bucket: list) -> bool:
+    """True if any entry in the bucket runs our hook script."""
+    for entry in bucket:
+        for h in entry.get("hooks", []) or []:
+            cmd = h.get("command", "") or ""
+            if HOOK_MARKER in cmd:
+                return True
+    return False

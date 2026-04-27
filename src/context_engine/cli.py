@@ -153,6 +153,27 @@ def _has_cce_hook(hook_list: list, marker: str) -> bool:
     return False
 
 
+def _install_memory_hooks(project_dir: Path) -> None:
+    """Install the 5 lifecycle hooks for memory capture (PR 2).
+
+    Writes ~/.cce/hooks/cce_hook.sh and wires <project>/.claude/settings.json
+    entries for SessionStart, UserPromptSubmit, PostToolUse, Stop, SessionEnd.
+    Idempotent.
+    """
+    from context_engine.memory.hook_installer import (
+        install_hook_script, install_settings,
+    )
+    install_hook_script()
+    summary = install_settings(project_dir)
+    if summary["added"]:
+        _ok(
+            f"Memory hooks installed  "
+            + _dim(f"({len(summary['added'])} hooks: {', '.join(summary['added'])})")
+        )
+    elif summary["skipped"]:
+        _ok("Memory hooks already configured")
+
+
 def _ensure_session_hook(project_dir: Path) -> None:
     """Add Claude Code hooks so CCE status shows on startup."""
     settings_dir = project_dir / ".claude"
@@ -567,9 +588,10 @@ def init(ctx: click.Context) -> None:
     else:
         _ok("MCP server already configured in " + click.style(".mcp.json", fg="cyan"))
 
-    # 5. CLAUDE.md + session hook
+    # 5. CLAUDE.md + session hook + memory lifecycle hooks
     _ensure_claude_md(project_dir)
     _ensure_session_hook(project_dir)
+    _install_memory_hooks(project_dir)
 
     # 6. .gitignore — add CCE per-machine entries
     ensure_gitignore(str(project_dir))
@@ -2054,8 +2076,26 @@ async def _run_serve(config) -> None:
         worker_task = asyncio.create_task(_reindex_worker())
         watcher.start(loop=loop)
 
+    # Memory hook listener — loopback HTTP for the 5 lifecycle hooks. Best
+    # effort: a setup failure here must NOT prevent the MCP server starting
+    # (capture is a non-critical feature; retrieval still works without it).
+    hook_runner = None
+    hook_port = None
+    try:
+        from context_engine.memory.hook_server import start_hook_server
+        hook_runner, hook_port = await start_hook_server(
+            storage_base=storage_base, project_name=project_name,
+        )
+    except Exception as exc:
+        _log.warning("Memory hook server failed to start: %s", exc)
+
     watcher_label = " · live watcher active" if watcher else ""
-    print(f"CCE ready · {project_name} · {chunk_count} chunks indexed{watcher_label}", file=sys.stderr)
+    hook_label = f" · memory hooks :{hook_port}" if hook_port else ""
+    print(
+        f"CCE ready · {project_name} · {chunk_count} chunks indexed"
+        f"{watcher_label}{hook_label}",
+        file=sys.stderr,
+    )
 
     try:
         await mcp.run_stdio()
@@ -2068,3 +2108,8 @@ async def _run_serve(config) -> None:
                 await worker_task
             except asyncio.CancelledError:
                 pass
+        if hook_runner is not None:
+            try:
+                await hook_runner.cleanup()
+            except Exception:
+                _log.warning("hook_runner cleanup failed", exc_info=True)

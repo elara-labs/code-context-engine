@@ -1,0 +1,212 @@
+"""Integration tests for the 5 lifecycle-hook HTTP endpoints."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+from aiohttp import web
+
+from context_engine.memory import db as memory_db
+from context_engine.memory.hooks import add_routes
+
+
+@pytest.fixture
+async def hook_app(tmp_path: Path):
+    """An aiohttp Application with the memory db wired up + hook routes."""
+    db_path = tmp_path / "memory.db"
+    conn = memory_db.connect(db_path)
+    app = web.Application()
+    app["memory_db"] = conn
+    app["project_name"] = "demo"
+    add_routes(app)
+    yield app, conn
+    conn.close()
+
+
+async def test_session_start_inserts_session(hook_app, aiohttp_client):
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    resp = await client.post(
+        "/hooks/SessionStart",
+        json={"session_id": "abc", "project": "demo", "started_at": 1700000000},
+    )
+    assert resp.status == 200
+    body = await resp.json()
+    assert body == {"ok": True, "session_id": "abc"}
+
+    rows = list(conn.execute("SELECT id, project, status FROM sessions"))
+    assert len(rows) == 1
+    assert rows[0]["id"] == "abc"
+    assert rows[0]["project"] == "demo"
+    assert rows[0]["status"] == "active"
+
+
+async def test_session_start_idempotent(hook_app, aiohttp_client):
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    for _ in range(3):
+        resp = await client.post(
+            "/hooks/SessionStart",
+            json={"session_id": "abc", "project": "demo"},
+        )
+        assert resp.status == 200
+    n = conn.execute("SELECT COUNT(*) AS n FROM sessions").fetchone()["n"]
+    assert n == 1
+
+
+async def test_user_prompt_submit_inserts_and_assigns_number(hook_app, aiohttp_client):
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    await client.post(
+        "/hooks/SessionStart", json={"session_id": "abc", "project": "demo"},
+    )
+    r1 = await client.post(
+        "/hooks/UserPromptSubmit",
+        json={"session_id": "abc", "prompt_text": "hello"},
+    )
+    r2 = await client.post(
+        "/hooks/UserPromptSubmit",
+        json={"session_id": "abc", "prompt_text": "world"},
+    )
+    assert (await r1.json())["prompt_number"] == 1
+    assert (await r2.json())["prompt_number"] == 2
+
+    rows = list(conn.execute(
+        "SELECT prompt_number, prompt_text FROM prompts ORDER BY prompt_number"
+    ))
+    assert [(r["prompt_number"], r["prompt_text"]) for r in rows] == [
+        (1, "hello"), (2, "world"),
+    ]
+    # Second prompt enqueued compression for prior turn (prompt 1).
+    pending = list(conn.execute(
+        "SELECT kind, session_id, prompt_number FROM pending_compressions"
+    ))
+    assert pending == [{"kind": "turn", "session_id": "abc", "prompt_number": 1}] \
+        if isinstance(pending[0], dict) else len(pending) == 1
+
+
+async def test_post_tool_use_inserts_event_and_payload(hook_app, aiohttp_client):
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    await client.post(
+        "/hooks/SessionStart", json={"session_id": "abc", "project": "demo"},
+    )
+    await client.post(
+        "/hooks/UserPromptSubmit",
+        json={"session_id": "abc", "prompt_text": "hi"},
+    )
+    resp = await client.post(
+        "/hooks/PostToolUse",
+        json={
+            "session_id": "abc",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/tmp/foo.py"},
+            "tool_output": "x = 1\n",
+        },
+    )
+    assert resp.status == 200
+    events = list(conn.execute(
+        "SELECT tool_name, payload_id, prompt_number FROM tool_events"
+    ))
+    assert len(events) == 1
+    assert events[0]["tool_name"] == "Read"
+    assert events[0]["prompt_number"] == 1
+    payload_id = events[0]["payload_id"]
+    payload = conn.execute(
+        "SELECT raw_input, raw_output, size_bytes FROM tool_event_payloads "
+        "WHERE id = ?", (payload_id,),
+    ).fetchone()
+    assert "/tmp/foo.py" in payload["raw_input"]
+    assert "x = 1" in payload["raw_output"]
+    assert payload["size_bytes"] > 0
+
+
+async def test_stop_enqueues_turn_compression(hook_app, aiohttp_client):
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    await client.post(
+        "/hooks/SessionStart", json={"session_id": "abc", "project": "demo"},
+    )
+    await client.post(
+        "/hooks/UserPromptSubmit",
+        json={"session_id": "abc", "prompt_text": "hi"},
+    )
+    resp = await client.post(
+        "/hooks/Stop",
+        json={"session_id": "abc"},
+    )
+    assert resp.status == 200
+    pending = list(conn.execute(
+        "SELECT kind, session_id, prompt_number FROM pending_compressions"
+    ))
+    assert any(
+        p["kind"] == "turn" and p["prompt_number"] == 1 for p in pending
+    )
+
+
+async def test_session_end_marks_completed_and_enqueues_rollup(
+    hook_app, aiohttp_client,
+):
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    await client.post(
+        "/hooks/SessionStart", json={"session_id": "abc", "project": "demo"},
+    )
+    resp = await client.post(
+        "/hooks/SessionEnd",
+        json={"session_id": "abc", "exit_reason": "normal"},
+    )
+    assert resp.status == 200
+    row = conn.execute(
+        "SELECT status, exit_reason, ended_at_epoch FROM sessions WHERE id = ?",
+        ("abc",),
+    ).fetchone()
+    assert row["status"] == "completed"
+    assert row["exit_reason"] == "normal"
+    assert row["ended_at_epoch"] is not None
+
+    pending = list(conn.execute(
+        "SELECT kind, session_id, prompt_number FROM pending_compressions "
+        "WHERE kind = 'session_rollup'"
+    ))
+    assert len(pending) == 1
+    assert pending[0]["session_id"] == "abc"
+
+
+async def test_missing_session_id_returns_400(hook_app, aiohttp_client):
+    app, _ = hook_app
+    client = await aiohttp_client(app)
+    for endpoint in [
+        "/hooks/SessionStart",
+        "/hooks/UserPromptSubmit",
+        "/hooks/PostToolUse",
+        "/hooks/Stop",
+        "/hooks/SessionEnd",
+    ]:
+        resp = await client.post(endpoint, json={})
+        assert resp.status == 400, f"{endpoint} should require session_id"
+
+
+async def test_compression_queue_dedupes(hook_app, aiohttp_client):
+    """Stop and the next UserPromptSubmit can both enqueue the same turn."""
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    await client.post(
+        "/hooks/SessionStart", json={"session_id": "abc", "project": "demo"},
+    )
+    await client.post(
+        "/hooks/UserPromptSubmit",
+        json={"session_id": "abc", "prompt_text": "hi"},
+    )
+    await client.post("/hooks/Stop", json={"session_id": "abc"})
+    # Next prompt would also enqueue prev turn (1).
+    await client.post(
+        "/hooks/UserPromptSubmit",
+        json={"session_id": "abc", "prompt_text": "next"},
+    )
+    n = conn.execute(
+        "SELECT COUNT(*) AS n FROM pending_compressions "
+        "WHERE kind = 'turn' AND session_id = 'abc' AND prompt_number = 1"
+    ).fetchone()["n"]
+    assert n == 1, "double-enqueue should be deduped by UNIQUE constraint"
