@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/fazleelahhee/Claude-Context-Engine/main/docs/logo.svg" alt="Code Context Engine" width="160">
+  <img src="https://raw.githubusercontent.com/elara-labs/code-context-engine/main/docs/logo.svg" alt="Code Context Engine" width="160">
 </p>
 
 <h1 align="center">Code Context Engine</h1>
@@ -13,7 +13,7 @@
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+"></a>
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-compatible-green.svg" alt="MCP Compatible"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License"></a>
-  <a href="https://github.com/fazleelahhee/Claude-Context-Engine"><img src="https://img.shields.io/github/stars/fazleelahhee/Claude-Context-Engine?style=social" alt="Stars"></a>
+  <a href="https://github.com/elara-labs/code-context-engine"><img src="https://img.shields.io/github/stars/elara-labs/code-context-engine?style=social" alt="Stars"></a>
 </p>
 
 <p align="center">
@@ -147,17 +147,17 @@ Once restarted, Claude can call `context_search` and the eight companion MCP too
 
 ## Documentation
 
-Full documentation is available on the [GitHub Wiki](https://github.com/fazleelahhee/Claude-Context-Engine/wiki):
+Full documentation is available on the [GitHub Wiki](https://github.com/elara-labs/code-context-engine/wiki):
 
 | Page | What it covers |
 |------|---------------|
-| [Examples](https://github.com/fazleelahhee/Claude-Context-Engine/wiki/Examples) | Real conversations — what you type, what Claude does |
-| [CCE In Practice](https://github.com/fazleelahhee/Claude-Context-Engine/wiki/CCE-In-Practice) | Token counts and internals for each scenario |
-| [How It Works](https://github.com/fazleelahhee/Claude-Context-Engine/wiki/How-It-Works) | Full 9-stage pipeline: indexing, retrieval, compression |
-| [CLI Reference](https://github.com/fazleelahhee/Claude-Context-Engine/wiki/CLI-Reference) | Every command with expected output |
-| [Tech Stack](https://github.com/fazleelahhee/Claude-Context-Engine/wiki/Tech-Stack) | Every library: what it does, where it's used, why chosen |
-| [Project Commands](https://github.com/fazleelahhee/Claude-Context-Engine/wiki/Project-Commands) | Rules, preferences, and per-project commands for Claude |
-| [Configuration](https://github.com/fazleelahhee/Claude-Context-Engine/wiki/Configuration) | All config options, global and per-project |
+| [Examples](https://github.com/elara-labs/code-context-engine/wiki/Examples) | Real conversations — what you type, what Claude does |
+| [CCE In Practice](https://github.com/elara-labs/code-context-engine/wiki/CCE-In-Practice) | Token counts and internals for each scenario |
+| [How It Works](https://github.com/elara-labs/code-context-engine/wiki/How-It-Works) | Full 9-stage pipeline: indexing, retrieval, compression |
+| [CLI Reference](https://github.com/elara-labs/code-context-engine/wiki/CLI-Reference) | Every command with expected output |
+| [Tech Stack](https://github.com/elara-labs/code-context-engine/wiki/Tech-Stack) | Every library: what it does, where it's used, why chosen |
+| [Project Commands](https://github.com/elara-labs/code-context-engine/wiki/Project-Commands) | Rules, preferences, and per-project commands for Claude |
+| [Configuration](https://github.com/elara-labs/code-context-engine/wiki/Configuration) | All config options, global and per-project |
 
 ---
 
@@ -223,7 +223,7 @@ cce dashboard --port 8080      # custom port
 cce dashboard --no-browser     # server only, no browser open
 ```
 
-![CCE Dashboard](https://raw.githubusercontent.com/fazleelahhee/Claude-Context-Engine/main/docs/dashboard.png)
+![CCE Dashboard](https://raw.githubusercontent.com/elara-labs/code-context-engine/main/docs/dashboard.png)
 
 ---
 
@@ -474,7 +474,7 @@ cce commands add before_push 'composer test'
 cce commands add-custom deploy 'kubectl apply -f k8s/'
 ```
 
-Claude sees these at every session start and follows them automatically. Supports workspace-level configs for multi-project directories. See the [Project Commands wiki](https://github.com/fazleelahhee/Claude-Context-Engine/wiki/Project-Commands) for details.
+Claude sees these at every session start and follows them automatically. Supports workspace-level configs for multi-project directories. See the [Project Commands wiki](https://github.com/elara-labs/code-context-engine/wiki/Project-Commands) for details.
 ---
 
 ## Optional Ollama Support
@@ -539,7 +539,7 @@ All other text-based files (Markdown, YAML, PHP, config files, etc.) are chunked
 
 Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions.
 
-Browse [good first issues](https://github.com/fazleelahhee/Claude-Context-Engine/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) if you are looking for a place to start.
+Browse [good first issues](https://github.com/elara-labs/code-context-engine/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) if you are looking for a place to start.
 
 ---
 
