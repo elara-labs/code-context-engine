@@ -1,4 +1,4 @@
-# Claude-Context-Engine — Code Review & Improvement Roadmap
+# Code-Context-Engine — Code Review & Improvement Roadmap
 
 **Date:** 2026-04-18
 **Scope:** Full-repo review of `src/context_engine/`, `tests/`, `.github/workflows/`, packaging, and docs.
@@ -9,7 +9,7 @@
 ## 1. Executive Summary
 
 ### Purpose
-Claude-Context-Engine is a **local-first semantic indexing and retrieval system** designed to reduce token usage in Claude Code workflows. It chunks codebases using tree-sitter AST parsing, embeds chunks with `sentence-transformers`, stores them in LanceDB, and retrieves only the most relevant context when developers ask questions. An MCP server exposes the index to Claude Code.
+Code-Context-Engine is a **local-first semantic indexing and retrieval system** designed to reduce token usage in Claude Code workflows. It chunks codebases using tree-sitter AST parsing, embeds chunks with `sentence-transformers`, stores them in LanceDB, and retrieves only the most relevant context when developers ask questions. An MCP server exposes the index to Claude Code.
 
 ### Strengths
 - **Clean module structure** — `indexer/`, `storage/`, `retrieval/`, `compression/`, `integration/` each have a focused responsibility.
@@ -368,7 +368,7 @@ Remove the `password:` line entirely — trusted publishing authenticates via OI
 
 ### 4.1 `.mcp.json` has a hard-coded wrong path
 
-`/.mcp.json:4` points to `/Users/raj/projects/Claude-Context-Engine/.venv/bin/cce` — a path specific to another machine. The MCP server will not start for anyone cloning the repo.
+`/.mcp.json:4` points to `/Users/raj/projects/Code-Context-Engine/.venv/bin/cce` — a path specific to another machine. The MCP server will not start for anyone cloning the repo.
 
 **Fix options:**
 
