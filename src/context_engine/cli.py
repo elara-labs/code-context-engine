@@ -2089,6 +2089,20 @@ async def _run_serve(config) -> None:
     except Exception as exc:
         _log.warning("Memory hook server failed to start: %s", exc)
 
+    # Memory compression worker — drains pending_compressions in the background.
+    # Owns its own sqlite connection (sqlite3 connections are not thread-safe).
+    compression_conn = None
+    compression_task = None
+    try:
+        from context_engine.memory import db as memory_db
+        from context_engine.memory.compressor import compression_loop
+        compression_conn = memory_db.connect(memory_db.memory_db_path(storage_base))
+        compression_task = asyncio.create_task(
+            compression_loop(compression_conn, embedder)
+        )
+    except Exception as exc:
+        _log.warning("Memory compression worker failed to start: %s", exc)
+
     watcher_label = " · live watcher active" if watcher else ""
     hook_label = f" · memory hooks :{hook_port}" if hook_port else ""
     print(
@@ -2107,6 +2121,17 @@ async def _run_serve(config) -> None:
             try:
                 await worker_task
             except asyncio.CancelledError:
+                pass
+        if compression_task is not None:
+            compression_task.cancel()
+            try:
+                await compression_task
+            except asyncio.CancelledError:
+                pass
+        if compression_conn is not None:
+            try:
+                compression_conn.close()
+            except Exception:
                 pass
         if hook_runner is not None:
             try:
