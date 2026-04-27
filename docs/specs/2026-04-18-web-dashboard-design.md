@@ -112,7 +112,7 @@ Adds to `pyproject.toml` optional or core deps:
 - `fastapi>=0.110`
 - `uvicorn>=0.29`
 
-Both are lightweight. If the user installs via `pip install claude-context-engine`, they are included. No build step, no Node.js, no separate frontend tooling.
+Both are lightweight. If the user installs via `pip install code-context-engine`, they are included. No build step, no Node.js, no separate frontend tooling.
 
 ---
 

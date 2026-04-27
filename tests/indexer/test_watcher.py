@@ -73,14 +73,13 @@ async def test_watcher_ignore_matches_component_not_substring(tmp_path):
 
 @pytest.mark.asyncio
 async def test_watcher_always_ignores_cce_dirs(tmp_path):
-    """'.cce' and '.claude-context-engine' are always ignored even without explicit patterns."""
+    """'.cce' is always ignored even without explicit patterns."""
     events = []
 
     async def on_change(path: str):
         events.append(path)
 
     (tmp_path / ".cce").mkdir()
-    (tmp_path / ".claude-context-engine").mkdir()
 
     watcher = FileWatcher(
         watch_dir=str(tmp_path), on_change=on_change,
@@ -88,11 +87,10 @@ async def test_watcher_always_ignores_cce_dirs(tmp_path):
     )
     watcher.start()
     (tmp_path / ".cce" / "commands.yaml").write_text("test")
-    (tmp_path / ".claude-context-engine" / "index.db").write_text("test")
     (tmp_path / "real.py").write_text("should be seen")
     await asyncio.sleep(0.5)
     watcher.stop()
-    assert not any(".cce" in e or ".claude-context-engine" in e for e in events)
+    assert not any(".cce" in e for e in events)
     assert any("real.py" in e for e in events)
 
 

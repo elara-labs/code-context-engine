@@ -373,7 +373,7 @@ Remove the `password:` line entirely — trusted publishing authenticates via OI
 **Fix options:**
 
 1. Don't commit a machine-specific `.mcp.json`. Add it to `.gitignore` and ship a `.mcp.json.example`.
-2. Use the installed `cce` binary directly (assuming `pip install claude-context-engine`):
+2. Use the installed `cce` binary directly (assuming `pip install code-context-engine`):
 
    ```json
    {

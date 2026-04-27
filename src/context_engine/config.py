@@ -5,12 +5,7 @@ from pathlib import Path
 import yaml
 
 
-_NEW_HOME = Path.home() / ".cce"
-_OLD_HOME = Path.home() / ".claude-context-engine"
-
-# Use the old directory if it exists and the new one does not, so existing
-# installs keep working without a manual migration step.
-_CCE_HOME = _OLD_HOME if (_OLD_HOME.exists() and not _NEW_HOME.exists()) else _NEW_HOME
+_CCE_HOME = Path.home() / ".cce"
 
 DEFAULT_GLOBAL_PATH = _CCE_HOME / "config.yaml"
 PROJECT_CONFIG_NAME = ".context-engine.yaml"

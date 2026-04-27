@@ -49,7 +49,6 @@ CLAUDE.md
 
 # CCE — index data (stored in ~/.cce/ but guard here too)
 *.lance/
-.claude-context-engine/
 
 # Build artefacts
 docs/superpowers/

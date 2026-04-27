@@ -202,12 +202,7 @@ def _show_welcome_banner(config) -> None:
     from importlib.metadata import version as pkg_version
 
     try:
-        # Try the new package name first; fall back to the legacy name so
-        # users on a pre-0.3.0 install still get a real version string.
-        try:
-            ver = pkg_version("code-context-engine")
-        except Exception:
-            ver = pkg_version("claude-context-engine")
+        ver = pkg_version("code-context-engine")
     except Exception:
         ver = "?"
 
@@ -612,12 +607,7 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
 
     if oneline:
         try:
-            # Try the new package name first; fall back to the legacy name so
-            # users on a pre-0.3.0 install still get a real version string.
-            try:
-                ver = pkg_version("code-context-engine")
-            except Exception:
-                ver = pkg_version("claude-context-engine")
+            ver = pkg_version("code-context-engine")
         except Exception:
             ver = "?"
         project_name = Path.cwd().name
@@ -1556,12 +1546,7 @@ def serve(ctx: click.Context, as_http: bool, host: str, port: int, project_dir: 
         return
     from importlib.metadata import version as pkg_version
     try:
-        # Try the new package name first; fall back to the legacy name so
-        # users on a pre-0.3.0 install still get a real version string.
-        try:
-            ver = pkg_version("code-context-engine")
-        except Exception:
-            ver = pkg_version("claude-context-engine")
+        ver = pkg_version("code-context-engine")
     except Exception:
         ver = "unknown"
     click.echo(f"CCE v{ver} · Starting context engine MCP server...", err=True)

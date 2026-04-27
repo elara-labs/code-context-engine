@@ -7,14 +7,10 @@ _CHARS_PER_TOKEN = 4
 
 
 def _get_version() -> str:
-    # Try the new package name first; fall back to the legacy name so
-    # users on a pre-0.3.0 install still get a real version string.
-    for name in ("code-context-engine", "claude-context-engine"):
-        try:
-            return pkg_version(name)
-        except Exception:
-            continue
-    return "unknown"
+    try:
+        return pkg_version("code-context-engine")
+    except Exception:
+        return "unknown"
 
 
 class BootstrapBuilder:

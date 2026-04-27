@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 HOOK_MARKER = "# cce hook"
-_OLD_HOOK_MARKER = "# claude-context-engine hook"
 HOOK_NAMES = ["post-commit", "post-checkout", "post-merge"]
 
 
@@ -51,7 +50,7 @@ def _install_single_hook(hook_path: Path) -> None:
     script = _hook_script()
     if hook_path.exists():
         existing = hook_path.read_text()
-        if HOOK_MARKER in existing or _OLD_HOOK_MARKER in existing:
+        if HOOK_MARKER in existing:
             return
         new_content = existing.rstrip() + "\n\n" + script
     else:

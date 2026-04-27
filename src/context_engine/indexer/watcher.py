@@ -37,7 +37,7 @@ class _DebouncedHandler(FileSystemEventHandler):
             if part in self._ignore_set:
                 return True
             # Always skip CCE's own storage/index files
-            if part in (".cce", ".claude-context-engine"):
+            if part == ".cce":
                 return True
         return False
 
