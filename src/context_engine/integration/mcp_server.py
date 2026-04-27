@@ -737,6 +737,21 @@ class ContextEngineMCP:
                     seen.add(text)
                     candidates.append(text)
 
+        # Also include the consolidated decisions archive — `prune_old_sessions`
+        # writes decisions into decisions_log.json before deleting the source
+        # session files, so without this step a recall on a long-lived project
+        # would silently forget anything past the most-recent
+        # _SESSION_RECALL_WINDOW files. The CLI's `cce sessions prune`
+        # docstring already promises this works.
+        for decision in self._session_capture._load_consolidated_decisions():
+            text = (
+                f"[decision] {decision.get('decision', '')} — "
+                f"{decision.get('reason', '')}"
+            )
+            if text not in seen:
+                seen.add(text)
+                candidates.append(text)
+
         if not candidates:
             return []
 
