@@ -64,19 +64,15 @@ def migrate(
     storage_base = Path(storage_base)
     summary = MigrationSummary()
 
-    consumed_per_dir: dict[Path, list[Path]] = {}
-
     for sessions_dir in candidate_session_dirs(project_name, storage_base):
         if not sessions_dir.exists():
             continue
         summary.sources_scanned.append(str(sessions_dir))
 
-        json_files = sorted(
-            f for f in sessions_dir.glob("*.json")
-            # decisions_log.json is the consolidated archive — also a valid
-            # source of decisions, just in a different shape.
-        )
+        json_files = sorted(sessions_dir.glob("*.json"))
         consumed: list[Path] = []
+        decisions_added = 0
+        code_areas_added = 0
         for f in json_files:
             if _already_imported(conn, f):
                 summary.files_skipped += 1
@@ -86,20 +82,33 @@ def migrate(
             except (json.JSONDecodeError, OSError) as exc:
                 log.warning("Skipping unreadable session file %s: %s", f, exc)
                 continue
-            summary.decisions_imported += imported.decisions
-            summary.code_areas_imported += imported.code_areas
-            summary.files_imported += 1
-            _mark_imported(conn, f)
+            decisions_added += imported.decisions
+            code_areas_added += imported.code_areas
             consumed.append(f)
-        if consumed:
-            consumed_per_dir[sessions_dir] = consumed
 
-    conn.commit()
+        if not consumed:
+            continue
 
-    if archive and consumed_per_dir:
-        for sessions_dir, files in consumed_per_dir.items():
-            archived = _archive_and_remove(sessions_dir, files)
+        # Archive *before* marking imported. If zip-write fails we roll back
+        # the directory's inserts so a rerun retries cleanly — otherwise
+        # files would be permanently flagged imported but never archived.
+        if archive:
+            try:
+                archived = _archive_and_remove(sessions_dir, consumed)
+            except OSError as exc:
+                log.error(
+                    "Archive failed for %s: %s — rolling back imports", sessions_dir, exc
+                )
+                conn.rollback()
+                continue
             summary.files_archived += archived
+
+        for f in consumed:
+            _mark_imported(conn, f)
+        conn.commit()
+        summary.decisions_imported += decisions_added
+        summary.code_areas_imported += code_areas_added
+        summary.files_imported += len(consumed)
 
     return summary
 
@@ -117,10 +126,16 @@ def _import_one(conn: sqlite3.Connection, source: Path) -> _ImportCounts:
 
     # decisions_log.json is a top-level list of decision dicts, not a session.
     if source.name == _DECISIONS_LOG_NAME and isinstance(data, list):
+        # Memoise per-session existence checks within this archive — the same
+        # session_id often appears across many entries.
+        exists_cache: dict[str, bool] = {}
         for d in data:
+            sid = d.get("session_id")
+            if sid is not None and sid not in exists_cache:
+                exists_cache[sid] = _session_exists(conn, sid)
             _insert_decision(
                 conn,
-                session_id=None,
+                session_id=sid if sid is not None and exists_cache.get(sid) else None,
                 decision=d.get("decision", ""),
                 reason=d.get("reason", ""),
                 timestamp=d.get("timestamp"),
@@ -133,14 +148,12 @@ def _import_one(conn: sqlite3.Connection, source: Path) -> _ImportCounts:
         return counts
 
     session_id = data.get("id")
-    # We do not synthesise a sessions row from migrated data — the legacy
-    # JSON files predate the new sessions schema and miss timestamps in a
-    # form we can trust. Importing decisions with session_id=None is the
-    # safer choice; the FK is nullable on purpose.
+    # session_id is constant for the rest of this file — resolve once.
+    fk_session_id = session_id if _session_exists(conn, session_id) else None
     for d in data.get("decisions", []) or []:
         _insert_decision(
             conn,
-            session_id=session_id if _session_exists(conn, session_id) else None,
+            session_id=fk_session_id,
             decision=d.get("decision", ""),
             reason=d.get("reason", ""),
             timestamp=d.get("timestamp"),
@@ -149,7 +162,7 @@ def _import_one(conn: sqlite3.Connection, source: Path) -> _ImportCounts:
     for c in data.get("code_areas", []) or []:
         _insert_code_area(
             conn,
-            session_id=session_id if _session_exists(conn, session_id) else None,
+            session_id=fk_session_id,
             file_path=c.get("file_path", ""),
             description=c.get("description", ""),
             timestamp=c.get("timestamp"),
@@ -159,7 +172,9 @@ def _import_one(conn: sqlite3.Connection, source: Path) -> _ImportCounts:
 
 
 def _insert_decision(conn, *, session_id, decision, reason, timestamp):
-    epoch = int(timestamp) if timestamp else int(time.time())
+    # Use `is not None` so legacy rows with an explicit 0/0.0 timestamp keep
+    # their original ordering instead of being stamped to "now".
+    epoch = int(timestamp) if timestamp is not None else int(time.time())
     iso = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(epoch))
     conn.execute(
         "INSERT INTO decisions (session_id, decision, reason, source, "
@@ -169,7 +184,7 @@ def _insert_decision(conn, *, session_id, decision, reason, timestamp):
 
 
 def _insert_code_area(conn, *, session_id, file_path, description, timestamp):
-    epoch = int(timestamp) if timestamp else int(time.time())
+    epoch = int(timestamp) if timestamp is not None else int(time.time())
     conn.execute(
         "INSERT INTO code_areas (session_id, file_path, description, source, "
         "created_at_epoch) VALUES (?, ?, ?, 'migrated', ?)",

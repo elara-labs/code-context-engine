@@ -16,7 +16,6 @@ import json
 import logging
 import sqlite3
 import time
-from typing import Any
 
 from context_engine.memory.extractive import extractive_summary, truncation_summary
 
@@ -26,6 +25,7 @@ _DEFAULT_TURN_TOP_K = 3
 _DEFAULT_ROLLUP_TOP_K = 5
 _DEFAULT_INTERVAL_SECONDS = 5.0
 _TOOL_OUTPUT_CHAR_CAP = 1500  # avoid embedding multi-MB tool outputs
+_TOOL_INPUT_CHAR_CAP = 4000  # skip JSON parsing for huge tool inputs (e.g. patches)
 
 
 def compress_turn(
@@ -120,6 +120,11 @@ def _describe_input(tool_name: str, raw_input: str) -> str:
     """One-line descriptor of a tool invocation for the summary candidates."""
     if not raw_input:
         return tool_name
+    # Skip JSON parsing on oversize payloads (patches, large file contents) —
+    # the compression worker runs on the asyncio thread and we don't want it
+    # spending tens of ms parsing megabytes just to format a one-liner.
+    if len(raw_input) > _TOOL_INPUT_CHAR_CAP:
+        return f"{tool_name}: {raw_input[:120]}"
     try:
         data = json.loads(raw_input)
     except (json.JSONDecodeError, ValueError):
@@ -190,6 +195,9 @@ async def _drain_one(conn: sqlite3.Connection, embedder) -> bool:
     return True
 
 
+_BACKLOG_BATCH = 5  # drain at most this many items before yielding to other tasks
+
+
 async def compression_loop(
     conn: sqlite3.Connection,
     embedder,
@@ -197,16 +205,32 @@ async def compression_loop(
     interval_seconds: float = _DEFAULT_INTERVAL_SECONDS,
     stop_event: asyncio.Event | None = None,
 ) -> None:
-    """Run forever, draining the queue between sleeps. Cancellable via task.cancel()."""
+    """Run forever, draining the queue between sleeps. Cancellable via task.cancel().
+
+    `_drain_one` runs synchronously on the event-loop thread (embed + SQLite),
+    so under a backlog we yield with `sleep(0)` after each item and take a
+    short breath every `_BACKLOG_BATCH` items to keep `mcp.run_stdio()`
+    responsive instead of monopolising the loop.
+    """
+    consecutive = 0
     while True:
         if stop_event is not None and stop_event.is_set():
             return
         try:
             did_work = await _drain_one(conn, embedder)
-            if not did_work:
+            if did_work:
+                consecutive += 1
+                if consecutive >= _BACKLOG_BATCH:
+                    consecutive = 0
+                    await asyncio.sleep(0.05)
+                else:
+                    await asyncio.sleep(0)
+            else:
+                consecutive = 0
                 await asyncio.sleep(interval_seconds)
         except asyncio.CancelledError:
             raise
         except Exception:
             log.exception("compression_loop iteration crashed; backing off")
+            consecutive = 0
             await asyncio.sleep(interval_seconds)

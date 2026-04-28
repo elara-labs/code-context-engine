@@ -142,9 +142,11 @@ curl -sf -m 1 -X POST -H "Content-Type: application/json" \
 
 ## SQLite schema
 
-Eight tables in `~/.cce/projects/<name>/memory.db`. Timestamps stored as
-both ISO text and epoch int (text for humans, int for sorting). FTS5
-virtual tables shown last.
+The v1 schema in `~/.cce/projects/<name>/memory.db` includes the core
+memory tables plus support tables such as `tool_event_payloads`,
+`migrated_files`, and `schema_versions`, along with FTS5 virtual tables
+and their triggers. Timestamps are stored as both ISO text and epoch int
+(text for humans, int for sorting). FTS5 virtual tables shown last.
 
 ```sql
 -- A session = one Claude Code invocation in this project.

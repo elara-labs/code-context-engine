@@ -74,6 +74,31 @@ def _clamp_top_k(value, default: int = 10) -> int:
     return max(1, min(n, _MAX_TOP_K))
 
 
+def _clamp_int(value, *, default: int, lo: int, hi: int) -> int:
+    if value is None or value == "":
+        return default
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(n, hi))
+
+
+_FTS_RECALL_LIMIT = 100
+
+
+def _fts_match_query(topic: str) -> str:
+    """Build a safe FTS5 MATCH query from `topic` — OR of phrase-quoted tokens.
+
+    Returns "" when the topic has no usable tokens; callers should skip the
+    FTS query in that case rather than passing an empty MATCH (FTS5 would
+    raise).
+    """
+    tokens = [t.strip() for t in topic.split() if t.strip()]
+    safe = ['"' + t.replace('"', '""') + '"' for t in tokens]
+    return " OR ".join(safe)
+
+
 def _split_inline_overflow(
     chunks: list, max_tokens: int
 ) -> tuple[list, list]:
@@ -641,7 +666,8 @@ class ContextEngineMCP:
             return [TextContent(type="text", text="decision is required.")]
         self._session_capture.record_decision(self._session_id, decision, reason)
         self._persist_current_session()
-        # Dual-write into memory.db so the new recall path (FTS5) sees it too.
+        # Dual-write into memory.db so the FTS5-indexed decisions table picks
+        # this up — `_search_sessions` uses that index to prefilter candidates.
         if self._memory_conn is not None:
             try:
                 import time as _time
@@ -693,7 +719,7 @@ class ContextEngineMCP:
 
     def _handle_session_timeline(self, args):
         session_id = (args.get("session_id") or "").strip()
-        limit = int(args.get("limit") or 20)
+        limit = _clamp_int(args.get("limit"), default=20, lo=1, hi=200)
         if not session_id:
             return [TextContent(type="text", text="session_id is required.")]
         if self._memory_conn is None:
@@ -711,11 +737,14 @@ class ContextEngineMCP:
                 type="text",
                 text=f"No turn summaries for session {session_id} yet.",
             )]
-        meta = self._memory_conn.execute(
-            "SELECT project, started_at, ended_at, status, prompt_count, "
-            "rollup_summary FROM sessions WHERE id = ?",
-            (session_id,),
-        ).fetchone()
+        try:
+            meta = self._memory_conn.execute(
+                "SELECT project, started_at, ended_at, status, prompt_count, "
+                "rollup_summary FROM sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+        except Exception as exc:
+            return [TextContent(type="text", text=f"timeline query failed: {exc}")]
         header = []
         if meta:
             header.append(f"session: {session_id} · {meta['project']} · {meta['status']}")
@@ -738,13 +767,16 @@ class ContextEngineMCP:
             return [TextContent(type="text", text="event_id must be an integer.")]
         if self._memory_conn is None:
             return [TextContent(type="text", text="Memory store not available.")]
-        row = self._memory_conn.execute(
-            "SELECT te.tool_name, te.session_id, te.prompt_number, te.created_at, "
-            "p.raw_input, p.raw_output FROM tool_events te "
-            "LEFT JOIN tool_event_payloads p ON p.id = te.payload_id "
-            "WHERE te.id = ?",
-            (event_id,),
-        ).fetchone()
+        try:
+            row = self._memory_conn.execute(
+                "SELECT te.tool_name, te.session_id, te.prompt_number, te.created_at, "
+                "p.raw_input, p.raw_output FROM tool_events te "
+                "LEFT JOIN tool_event_payloads p ON p.id = te.payload_id "
+                "WHERE te.id = ?",
+                (event_id,),
+            ).fetchone()
+        except Exception as exc:
+            return [TextContent(type="text", text=f"event query failed: {exc}")]
         if row is None:
             return [TextContent(
                 type="text",
@@ -758,11 +790,13 @@ class ContextEngineMCP:
                     "only — its raw payload aged out of the retention window."
                 ),
             )]
+        raw_input = row["raw_input"] if row["raw_input"] is not None else "<no input>"
+        raw_output = row["raw_output"] if row["raw_output"] is not None else "<no output>"
         body = (
             f"event {event_id} · {row['tool_name']} · session {row['session_id']} · "
             f"turn {row['prompt_number']} · {row['created_at']}\n\n"
-            f"input:\n{row['raw_input']}\n\n"
-            f"output:\n{row['raw_output']}"
+            f"input:\n{raw_input}\n\n"
+            f"output:\n{raw_output}"
         )
         return [TextContent(type="text", text=body)]
 
@@ -926,45 +960,58 @@ class ContextEngineMCP:
                 seen.add(text)
                 candidates.append(text)
 
-        # Fold in memory.db rows: decisions/code_areas (manual or migrated),
-        # plus the index of turn_summaries. Tagged with [layer:..|sid:..] so
-        # the agent knows where to drill from session_recall results — those
-        # tags map onto session_timeline / session_event drill-downs.
+        # Fold in memory.db rows: decisions / code_areas / turn_summaries.
+        # We use FTS5 MATCH to prefilter on `topic` rather than scanning the
+        # full tail — embedding hundreds of candidates per recall call is
+        # expensive (each is an embed_query() round-trip on the asyncio
+        # thread). Code_areas has no FTS table so we LIKE-filter on it.
+        # Tags ([layer:..|sid:..]) map onto session_timeline / session_event.
         if self._memory_conn is not None:
+            fts_q = _fts_match_query(topic)
+            like_needle = f"%{topic.strip()}%" if topic.strip() else None
             try:
-                for row in self._memory_conn.execute(
-                    "SELECT decision, reason, source, session_id "
-                    "FROM decisions ORDER BY created_at_epoch DESC LIMIT 200"
-                ):
-                    text = (
-                        f"[decision src={row['source']}|sid:{row['session_id'] or '-'}] "
-                        f"{row['decision']} — {row['reason']}"
-                    )
-                    if text not in seen:
-                        seen.add(text)
-                        candidates.append(text)
-                for row in self._memory_conn.execute(
-                    "SELECT file_path, description, source, session_id "
-                    "FROM code_areas ORDER BY created_at_epoch DESC LIMIT 200"
-                ):
-                    text = (
-                        f"[code_area src={row['source']}|sid:{row['session_id'] or '-'}] "
-                        f"{row['file_path']} — {row['description']}"
-                    )
-                    if text not in seen:
-                        seen.add(text)
-                        candidates.append(text)
-                for row in self._memory_conn.execute(
-                    "SELECT session_id, prompt_number, summary "
-                    "FROM turn_summaries ORDER BY created_at_epoch DESC LIMIT 200"
-                ):
-                    text = (
-                        f"[turn sid:{row['session_id']}|n:{row['prompt_number']}] "
-                        f"{row['summary']}"
-                    )
-                    if text not in seen:
-                        seen.add(text)
-                        candidates.append(text)
+                if fts_q:
+                    for row in self._memory_conn.execute(
+                        "SELECT d.decision, d.reason, d.source, d.session_id "
+                        "FROM decisions d JOIN decisions_fts f ON f.rowid = d.id "
+                        "WHERE decisions_fts MATCH ? ORDER BY rank LIMIT ?",
+                        (fts_q, _FTS_RECALL_LIMIT),
+                    ):
+                        text = (
+                            f"[decision src={row['source']}|sid:{row['session_id'] or '-'}] "
+                            f"{row['decision']} — {row['reason']}"
+                        )
+                        if text not in seen:
+                            seen.add(text)
+                            candidates.append(text)
+                    for row in self._memory_conn.execute(
+                        "SELECT t.session_id, t.prompt_number, t.summary "
+                        "FROM turn_summaries t JOIN turn_summaries_fts f "
+                        "ON f.rowid = t.id WHERE turn_summaries_fts MATCH ? "
+                        "ORDER BY rank LIMIT ?",
+                        (fts_q, _FTS_RECALL_LIMIT),
+                    ):
+                        text = (
+                            f"[turn sid:{row['session_id']}|n:{row['prompt_number']}] "
+                            f"{row['summary']}"
+                        )
+                        if text not in seen:
+                            seen.add(text)
+                            candidates.append(text)
+                if like_needle is not None:
+                    for row in self._memory_conn.execute(
+                        "SELECT file_path, description, source, session_id "
+                        "FROM code_areas WHERE file_path LIKE ? OR description LIKE ? "
+                        "ORDER BY created_at_epoch DESC LIMIT ?",
+                        (like_needle, like_needle, _FTS_RECALL_LIMIT),
+                    ):
+                        text = (
+                            f"[code_area src={row['source']}|sid:{row['session_id'] or '-'}] "
+                            f"{row['file_path']} — {row['description']}"
+                        )
+                        if text not in seen:
+                            seen.add(text)
+                            candidates.append(text)
             except Exception:
                 log.exception("memory.db recall query failed; using JSON only")
 
