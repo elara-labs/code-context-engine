@@ -227,6 +227,78 @@ def test_backfill_populates_existing_rows(tmp_path: Path):
         conn.close()
 
 
+def test_decisions_vec_cleaned_up_on_source_delete(tmp_path: Path):
+    """Trigger should drop the vec row when its decisions row is deleted."""
+    db_path = tmp_path / "memory.db"
+    conn = memory_db.connect(db_path)
+    embedder = _FakeEmbedder()
+    try:
+        cur = conn.execute(
+            "INSERT INTO decisions (decision, reason, source, "
+            "created_at_epoch, created_at) "
+            "VALUES (?, ?, 'manual', 1700000000, '2023-11-14T22:13:20')",
+            ("Adopt RRF for hybrid recall", "Cheap and well-cited"),
+        )
+        decision_id = cur.lastrowid
+        memory_db.record_decision_vec(
+            conn, embedder,
+            decision_id=decision_id,
+            decision="Adopt RRF for hybrid recall",
+            reason="Cheap and well-cited",
+        )
+        conn.commit()
+        # Sanity: vec row exists.
+        before = conn.execute(
+            "SELECT COUNT(*) AS n FROM decisions_vec WHERE rowid = ?",
+            (decision_id,),
+        ).fetchone()["n"]
+        assert before == 1
+
+        conn.execute("DELETE FROM decisions WHERE id = ?", (decision_id,))
+        conn.commit()
+
+        after = conn.execute(
+            "SELECT COUNT(*) AS n FROM decisions_vec WHERE rowid = ?",
+            (decision_id,),
+        ).fetchone()["n"]
+        assert after == 0, "trigger should have dropped the orphaned vec row"
+    finally:
+        conn.close()
+
+
+def test_turn_summaries_vec_cleaned_up_on_source_delete(tmp_path: Path):
+    db_path = tmp_path / "memory.db"
+    conn = memory_db.connect(db_path)
+    embedder = _FakeEmbedder()
+    try:
+        conn.execute(
+            "INSERT INTO sessions (id, project, started_at_epoch, "
+            "started_at, status) VALUES ('sx', 'demo', 1700000000, "
+            "'2023-11-14T22:13:20', 'active')"
+        )
+        cur = conn.execute(
+            "INSERT INTO turn_summaries (session_id, prompt_number, summary, "
+            "tier, created_at_epoch) VALUES ('sx', 1, ?, 'extractive', 1700000001)",
+            ("test summary",),
+        )
+        turn_id = cur.lastrowid
+        memory_db.record_turn_summary_vec(
+            conn, embedder, turn_id=turn_id, summary="test summary",
+        )
+        conn.commit()
+
+        conn.execute("DELETE FROM turn_summaries WHERE id = ?", (turn_id,))
+        conn.commit()
+
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM turn_summaries_vec WHERE rowid = ?",
+            (turn_id,),
+        ).fetchone()["n"]
+        assert n == 0
+    finally:
+        conn.close()
+
+
 def test_v1_to_v2_upgrade_in_place(tmp_path: Path):
     """A db stamped at v1 (no vec tables) gains them on the next connect()."""
     import sqlite3

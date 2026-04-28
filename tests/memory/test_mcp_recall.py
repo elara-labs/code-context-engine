@@ -181,3 +181,67 @@ def test_tool_names_includes_new_tools(mcp):
     assert "session_timeline" in mcp.TOOL_NAMES
     assert "session_event" in mcp.TOOL_NAMES
     assert "session_recall" in mcp.TOOL_NAMES
+
+
+def test_rrf_merge_basic():
+    """Items appearing in multiple lists should rank above items unique to one."""
+    from context_engine.integration.mcp_server import _rrf_merge
+    out = _rrf_merge(
+        ["A", "B", "C"],     # source 1: A first
+        ["B", "A", "D"],     # source 2: B first, A second
+        top=10,
+    )
+    # A and B both appear in both lists at rank ≤ 2; C and D each appear once.
+    assert out[0] in {"A", "B"}
+    assert out[1] in {"A", "B"}
+    assert set(out[:2]) == {"A", "B"}
+    assert "C" in out and "D" in out
+
+
+def test_rrf_merge_handles_empty_lists():
+    from context_engine.integration.mcp_server import _rrf_merge
+    out = _rrf_merge([], ["X", "Y"], [], top=10)
+    assert out == ["X", "Y"]
+
+
+def test_strip_tag_helper():
+    from context_engine.integration.mcp_server import _strip_tag
+    assert _strip_tag("[decision src=manual|sid:-] hello — world") == "hello — world"
+    assert _strip_tag("[turn sid:abc|n:3] this is a summary") == "this is a summary"
+    assert _strip_tag("no tag here") == "no tag here"
+    # Multi-bracket safety: only the leading bracketed prefix is stripped.
+    assert _strip_tag("[a] [b] x") == "[b] x"
+
+
+def test_recall_response_includes_tldr_when_enough_matches(mcp):
+    """When ≥3 matches are returned, _handle_session_recall prepends a TL;DR."""
+    import asyncio
+    for i in range(5):
+        mcp._memory_conn.execute(
+            "INSERT INTO decisions (decision, reason, source, "
+            "created_at_epoch, created_at) VALUES (?, ?, 'manual', 1700000000, "
+            "'2023-11-14T22:13:20')",
+            (f"Pick KEY library variant {i}", f"KEY rationale variant {i}"),
+        )
+    mcp._memory_conn.commit()
+
+    out = asyncio.run(mcp._handle_session_recall({"topic": "KEY"}))
+    text = out[0].text
+    assert text.startswith("TL;DR"), f"expected TL;DR header, got: {text[:120]!r}"
+    assert "Source matches:" in text
+
+
+def test_recall_response_omits_tldr_for_few_matches(mcp):
+    """With 1-2 matches, the bullet list is returned without a TL;DR header."""
+    import asyncio
+    mcp._memory_conn.execute(
+        "INSERT INTO decisions (decision, reason, source, "
+        "created_at_epoch, created_at) VALUES (?, ?, 'manual', 1700000000, "
+        "'2023-11-14T22:13:20')",
+        ("Single KEY decision", "Only one"),
+    )
+    mcp._memory_conn.commit()
+
+    out = asyncio.run(mcp._handle_session_recall({"topic": "KEY"}))
+    text = out[0].text
+    assert not text.startswith("TL;DR"), text[:120]

@@ -219,6 +219,26 @@ def _vec_table_stmts(dim: int) -> list[str]:
     ]
 
 
+def _vec_trigger_stmts() -> list[str]:
+    """Cleanup triggers — when a source row is deleted, drop its vec row too.
+
+    Without these, FK cascades / explicit deletes would leak rows in the vec
+    tables (FTS gets cleaned up by its own existing triggers).
+    """
+    return [
+        """
+        CREATE TRIGGER IF NOT EXISTS decisions_vec_ad AFTER DELETE ON decisions BEGIN
+          DELETE FROM decisions_vec WHERE rowid = old.id;
+        END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS turn_summaries_vec_ad AFTER DELETE ON turn_summaries BEGIN
+          DELETE FROM turn_summaries_vec WHERE rowid = old.id;
+        END
+        """,
+    ]
+
+
 def _serialize_vec(vec) -> bytes:
     """Pack a float vector into bytes for sqlite-vec."""
     v = list(vec) if not isinstance(vec, list) else vec
@@ -277,6 +297,8 @@ def _ensure_schema(conn: sqlite3.Connection, *, has_vec: bool) -> None:
             if has_vec:
                 for stmt in _vec_table_stmts(_VEC_DIM):
                     cur.execute(stmt)
+                for stmt in _vec_trigger_stmts():
+                    cur.execute(stmt)
             cur.execute(
                 "INSERT INTO schema_versions (version, applied_at_epoch) "
                 "VALUES (?, strftime('%s','now'))",
@@ -288,14 +310,17 @@ def _ensure_schema(conn: sqlite3.Connection, *, has_vec: bool) -> None:
             raise
         return
 
-    # Existing db — upgrade v1 → v2 by adding the vec tables. Backfill is
-    # deferred: callers with an embedder should run `backfill_vec_tables`.
+    # Existing db — upgrade v1 → v2 by adding the vec tables and their
+    # cleanup triggers. Backfill is deferred: callers with an embedder
+    # should run `backfill_vec_tables`.
     current = schema_version(conn)
     if current >= CURRENT_VERSION or not has_vec:
         return
     cur.execute("BEGIN")
     try:
         for stmt in _vec_table_stmts(_VEC_DIM):
+            cur.execute(stmt)
+        for stmt in _vec_trigger_stmts():
             cur.execute(stmt)
         cur.execute(
             "INSERT INTO schema_versions (version, applied_at_epoch) "
