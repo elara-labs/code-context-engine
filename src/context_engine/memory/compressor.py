@@ -158,13 +158,10 @@ def _summarise(text: str, *, embedder, top_k: int) -> tuple[str, str]:
         return truncation_summary(text), "truncation"
 
 
-async def _drain_one(conn: sqlite3.Connection, embedder) -> bool:
-    """Pop and process the oldest pending row. Returns True if work was done.
-
-    The compress functions run synchronously on the event-loop thread.
-    They're fast in practice (<200 ms for a single-turn extractive
-    summary on bge-small) and an in-process call avoids the SQLite
-    cross-thread restriction we'd hit if we tried asyncio.to_thread.
+def _drain_one_sync(conn: sqlite3.Connection, embedder) -> bool:
+    """Pop and process the oldest pending row. Pure-sync; safe for either the
+    main thread (tests) or a worker thread (production via to_thread).
+    Returns True iff work was done.
     """
     row = conn.execute(
         "SELECT id, kind, session_id, prompt_number, attempts FROM pending_compressions "
@@ -200,29 +197,69 @@ async def _drain_one(conn: sqlite3.Connection, embedder) -> bool:
     return True
 
 
+def _drain_one_threaded(db_path) -> bool:
+    """Open a worker-local connection, drain one, close. Designed to run on a
+    thread via `asyncio.to_thread` — that's the whole point of this function:
+    every byte of work below the to_thread call lives off the asyncio loop so
+    `mcp.run_stdio()` stays responsive even under a 50-turn backlog.
+    """
+    # Importing here avoids a circular import at module load.
+    from context_engine.memory import db as _memory_db
+    conn = _memory_db.connect(db_path)
+    try:
+        # Resolve the embedder lazily so the worker thread doesn't pin a
+        # cross-thread reference; the embedder is process-global anyway.
+        from context_engine.indexer.embedder import Embedder as _EmbedderCls  # noqa: F401
+        # Embedder is held by the caller — see compression_loop's closure.
+        return _drain_one_sync(conn, _drain_one_threaded._embedder)
+    finally:
+        conn.close()
+
+
+async def _drain_one(conn: sqlite3.Connection, embedder) -> bool:
+    """Async test-only shim around `_drain_one_sync` for tests that already
+    own a connection and don't want to pay the open/close round-trip.
+    """
+    return _drain_one_sync(conn, embedder)
+
+
 _BACKLOG_BATCH = 5  # drain at most this many items before yielding to other tasks
 
 
 async def compression_loop(
-    conn: sqlite3.Connection,
+    db_path,
     embedder,
     *,
     interval_seconds: float = _DEFAULT_INTERVAL_SECONDS,
     stop_event: asyncio.Event | None = None,
 ) -> None:
-    """Run forever, draining the queue between sleeps. Cancellable via task.cancel().
+    """Run forever, draining the queue off the asyncio thread.
 
-    `_drain_one` runs synchronously on the event-loop thread (embed + SQLite),
-    so under a backlog we yield with `sleep(0)` after each item and take a
-    short breath every `_BACKLOG_BATCH` items to keep `mcp.run_stdio()`
-    responsive instead of monopolising the loop.
+    Each iteration runs the heavy work (embed + SQLite write) on a worker
+    thread via `asyncio.to_thread`, so `mcp.run_stdio()` stays responsive
+    under backlog. We still pace with sleep(0) per item and a 50 ms breath
+    every `_BACKLOG_BATCH` items to keep CPU contention bounded.
+
+    `db_path` may also be a `sqlite3.Connection` for compatibility with the
+    test suite, in which case we drive `_drain_one_sync` directly.
     """
+    legacy_conn = isinstance(db_path, sqlite3.Connection)
+    # Stash the embedder on the function for the worker thread to read; this
+    # avoids passing it through asyncio.to_thread's positional plumbing while
+    # keeping the thread closure-free (no risk of capturing the asyncio loop).
+    _drain_one_threaded._embedder = embedder
+
     consecutive = 0
     while True:
         if stop_event is not None and stop_event.is_set():
             return
         try:
-            did_work = await _drain_one(conn, embedder)
+            if legacy_conn:
+                did_work = _drain_one_sync(db_path, embedder)
+            else:
+                did_work = await asyncio.to_thread(
+                    _drain_one_threaded, db_path,
+                )
             if did_work:
                 consecutive += 1
                 if consecutive >= _BACKLOG_BATCH:
