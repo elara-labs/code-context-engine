@@ -1137,7 +1137,7 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
     def _bar(saved_pct: int) -> str:
         """Render ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ grid where filled = tokens used."""
         used_pct = 100 - saved_pct
-        filled = max(0, min(_GRID_COLS, round(used_pct / 100 * _GRID_COLS)))
+        filled = max(1, min(_GRID_COLS, round(used_pct / 100 * _GRID_COLS)))
         cells = []
         for i in range(_GRID_COLS):
             if i < filled:
