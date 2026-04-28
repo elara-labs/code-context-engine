@@ -1815,6 +1815,112 @@ def sessions(ctx: click.Context) -> None:
         click.echo(ctx.get_help())
 
 
+@sessions.command(name="status")
+@click.pass_context
+def sessions_status(ctx: click.Context) -> None:
+    """Show health of this project's memory: db size, counts, queue, schema.
+
+    Works without `cce serve` — it just opens memory.db read-only and runs
+    a few queries. Useful for "is memory actually capturing anything?"
+    """
+    from context_engine.memory import db as memory_db
+
+    config = ctx.obj["config"]
+    project_name = Path.cwd().name
+    storage_base = Path(config.storage_path) / project_name
+    db_path = memory_db.memory_db_path(storage_base)
+
+    click.echo(f"  project: {project_name}")
+    click.echo(f"  storage: {storage_base}")
+    if not db_path.exists():
+        click.echo(
+            f"  {DOT} memory.db not initialised ({db_path}). Run "
+            f"`cce serve` for one prompt — the schema bootstraps on first open."
+        )
+        return
+
+    size_bytes = db_path.stat().st_size
+    click.echo(f"  memory.db: {db_path}  ({size_bytes // 1024} KB)")
+    conn = memory_db.connect(db_path)
+    try:
+        version = memory_db.schema_version(conn)
+        has_vec = memory_db.has_vec_tables(conn)
+        click.echo(
+            f"  schema:    v{version}"
+            f"{' · sqlite-vec available' if has_vec else ' · vec disabled'}"
+        )
+
+        # Sessions counts.
+        sess_rows = list(conn.execute(
+            "SELECT status, COUNT(*) AS n FROM sessions GROUP BY status"
+        ))
+        if sess_rows:
+            parts = ", ".join(f"{r['status']}={r['n']}" for r in sess_rows)
+            click.echo(f"  sessions:  {parts}")
+        else:
+            click.echo(f"  sessions:  none recorded yet")
+
+        # Decisions by source — biggest signal of "is capture working?"
+        dec_rows = list(conn.execute(
+            "SELECT source, COUNT(*) AS n FROM decisions GROUP BY source"
+        ))
+        if dec_rows:
+            parts = ", ".join(f"{r['source']}={r['n']}" for r in dec_rows)
+            click.echo(f"  decisions: {parts}")
+        else:
+            click.echo(f"  decisions: 0  ({DOT} no record_decision calls yet)")
+
+        # Turn summaries (compress worker output).
+        turn_count = conn.execute(
+            "SELECT COUNT(*) AS n FROM turn_summaries"
+        ).fetchone()["n"]
+        click.echo(f"  turns:     {turn_count} compressed summaries")
+
+        # Compression queue depth — a stuck worker shows up here.
+        queue = conn.execute(
+            "SELECT COUNT(*) AS n, COALESCE(MAX(attempts), 0) AS max_att "
+            "FROM pending_compressions"
+        ).fetchone()
+        if queue["n"]:
+            attn = (
+                f"  ({CROSS} max attempts={queue['max_att']})"
+                if queue["max_att"] > 1 else ""
+            )
+            click.echo(f"  queue:     {queue['n']} pending{attn}")
+        else:
+            click.echo(f"  queue:     drained")
+
+        # Vec coverage — backfill check.
+        if has_vec:
+            dec_v = conn.execute(
+                "SELECT COUNT(*) AS n FROM decisions_vec"
+            ).fetchone()["n"]
+            turn_v = conn.execute(
+                "SELECT COUNT(*) AS n FROM turn_summaries_vec"
+            ).fetchone()["n"]
+            dec_total = sum(r["n"] for r in dec_rows) if dec_rows else 0
+            click.echo(
+                f"  vec:       decisions={dec_v}/{dec_total}, "
+                f"turns={turn_v}/{turn_count}"
+            )
+
+        # Raw payload retention — how much of memory.db is unbounded data.
+        payloads = conn.execute(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(size_bytes), 0) AS total "
+            "FROM tool_event_payloads WHERE raw_input != ''"
+        ).fetchone()
+        if payloads["n"]:
+            mb = payloads["total"] // (1024 * 1024)
+            click.echo(
+                f"  payloads:  {payloads['n']} retained "
+                f"(~{mb} MB raw; `cce sessions prune` ages out >30d)"
+            )
+        else:
+            click.echo(f"  payloads:  none retained")
+    finally:
+        conn.close()
+
+
 @sessions.command(name="prune")
 @click.option(
     "--threshold",
