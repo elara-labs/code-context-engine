@@ -497,17 +497,14 @@
       line-height: 2;
     }
 
-    .grid-row {
-      display: flex;
-      align-items: baseline;
-      gap: 20px;
+    .savings-line { display: block; white-space: pre; }
+
+    .grid-bar {
+      display: inline-flex;
+      gap: 3px;
+      vertical-align: middle;
+      margin-right: 6px;
     }
-
-    .grid-cells { letter-spacing: .04em; }
-
-    .grid-label { color: var(--text2); white-space: nowrap; }
-    .grid-label.highlight { color: var(--green); font-weight: 600; }
-    .grid-label.muted { color: var(--text3); }
 
     .savings-right {
       display: flex;
@@ -905,7 +902,14 @@
           <div class="win-dot" style="background:#27c93f"></div>
           <span class="terminal-label">cce savings</span>
         </div>
-        <div class="savings-body" id="savings-demo"></div>
+        <div class="savings-body">
+          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-used">⛁</span><span class="s-used">⛁</span><span class="s-used">⛁</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span class="t-cyan" style="font-weight:600">my-project</span> <span class="t-dim">·</span> <span class="t-cyan">38</span> <span class="t-dim">queries</span></span>
+          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span class="t-cyan">14.2k</span> <span class="t-dim">served ·</span> <span class="t-cyan">26.0k</span> <span class="t-dim">raw ·</span> <span class="t-cyan">48.0k</span> <span class="t-dim">baseline</span></span>
+          <span class="savings-line">&nbsp;</span>
+          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span style="font-weight:600">Token savings (split)</span></span>
+          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span class="s-used">⛁</span> <span class="t-info">Retrieval:</span>    <span class="t-save">46%</span>  <span class="t-dim">vs full files</span></span>
+          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span class="s-free">⛶</span> <span class="t-info">Compression:</span>  <span class="t-save">45%</span>  <span class="t-dim">chunk → summary</span></span>
+        </div>
       </div>
 
       <div class="savings-right">
@@ -1173,15 +1177,15 @@ const HERO_LINES = [
   { html: '', delay: 300 },
   { html: '<span class="t-dim">$</span> <span class="t-cmd">cce</span>', delay: 500 },
   { html: '', delay: 200 },
-  { html: '<span class="t-dim">╭────────────────── Code Context Engine v0.3.1 ──────────────────╮</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>                    <span class="t-cyan" style="font-weight:700">⬡  C C E  ⬡</span>                     <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>                    <span style="font-weight:700">my-project</span>                     <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>       <span class="t-dim">standard profile  ·  ~/my-project</span>        <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">╭──────────────── Code Context Engine v0.3.1 ────────────────╮</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span>                        <span class="t-cyan" style="font-weight:700">⬡  C C E  ⬡</span>                         <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span>                         <span style="font-weight:700">my-project</span>                         <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span>             <span class="t-dim">standard profile  ·  ~/my-project</span>              <span class="t-dim">│</span>', delay: 80 },
   { html: '<span class="t-dim">├───────────────────────────┬────────────────────────────────┤</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span> <span class="t-info">Status</span>                    <span class="t-dim">│</span> <span class="t-info">Getting started</span>               <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Indexed   <span class="t-cyan">1,247</span> chunks <span class="t-dim">│</span>  <span class="t-cyan">cce status</span>  <span class="t-dim">full diagnostics</span> <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Compress  <span class="t-dim">truncation</span>   <span class="t-dim">│</span>  <span class="t-cyan">cce savings</span> <span class="t-dim">token savings</span>    <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Savings   <span class="t-save">70%</span>          <span class="t-dim">│</span>  <span class="t-cyan">cce list</span>    <span class="t-dim">all commands</span>     <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span> <span class="t-info">Status</span>                    <span class="t-dim">│</span> <span class="t-info">Getting started</span>                <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Indexed   <span class="t-cyan">1,247</span> chunks <span class="t-dim">│</span>  <span class="t-cyan">cce status</span>   <span class="t-dim">full diagnostics</span> <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Compress  <span class="t-dim">truncation</span>   <span class="t-dim">│</span>  <span class="t-cyan">cce savings</span>  <span class="t-dim">token savings</span>    <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Savings   <span class="t-save">70%</span>          <span class="t-dim">│</span>  <span class="t-cyan">cce list</span>     <span class="t-dim">all commands</span>     <span class="t-dim">│</span>', delay: 80 },
   { html: '<span class="t-dim">╰───────────────────────────┴────────────────────────────────╯</span>', delay: 80 },
 ];
 
@@ -1236,52 +1240,6 @@ function replayTerminal() {
   runTerminal(false);
 }
 
-// ── Savings demo (static) ──────────────────────────────
-function buildSavingsDemo() {
-  const el = document.getElementById('savings-demo');
-  const U = '⛁', F = '⛶';
-  const ROWS = 6, COLS = 10;
-  const filledPerRow = 3;
-
-  const labels = [
-    { text: 'my-project · 38 queries', cls: '' },
-    { text: '14.2k served · 26.0k chunks raw · 48.0k full-file baseline', cls: 'muted' },
-    { text: '', cls: '' },
-    { text: 'Token savings (split)', cls: '' },
-    { html: '<span class="s-used"></span> Retrieval:    46%  vs reading full files', cls: '' },
-    { html: '<span class="s-free"></span> Compression:  45%  chunk → summary', cls: 'highlight' },
-  ];
-
-  for (let r = 0; r < ROWS; r++) {
-    const row = document.createElement('div');
-    row.className = 'grid-row';
-
-    let cells = '  ';
-    for (let c = 0; c < COLS; c++) {
-      const ch = c < filledPerRow ? U : F;
-      const cls = c < filledPerRow ? 's-used' : 's-free';
-      cells += `<span class="${cls}">${ch}</span>`;
-      if (c < COLS - 1) cells += ' ';
-    }
-
-    const gridEl = document.createElement('span');
-    gridEl.className = 'grid-cells';
-    gridEl.innerHTML = cells;
-
-    const labelEl = document.createElement('span');
-    labelEl.className = 'grid-label ' + (labels[r].cls || '');
-    if (labels[r].html) {
-      labelEl.innerHTML = '   ' + labels[r].html;
-    } else {
-      labelEl.textContent = '   ' + (labels[r].text || '');
-    }
-
-    row.appendChild(gridEl);
-    row.appendChild(labelEl);
-    el.appendChild(row);
-  }
-}
-
 // ── Ticker ─────────────────────────────────────────────
 function buildTicker() {
   const items = [
@@ -1318,7 +1276,6 @@ function buildTicker() {
 document.addEventListener('DOMContentLoaded', () => {
   runTypewriter();
   runTerminal(false);
-  buildSavingsDemo();
   buildTicker();
 });
 </script>
