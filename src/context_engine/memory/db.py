@@ -478,3 +478,53 @@ def search_turn_summaries_vec(conn, embedder, topic: str, *, k: int = 20) -> lis
         log.debug("turn_summaries_vec search failed: %s", exc)
         return []
     return [r["rowid"] for r in rows]
+
+
+# ── Retention ───────────────────────────────────────────────────────────────
+
+def prune_old_payloads(conn, *, days: int = 30) -> dict[str, int]:
+    """NULL-out raw_input/raw_output on tool_event_payloads older than `days`.
+
+    The summary lives on `tool_events.summary` (or as a turn_summary), so
+    callers can still get the gist of an aged-out event — the raw payload
+    is the expensive part and the only thing that grows unbounded. The
+    `session_event` MCP tool already has a "raw payload aged out of the
+    retention window" branch; this is what makes that branch reachable.
+
+    Returns counts: {"payloads_pruned", "bytes_freed_estimate"}.
+    """
+    cutoff = conn.execute(
+        "SELECT strftime('%s','now') - ? * 86400 AS cutoff", (days,),
+    ).fetchone()["cutoff"]
+    # tool_event_payloads has no created_at of its own — it inherits time
+    # from tool_events. Find payloads referenced only by old events, where
+    # the raw fields aren't already nulled.
+    # raw_input has NOT NULL in v1 schema, so we use '' as the aged-out
+    # sentinel for it; raw_output is already nullable. Callers detect aged
+    # rows via "not raw_input and raw_output is None".
+    rows = conn.execute(
+        "SELECT p.id, p.size_bytes "
+        "FROM tool_event_payloads p "
+        "WHERE p.raw_input != '' "
+        "AND NOT EXISTS ("
+        "  SELECT 1 FROM tool_events te "
+        "  WHERE te.payload_id = p.id "
+        "  AND te.created_at_epoch >= ?"
+        ")",
+        (cutoff,),
+    ).fetchall()
+    if not rows:
+        return {"payloads_pruned": 0, "bytes_freed_estimate": 0}
+    ids = [r["id"] for r in rows]
+    bytes_freed = sum(r["size_bytes"] or 0 for r in rows)
+    placeholders = ",".join("?" * len(ids))
+    conn.execute(
+        f"UPDATE tool_event_payloads "
+        f"SET raw_input = '', raw_output = NULL, size_bytes = 0 "
+        f"WHERE id IN ({placeholders})",
+        tuple(ids),
+    )
+    conn.commit()
+    log.info("pruned %d tool payloads older than %dd (~%d bytes freed)",
+             len(ids), days, bytes_freed)
+    return {"payloads_pruned": len(ids), "bytes_freed_estimate": bytes_freed}

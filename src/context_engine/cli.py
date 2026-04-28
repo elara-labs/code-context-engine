@@ -1830,33 +1830,72 @@ def sessions(ctx: click.Context) -> None:
     type=int,
     help="Number of most-recent sessions to keep verbatim",
 )
+@click.option(
+    "--retain-payloads-days",
+    default=30,
+    show_default=True,
+    type=int,
+    help=(
+        "Drop raw tool inputs/outputs older than this many days from memory.db. "
+        "Summaries are kept; only the unbounded raw payload bytes are nulled."
+    ),
+)
 @click.pass_context
-def sessions_prune(ctx: click.Context, threshold: int, keep: int) -> None:
-    """Consolidate old session files into a single decisions log.
+def sessions_prune(
+    ctx: click.Context, threshold: int, keep: int, retain_payloads_days: int,
+) -> None:
+    """Consolidate old session files and age out raw memory.db payloads.
 
-    Decisions from old sessions are appended to decisions_log.json and the
-    source files are removed; the most-recent sessions (--keep) are kept
-    verbatim. Decisions remain searchable via session_recall after pruning.
+    Two independent jobs:
+      1. JSON sessions → decisions_log.json (`SessionCapture.prune_old_sessions`)
+      2. memory.db `tool_event_payloads.raw_input/raw_output` older than
+         --retain-payloads-days are NULLed. Summaries (turn_summaries,
+         decisions, code_areas) are untouched and stay searchable.
     """
     from context_engine.integration.session_capture import SessionCapture
+    from context_engine.memory import db as memory_db
 
     config = ctx.obj["config"]
     project_name = Path.cwd().name
-    sessions_dir = Path(config.storage_path) / project_name / "sessions"
-    if not sessions_dir.exists():
-        click.echo(f"  {DOT} No sessions directory at {sessions_dir}")
-        return
-    capture = SessionCapture(sessions_dir=str(sessions_dir))
-    summary = capture.prune_old_sessions(threshold=threshold, keep=keep)
-    pruned = summary.get("pruned", 0)
-    appended = summary.get("decisions_appended", 0)
-    if pruned == 0:
-        reason = summary.get("reason", "")
-        click.echo(f"  {DOT} Nothing to prune ({reason}).")
+    storage_base = Path(config.storage_path) / project_name
+    sessions_dir = storage_base / "sessions"
+
+    if sessions_dir.exists():
+        capture = SessionCapture(sessions_dir=str(sessions_dir))
+        summary = capture.prune_old_sessions(threshold=threshold, keep=keep)
+        pruned = summary.get("pruned", 0)
+        appended = summary.get("decisions_appended", 0)
+        if pruned == 0:
+            reason = summary.get("reason", "")
+            click.echo(f"  {DOT} JSON sessions: nothing to prune ({reason}).")
+        else:
+            click.echo(
+                f"  {CHECK} JSON sessions: pruned {pruned} file(s); "
+                f"archived {appended} decision(s) to decisions_log.json."
+            )
     else:
+        click.echo(f"  {DOT} JSON sessions: no directory at {sessions_dir}")
+
+    db_path = memory_db.memory_db_path(storage_base)
+    if not db_path.exists():
+        click.echo(f"  {DOT} memory.db: not initialised at {db_path}")
+        return
+    conn = memory_db.connect(db_path)
+    try:
+        out = memory_db.prune_old_payloads(conn, days=retain_payloads_days)
+    finally:
+        conn.close()
+    n = out["payloads_pruned"]
+    if n == 0:
         click.echo(
-            f"  {CHECK} Pruned {pruned} session file(s); "
-            f"archived {appended} decision(s) to decisions_log.json."
+            f"  {DOT} memory.db: no raw payloads older than "
+            f"{retain_payloads_days}d to prune."
+        )
+    else:
+        kb = out["bytes_freed_estimate"] // 1024
+        click.echo(
+            f"  {CHECK} memory.db: aged out {n} raw payload(s) "
+            f"(~{kb} KB freed; summaries retained)."
         )
 
 

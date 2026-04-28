@@ -932,7 +932,9 @@ class ContextEngineMCP:
                 type="text",
                 text=f"No event with id={event_id}.",
             )]
-        if row["raw_input"] is None and row["raw_output"] is None:
+        # Aged-out check: retention writes raw_input='' and raw_output=NULL
+        # (raw_input has NOT NULL on the schema, so '' is its sentinel).
+        if not row["raw_input"] and row["raw_output"] is None:
             return [TextContent(
                 type="text",
                 text=(

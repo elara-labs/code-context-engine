@@ -299,6 +299,78 @@ def test_turn_summaries_vec_cleaned_up_on_source_delete(tmp_path: Path):
         conn.close()
 
 
+def test_prune_old_payloads_nulls_aged_raws_and_keeps_summaries(tmp_path: Path):
+    """Old payloads have raw_input/raw_output NULLed; summaries stay intact."""
+    import time
+    db_path = tmp_path / "memory.db"
+    conn = memory_db.connect(db_path)
+    try:
+        conn.execute(
+            "INSERT INTO sessions (id, project, started_at_epoch, started_at, "
+            "status) VALUES ('sret', 'demo', 1700000000, '2023-11-14T22:13:20', "
+            "'active')"
+        )
+        # Old payload (90 days ago) — should be aged out.
+        old_epoch = int(time.time()) - 90 * 86_400
+        old_pid = conn.execute(
+            "INSERT INTO tool_event_payloads (raw_input, raw_output, size_bytes) "
+            "VALUES (?, ?, ?)",
+            ('{"cmd":"ls"}', "x" * 5000, 5012),
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO tool_events (session_id, prompt_number, tool_name, "
+            "payload_id, summary, created_at_epoch, created_at) "
+            "VALUES ('sret', 1, 'Bash', ?, 'ran ls', ?, '2023-11-14T22:13:20')",
+            (old_pid, old_epoch),
+        )
+        # Recent payload (1 day ago) — should be kept.
+        recent_epoch = int(time.time()) - 86_400
+        recent_pid = conn.execute(
+            "INSERT INTO tool_event_payloads (raw_input, raw_output, size_bytes) "
+            "VALUES (?, ?, ?)",
+            ('{"cmd":"pwd"}', "y" * 100, 113),
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO tool_events (session_id, prompt_number, tool_name, "
+            "payload_id, summary, created_at_epoch, created_at) "
+            "VALUES ('sret', 2, 'Bash', ?, 'ran pwd', ?, '2025-01-01T00:00:00')",
+            (recent_pid, recent_epoch),
+        )
+        conn.commit()
+
+        out = memory_db.prune_old_payloads(conn, days=30)
+        assert out["payloads_pruned"] == 1
+        assert out["bytes_freed_estimate"] == 5012
+
+        old_row = conn.execute(
+            "SELECT raw_input, raw_output FROM tool_event_payloads WHERE id = ?",
+            (old_pid,),
+        ).fetchone()
+        # raw_input is NOT NULL in the schema, so we use '' as the aged
+        # sentinel; raw_output is nullable.
+        assert old_row["raw_input"] == ""
+        assert old_row["raw_output"] is None
+
+        recent_row = conn.execute(
+            "SELECT raw_input, raw_output FROM tool_event_payloads WHERE id = ?",
+            (recent_pid,),
+        ).fetchone()
+        assert recent_row["raw_input"] is not None
+        assert recent_row["raw_output"] is not None
+
+        # Summary on tool_events is untouched.
+        old_evt = conn.execute(
+            "SELECT summary FROM tool_events WHERE payload_id = ?", (old_pid,)
+        ).fetchone()
+        assert old_evt["summary"] == "ran ls"
+
+        # Idempotent — second call is a no-op.
+        out2 = memory_db.prune_old_payloads(conn, days=30)
+        assert out2["payloads_pruned"] == 0
+    finally:
+        conn.close()
+
+
 def test_v1_to_v2_upgrade_in_place(tmp_path: Path):
     """A db stamped at v1 (no vec tables) gains them on the next connect()."""
     import sqlite3
