@@ -55,7 +55,7 @@ _CCE_CLAUDE_MD_MARKER = "## Context Engine (CCE)"
 # Version stamp embedded as an HTML comment so it doesn't render in the final
 # Markdown but lets `_ensure_claude_md` detect when the installed block is
 # stale and needs replacing. Bump whenever _CCE_CLAUDE_MD_BLOCK changes.
-_CCE_CLAUDE_MD_VERSION = "2"
+_CCE_CLAUDE_MD_VERSION = "3"
 _CCE_CLAUDE_MD_VERSION_TAG = f"<!-- cce-block-version: {_CCE_CLAUDE_MD_VERSION} -->"
 _CCE_CLAUDE_MD_VERSION_PREFIX = "<!-- cce-block-version: "
 _CCE_CLAUDE_MD_END_MARKER = "<!-- /cce-block -->"
@@ -126,6 +126,21 @@ Format: `record_code_area(file_path="...", description="...")`.
 Skip recording for trivial reads, formatting changes, or one-off lookups —
 the goal is durable signal, not an event log.
 
+### Drilling deeper from a recall hit
+
+`session_recall` results are tagged with the source session id, e.g.
+`[turn sid:abc123|n:5]`. To drill in:
+
+- `session_timeline(session_id="abc123")` — walk the per-turn summaries of
+  that session in order. Use this when the user asks "what was the
+  reasoning?" or "how did we get there?".
+- `session_event(event_id=N)` — fetch a specific tool event's raw input
+  and output (capped at 4 KB at read time). Use this when a turn summary
+  references a tool result you actually need to inspect.
+
+Both are read-only and cheap. Prefer them over re-running tool calls or
+asking the user to re-paste context.
+
 ## Output Style
 
 Be concise. Lead with the answer or action, not reasoning. Skip filler words,
@@ -151,6 +166,86 @@ def _has_cce_hook(hook_list: list, marker: str) -> bool:
             if marker in h.get("command", ""):
                 return True
     return False
+
+
+def _install_memory_hooks(project_dir: Path) -> None:
+    """Install the 5 lifecycle hooks for memory capture (PR 2).
+
+    Writes ~/.cce/hooks/cce_hook.sh and wires <project>/.claude/settings.json
+    entries for SessionStart, UserPromptSubmit, PostToolUse, Stop, SessionEnd.
+    Idempotent.
+    """
+    from context_engine.memory.hook_installer import (
+        install_hook_script, install_settings,
+    )
+    install_hook_script()
+    summary = install_settings(project_dir)
+    if summary["added"]:
+        _ok(
+            f"Memory hooks installed  "
+            + _dim(f"({len(summary['added'])} hooks: {', '.join(summary['added'])})")
+        )
+    elif summary["skipped"]:
+        _ok("Memory hooks already configured")
+
+
+def _check_memory_capture_reachable(config, project_dir: Path) -> None:
+    """Probe the loopback hook server so the user knows whether `cce serve` is
+    actually running before they restart Claude Code expecting capture to work.
+
+    Hooks fail closed (`curl ... || true`), so a missing daemon means capture
+    is *silently* disabled — exactly the onboarding footgun this guards
+    against. We never block init; we just print clear next steps.
+    """
+    import socket
+    project_name = project_dir.name
+    storage_base = Path(config.storage_path) / project_name
+    # Try the storage-local file first (authoritative), then fall back to
+    # the default-path rendezvous file `cce serve` writes for the hook
+    # shell script. Either is sufficient for the probe.
+    candidates = [
+        storage_base / "serve.port",
+        Path.home() / ".cce" / "projects" / project_name / "serve.port",
+    ]
+    port_file = next((p for p in candidates if p.exists()), None)
+    if port_file is None:
+        _warn(
+            "Memory capture not yet active — `cce serve` hasn't been started "
+            "for this project."
+        )
+        click.echo(
+            _dim(
+                "    Run `cce serve` in a separate terminal so the loopback "
+                "hook server starts;\n"
+                "    until it's running, hooks fire successfully but capture "
+                "is silently dropped.\n"
+                "    Verify any time with `cce sessions status`."
+            )
+        )
+        return
+    try:
+        port = int(port_file.read_text().strip())
+    except (OSError, ValueError):
+        _warn(f"Memory capture port file unreadable at {port_file}")
+        return
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=1.0):
+            pass
+    except OSError:
+        _warn(
+            f"Memory capture stale — found serve.port at :{port} but "
+            "nothing is listening."
+        )
+        click.echo(
+            _dim(
+                "    Either `cce serve` exited or is bound to a different "
+                "port now.\n"
+                "    Restart it; the new port replaces the stale file on "
+                "first hook fire."
+            )
+        )
+        return
+    _ok(f"Memory capture active  " + _dim(f"(127.0.0.1:{port} reachable)"))
 
 
 def _ensure_session_hook(project_dir: Path) -> None:
@@ -567,9 +662,11 @@ def init(ctx: click.Context) -> None:
     else:
         _ok("MCP server already configured in " + click.style(".mcp.json", fg="cyan"))
 
-    # 5. CLAUDE.md + session hook
+    # 5. CLAUDE.md + session hook + memory lifecycle hooks
     _ensure_claude_md(project_dir)
     _ensure_session_hook(project_dir)
+    _install_memory_hooks(project_dir)
+    _check_memory_capture_reachable(config, project_dir)
 
     # 6. .gitignore — add CCE per-machine entries
     ensure_gitignore(str(project_dir))
@@ -1793,6 +1890,112 @@ def sessions(ctx: click.Context) -> None:
         click.echo(ctx.get_help())
 
 
+@sessions.command(name="status")
+@click.pass_context
+def sessions_status(ctx: click.Context) -> None:
+    """Show health of this project's memory: db size, counts, queue, schema.
+
+    Works without `cce serve` — it just opens memory.db read-only and runs
+    a few queries. Useful for "is memory actually capturing anything?"
+    """
+    from context_engine.memory import db as memory_db
+
+    config = ctx.obj["config"]
+    project_name = Path.cwd().name
+    storage_base = Path(config.storage_path) / project_name
+    db_path = memory_db.memory_db_path(storage_base)
+
+    click.echo(f"  project: {project_name}")
+    click.echo(f"  storage: {storage_base}")
+    if not db_path.exists():
+        click.echo(
+            f"  {DOT} memory.db not initialised ({db_path}). Run "
+            f"`cce serve` for one prompt — the schema bootstraps on first open."
+        )
+        return
+
+    size_bytes = db_path.stat().st_size
+    click.echo(f"  memory.db: {db_path}  ({size_bytes // 1024} KB)")
+    conn = memory_db.connect(db_path)
+    try:
+        version = memory_db.schema_version(conn)
+        has_vec = memory_db.has_vec_tables(conn)
+        click.echo(
+            f"  schema:    v{version}"
+            f"{' · sqlite-vec available' if has_vec else ' · vec disabled'}"
+        )
+
+        # Sessions counts.
+        sess_rows = list(conn.execute(
+            "SELECT status, COUNT(*) AS n FROM sessions GROUP BY status"
+        ))
+        if sess_rows:
+            parts = ", ".join(f"{r['status']}={r['n']}" for r in sess_rows)
+            click.echo(f"  sessions:  {parts}")
+        else:
+            click.echo(f"  sessions:  none recorded yet")
+
+        # Decisions by source — biggest signal of "is capture working?"
+        dec_rows = list(conn.execute(
+            "SELECT source, COUNT(*) AS n FROM decisions GROUP BY source"
+        ))
+        if dec_rows:
+            parts = ", ".join(f"{r['source']}={r['n']}" for r in dec_rows)
+            click.echo(f"  decisions: {parts}")
+        else:
+            click.echo(f"  decisions: 0  ({DOT} no record_decision calls yet)")
+
+        # Turn summaries (compress worker output).
+        turn_count = conn.execute(
+            "SELECT COUNT(*) AS n FROM turn_summaries"
+        ).fetchone()["n"]
+        click.echo(f"  turns:     {turn_count} compressed summaries")
+
+        # Compression queue depth — a stuck worker shows up here.
+        queue = conn.execute(
+            "SELECT COUNT(*) AS n, COALESCE(MAX(attempts), 0) AS max_att "
+            "FROM pending_compressions"
+        ).fetchone()
+        if queue["n"]:
+            attn = (
+                f"  ({CROSS} max attempts={queue['max_att']})"
+                if queue["max_att"] > 1 else ""
+            )
+            click.echo(f"  queue:     {queue['n']} pending{attn}")
+        else:
+            click.echo(f"  queue:     drained")
+
+        # Vec coverage — backfill check.
+        if has_vec:
+            dec_v = conn.execute(
+                "SELECT COUNT(*) AS n FROM decisions_vec"
+            ).fetchone()["n"]
+            turn_v = conn.execute(
+                "SELECT COUNT(*) AS n FROM turn_summaries_vec"
+            ).fetchone()["n"]
+            dec_total = sum(r["n"] for r in dec_rows) if dec_rows else 0
+            click.echo(
+                f"  vec:       decisions={dec_v}/{dec_total}, "
+                f"turns={turn_v}/{turn_count}"
+            )
+
+        # Raw payload retention — how much of memory.db is unbounded data.
+        payloads = conn.execute(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(size_bytes), 0) AS total "
+            "FROM tool_event_payloads WHERE raw_input != ''"
+        ).fetchone()
+        if payloads["n"]:
+            mb = payloads["total"] // (1024 * 1024)
+            click.echo(
+                f"  payloads:  {payloads['n']} retained "
+                f"(~{mb} MB raw; `cce sessions prune` ages out >30d)"
+            )
+        else:
+            click.echo(f"  payloads:  none retained")
+    finally:
+        conn.close()
+
+
 @sessions.command(name="prune")
 @click.option(
     "--threshold",
@@ -1808,34 +2011,123 @@ def sessions(ctx: click.Context) -> None:
     type=int,
     help="Number of most-recent sessions to keep verbatim",
 )
+@click.option(
+    "--retain-payloads-days",
+    default=30,
+    show_default=True,
+    type=int,
+    help=(
+        "Drop raw tool inputs/outputs older than this many days from memory.db. "
+        "Summaries are kept; only the unbounded raw payload bytes are nulled."
+    ),
+)
 @click.pass_context
-def sessions_prune(ctx: click.Context, threshold: int, keep: int) -> None:
-    """Consolidate old session files into a single decisions log.
+def sessions_prune(
+    ctx: click.Context, threshold: int, keep: int, retain_payloads_days: int,
+) -> None:
+    """Consolidate old session files and age out raw memory.db payloads.
 
-    Decisions from old sessions are appended to decisions_log.json and the
-    source files are removed; the most-recent sessions (--keep) are kept
-    verbatim. Decisions remain searchable via session_recall after pruning.
+    Two independent jobs:
+      1. JSON sessions → decisions_log.json (`SessionCapture.prune_old_sessions`)
+      2. memory.db `tool_event_payloads.raw_input/raw_output` older than
+         --retain-payloads-days are NULLed. Summaries (turn_summaries,
+         decisions, code_areas) are untouched and stay searchable.
     """
     from context_engine.integration.session_capture import SessionCapture
+    from context_engine.memory import db as memory_db
 
     config = ctx.obj["config"]
     project_name = Path.cwd().name
-    sessions_dir = Path(config.storage_path) / project_name / "sessions"
-    if not sessions_dir.exists():
-        click.echo(f"  {DOT} No sessions directory at {sessions_dir}")
-        return
-    capture = SessionCapture(sessions_dir=str(sessions_dir))
-    summary = capture.prune_old_sessions(threshold=threshold, keep=keep)
-    pruned = summary.get("pruned", 0)
-    appended = summary.get("decisions_appended", 0)
-    if pruned == 0:
-        reason = summary.get("reason", "")
-        click.echo(f"  {DOT} Nothing to prune ({reason}).")
+    storage_base = Path(config.storage_path) / project_name
+    sessions_dir = storage_base / "sessions"
+
+    if sessions_dir.exists():
+        capture = SessionCapture(sessions_dir=str(sessions_dir))
+        summary = capture.prune_old_sessions(threshold=threshold, keep=keep)
+        pruned = summary.get("pruned", 0)
+        appended = summary.get("decisions_appended", 0)
+        if pruned == 0:
+            reason = summary.get("reason", "")
+            click.echo(f"  {DOT} JSON sessions: nothing to prune ({reason}).")
+        else:
+            click.echo(
+                f"  {CHECK} JSON sessions: pruned {pruned} file(s); "
+                f"archived {appended} decision(s) to decisions_log.json."
+            )
     else:
+        click.echo(f"  {DOT} JSON sessions: no directory at {sessions_dir}")
+
+    db_path = memory_db.memory_db_path(storage_base)
+    if not db_path.exists():
+        click.echo(f"  {DOT} memory.db: not initialised at {db_path}")
+        return
+    conn = memory_db.connect(db_path)
+    try:
+        out = memory_db.prune_old_payloads(conn, days=retain_payloads_days)
+    finally:
+        conn.close()
+    n = out["payloads_pruned"]
+    if n == 0:
         click.echo(
-            f"  {CHECK} Pruned {pruned} session file(s); "
-            f"archived {appended} decision(s) to decisions_log.json."
+            f"  {DOT} memory.db: no raw payloads older than "
+            f"{retain_payloads_days}d to prune."
         )
+    else:
+        kb = out["bytes_freed_estimate"] // 1024
+        click.echo(
+            f"  {CHECK} memory.db: aged out {n} raw payload(s) "
+            f"(~{kb} KB freed; summaries retained)."
+        )
+
+
+@sessions.command(name="migrate")
+@click.option(
+    "--no-archive",
+    is_flag=True,
+    default=False,
+    help="Don't archive consumed JSON files into migrated.zip after import.",
+)
+@click.pass_context
+def sessions_migrate(ctx: click.Context, no_archive: bool) -> None:
+    """Import legacy per-session JSON files into the per-project memory.db.
+
+    Idempotent: rerun is a no-op once everything has been imported. Imported
+    decisions and code areas are tagged with source='migrated' so future
+    session_recall can rank them appropriately.
+    """
+    from context_engine.memory import db as memory_db, migrate as memory_migrate
+
+    config = ctx.obj["config"]
+    project_name = Path.cwd().name
+    storage_base = Path(config.storage_path) / project_name
+    db_path = memory_db.memory_db_path(storage_base)
+
+    conn = memory_db.connect(db_path)
+    try:
+        summary = memory_migrate.migrate(
+            conn,
+            project_name=project_name,
+            storage_base=storage_base,
+            archive=not no_archive,
+        )
+    finally:
+        conn.close()
+
+    if not summary.sources_scanned:
+        click.echo(f"  {DOT} No legacy session directories found.")
+        return
+
+    click.echo(f"  {CHECK} Scanned: {len(summary.sources_scanned)} source dir(s)")
+    if summary.files_imported == 0 and summary.files_skipped > 0:
+        click.echo(f"  {DOT} {summary.files_skipped} file(s) already imported. Nothing to do.")
+        return
+    click.echo(
+        f"  {CHECK} Imported {summary.files_imported} file(s) → "
+        f"{summary.decisions_imported} decision(s), "
+        f"{summary.code_areas_imported} code area(s)."
+    )
+    if summary.files_archived:
+        click.echo(f"  {CHECK} Archived {summary.files_archived} file(s) to migrated.zip")
 
 
 async def _run_index(
@@ -2004,8 +2296,52 @@ async def _run_serve(config) -> None:
         worker_task = asyncio.create_task(_reindex_worker())
         watcher.start(loop=loop)
 
+    # Memory hook listener — loopback HTTP for the 5 lifecycle hooks. Best
+    # effort: a setup failure here must NOT prevent the MCP server starting
+    # (capture is a non-critical feature; retrieval still works without it).
+    hook_runner = None
+    hook_port = None
+    try:
+        from context_engine.memory.hook_server import start_hook_server
+        hook_runner, hook_port = await start_hook_server(
+            storage_base=storage_base, project_name=project_name,
+        )
+    except Exception as exc:
+        _log.warning("Memory hook server failed to start: %s", exc)
+
+    # Memory compression worker — drains pending_compressions in the background.
+    # Each iteration opens a thread-local SQLite connection inside
+    # `asyncio.to_thread`, so this loop never holds the asyncio thread while
+    # an embed + SQLite write is in flight.
+    compression_task = None
+    auto_prune_task = None
+    try:
+        from context_engine.memory import db as memory_db
+        from context_engine.memory.compressor import compression_loop
+        compression_task = asyncio.create_task(
+            compression_loop(memory_db.memory_db_path(storage_base), embedder)
+        )
+    except Exception as exc:
+        _log.warning("Memory compression worker failed to start: %s", exc)
+
+    # Auto-prune — run prune_old_payloads in the background so users who
+    # never invoke `cce sessions prune` manually still get bounded memory.db
+    # growth.
+    try:
+        from context_engine.memory.db import auto_prune_loop
+        auto_prune_task = asyncio.create_task(
+            auto_prune_loop(storage_base, days=30)
+        )
+    except Exception as exc:
+        _log.warning("Auto-prune worker failed to start: %s", exc)
+
     watcher_label = " · live watcher active" if watcher else ""
-    print(f"CCE ready · {project_name} · {chunk_count} chunks indexed{watcher_label}", file=sys.stderr)
+    hook_label = f" · memory hooks :{hook_port}" if hook_port else ""
+    print(
+        f"CCE ready · {project_name} · {chunk_count} chunks indexed"
+        f"{watcher_label}{hook_label}",
+        file=sys.stderr,
+    )
 
     try:
         await mcp.run_stdio()
@@ -2018,3 +2354,20 @@ async def _run_serve(config) -> None:
                 await worker_task
             except asyncio.CancelledError:
                 pass
+        if compression_task is not None:
+            compression_task.cancel()
+            try:
+                await compression_task
+            except asyncio.CancelledError:
+                pass
+        if auto_prune_task is not None:
+            auto_prune_task.cancel()
+            try:
+                await auto_prune_task
+            except asyncio.CancelledError:
+                pass
+        if hook_runner is not None:
+            try:
+                await hook_runner.cleanup()
+            except Exception:
+                _log.warning("hook_runner cleanup failed", exc_info=True)

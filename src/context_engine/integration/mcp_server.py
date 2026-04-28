@@ -1,6 +1,8 @@
 """MCP server exposing context engine tools to Claude Code."""
 import json
 import logging
+import re
+import threading
 from pathlib import Path
 
 from context_engine.utils import atomic_write_text as _atomic_write_text
@@ -20,6 +22,8 @@ from context_engine.integration.git_context import (
     get_working_state,
 )
 from context_engine.integration.session_capture import SessionCapture
+from context_engine.memory import db as memory_db
+from context_engine.memory.extractive import extractive_summary
 
 log = logging.getLogger(__name__)
 
@@ -30,11 +34,12 @@ _MAX_TOP_K = 100
 # Older files past this window are silently dropped — see roadmap item
 # "persistent session search across projects" for how this should evolve.
 _SESSION_RECALL_WINDOW = 50
-# Minimum cosine-derived similarity (1 - distance) for a session entry to
-# qualify as a topic match. Tuned conservatively — substring grep would
-# return 0 results for paraphrases, vector recall now returns paraphrase
-# matches, but we want to avoid drowning the caller in unrelated decisions.
-_SESSION_RECALL_MIN_SIM = 0.35
+# Minimum cosine similarity for a JSON-history entry to qualify as a topic
+# match. bge-small's noise floor on short English is ~0.50 (a random off-
+# topic query against trading decisions hits 0.535), so anything below ~0.55
+# is statistical noise. 0.55 keeps real paraphrase matches (~0.59-0.65) and
+# rejects "how is the weather today" against unrelated decisions.
+_SESSION_RECALL_MIN_SIM = 0.55
 
 
 def _count_tokens(text: str) -> int:
@@ -71,6 +76,183 @@ def _clamp_top_k(value, default: int = 10) -> int:
     except (TypeError, ValueError):
         return default
     return max(1, min(n, _MAX_TOP_K))
+
+
+def _clamp_int(value, *, default: int, lo: int, hi: int) -> int:
+    if value is None or value == "":
+        return default
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(n, hi))
+
+
+_FTS_RECALL_LIMIT = 100
+_VEC_RECALL_K = 30
+# Read-time cap on session_event payloads. Inputs already have a 4 KB write
+# cap (compressor._TOOL_INPUT_CHAR_CAP) but outputs are stored uncapped, so a
+# 50 KB Bash stdout would re-feed ~12 k tokens on every fetch without this.
+_EVENT_PAYLOAD_READ_CAP = 4_000
+# RRF (reciprocal rank fusion) constant. 60 is the canonical value from the
+# Cormack/Clarke/Buettcher 2009 paper — small enough that early ranks
+# dominate, large enough to keep the late tail relevant.
+_RRF_K = 60
+# How many of the top RRF-ranked candidates to feed the extractive summariser
+# for the TL;DR header. More = broader summary, slower extract.
+_TLDR_TOP_N = 10
+# Strip the "[decision src=...|sid:...] " style prefix the formatter adds —
+# the summariser should see the actual content, not our metadata tags.
+_TAG_PREFIX_RE = re.compile(r"^\[[^\]]*\]\s*")
+# Strip the trailing " · 5m ago · → session_timeline(\"abc\")" affordance the
+# formatter appends. Used for dedup so the same decision rendered with vs.
+# without the affordance (e.g. JSON-history vs. memory.db dual-write) collapses.
+_AFFORDANCE_TAIL_RE = re.compile(r"\s*·\s+(?:just now|\d+[mhdy]o? ago|\d+[mhd] ago)(?:\s*·\s+→\s+session_(?:timeline|event)\([^)]*\))?\s*$")
+
+
+def _strip_tag(text: str) -> str:
+    return _TAG_PREFIX_RE.sub("", text)
+
+
+def _content_key(text: str) -> str:
+    """Stable dedup key for a recall match. Strips both the [tag] prefix and
+    the " · 5m ago · → session_timeline(...)" affordance suffix so the same
+    decision rendered through different code paths (memory.db with hints,
+    JSON history without) collapses to one entry under RRF.
+    """
+    body = _TAG_PREFIX_RE.sub("", text)
+    body = _AFFORDANCE_TAIL_RE.sub("", body)
+    return body.strip()
+
+
+def _humanise_relative_time(epoch: int | None) -> str:
+    """Best-effort "3d ago" / "5m ago" string. Empty on bad/missing input.
+
+    Only surfaces what's helpful to the model — sub-minute deltas would be
+    noise on a recall hit, so we round to minute granularity at minimum.
+    """
+    if epoch is None:
+        return ""
+    import time as _time
+    try:
+        delta = max(0, int(_time.time()) - int(epoch))
+    except (TypeError, ValueError):
+        return ""
+    if delta < 60:
+        return "just now"
+    if delta < 3600:
+        return f"{delta // 60}m ago"
+    if delta < 86_400:
+        return f"{delta // 3600}h ago"
+    if delta < 30 * 86_400:
+        return f"{delta // 86_400}d ago"
+    if delta < 365 * 86_400:
+        return f"{delta // (30 * 86_400)}mo ago"
+    return f"{delta // (365 * 86_400)}y ago"
+
+
+def _truncate_payload(text: str | None, cap: int) -> str:
+    """Trim a captured tool payload at read time. Empty NULL → placeholder."""
+    if text is None:
+        return "<no value>"
+    if len(text) <= cap:
+        return text
+    suffix = f"\n…[truncated, {len(text) - cap} more chars]"
+    return text[:cap] + suffix
+
+
+def _rrf_merge(*ranked_lists: list[str], top: int) -> list[str]:
+    """Reciprocal rank fusion of multiple ranked lists.
+
+    Each input list is `[item_at_rank_0, item_at_rank_1, ...]`. Items in
+    common across lists rise; items in only one list still surface
+    proportional to their rank there. Returns up to `top` items.
+
+    Dedup key strips both the [tag] prefix *and* the affordance tail
+    (" · 5m ago · → session_timeline(...)"), so the same decision rendered
+    through multiple paths (memory.db with hints + JSON history without)
+    collapses into a single boosted entry instead of inflating recall.
+    """
+    scores: dict[str, float] = {}
+    repr_for_key: dict[str, str] = {}
+    for items in ranked_lists:
+        for rank, item in enumerate(items):
+            key = _content_key(item)
+            scores[key] = scores.get(key, 0.0) + 1.0 / (_RRF_K + rank + 1)
+            # Prefer the richer-rendered form (with affordance hints) when
+            # multiple paths produced the same decision — same key, different
+            # text. The hint-bearing form is strictly more useful to the agent.
+            existing = repr_for_key.get(key)
+            if existing is None or (
+                len(item) > len(existing) and " · " in item
+            ):
+                repr_for_key[key] = item
+    ordered_keys = sorted(scores, key=lambda k: scores[k], reverse=True)[:top]
+    return [repr_for_key[k] for k in ordered_keys]
+
+
+# Conservative function-word list. We strip these from FTS5 queries so that
+# `is OR the OR today OR we OR can` doesn't match every decision in the
+# corpus. Restricted to genuine grammatical glue — articles, auxiliaries,
+# pronouns, prepositions, conjunctions, common interrogatives. Topic words
+# (code, auth, database, improve, scale, etc.) are NOT in this list.
+#
+# Vec search still runs in parallel against the original query, so even if
+# every token is filtered out, semantic recall still surfaces matches.
+_FTS_STOP_WORDS = frozenset({
+    # articles / determiners
+    "a", "an", "the", "this", "that", "these", "those", "some", "any",
+    "no", "all", "both", "each", "every", "other", "another", "such",
+    # auxiliaries / modals
+    "is", "are", "was", "were", "be", "been", "being", "am",
+    "have", "has", "had", "having",
+    "do", "does", "did", "doing", "done",
+    "will", "would", "shall", "should", "can", "could", "may", "might",
+    "must", "ought",
+    # pronouns
+    "i", "we", "you", "he", "she", "it", "they", "me", "us", "him", "her",
+    "them", "my", "our", "your", "his", "its", "their", "mine", "ours",
+    "yours", "hers", "theirs", "myself", "ourselves", "yourself",
+    "yourselves", "himself", "herself", "itself", "themselves",
+    # prepositions / conjunctions
+    "of", "in", "on", "at", "to", "for", "with", "by", "from", "as",
+    "into", "onto", "upon", "about", "above", "below", "under", "over",
+    "between", "among", "through", "during", "before", "after", "since",
+    "until", "while", "and", "or", "but", "nor", "so", "if", "than",
+    "then", "because", "though", "although", "unless",
+    # interrogatives / proforms
+    "how", "what", "when", "where", "which", "who", "whom", "whose",
+    "why", "here", "there",
+    # filler / generic time words
+    "just", "only", "even", "also", "very", "too", "still", "now",
+    "today", "tomorrow", "yesterday",
+    # common verbs that carry no topic signal in this domain
+    "get", "got", "make", "made", "go", "went", "see", "saw", "let",
+})
+
+
+def _strip_stop_words(topic: str) -> str:
+    """Return `topic` with function words removed; falls back to the
+    original if every token is a stop word (rare)."""
+    tokens = [t.strip().lower() for t in topic.split() if t.strip()]
+    content = [t for t in tokens if t not in _FTS_STOP_WORDS]
+    return " ".join(content) if content else topic
+
+
+def _fts_match_query(topic: str) -> str:
+    """Build a safe FTS5 MATCH query from `topic` — OR of phrase-quoted
+    *content* tokens (function words like "is/the/today/we/can" stripped).
+
+    Returns "" when the topic has no usable content tokens left; callers
+    skip the FTS query in that case rather than passing an empty MATCH
+    (FTS5 would raise). When this happens, the vec semantic-search path
+    still runs against the original query string, so meaning isn't lost.
+    """
+    content = _strip_stop_words(topic).split()
+    if not content:
+        return ""
+    safe = ['"' + t.replace('"', '""') + '"' for t in content]
+    return " OR ".join(safe)
 
 
 def _split_inline_overflow(
@@ -123,6 +305,8 @@ class ContextEngineMCP:
         "expand_chunk",
         "related_context",
         "session_recall",
+        "session_timeline",
+        "session_event",
         "record_decision",
         "record_code_area",
         "index_status",
@@ -155,10 +339,38 @@ class ContextEngineMCP:
         )
 
         # Session capture — persists decisions and code-area notes across runs.
+        # Both the legacy JSON path and the new memory.db path are written to
+        # for record_decision / record_code_area; recall queries both. Once a
+        # release cycle of dual-write confirms parity, the JSON write side
+        # can be retired.
         self._session_capture = SessionCapture(
             sessions_dir=str(self._storage_base / "sessions")
         )
         self._session_id = self._session_capture.start_session(project_name)
+        try:
+            self._memory_conn = memory_db.connect(
+                memory_db.memory_db_path(self._storage_base)
+            )
+            # Ensure the sessions row exists so dual-writes don't trip the FK.
+            # The SessionStart hook normally creates this, but the MCP server
+            # may start in environments without hook coverage (e.g. tests).
+            import time as _t
+            _epoch = int(_t.time())
+            self._memory_conn.execute(
+                "INSERT OR IGNORE INTO sessions (id, project, started_at_epoch, "
+                "started_at, status) VALUES (?, ?, ?, ?, 'active')",
+                (self._session_id, project_name, _epoch,
+                 _t.strftime("%Y-%m-%dT%H:%M:%S", _t.gmtime(_epoch))),
+            )
+            self._memory_conn.commit()
+            # Semantic backfill on a daemon thread — projects with thousands
+            # of historical decisions/turns shouldn't pay a multi-second
+            # embed-everything stall on every MCP startup. Each thread opens
+            # its own connection (sqlite3 enforces check_same_thread).
+            self._spawn_vec_backfill()
+        except Exception as exc:
+            log.warning("memory.db open failed; recall will fall back to JSON: %s", exc)
+            self._memory_conn = None
         # Cheap maintenance on start: if the project has accumulated more than
         # _PRUNE_THRESHOLD session files, consolidate the oldest decisions
         # into decisions_log.json and remove the source files. No-op when
@@ -253,6 +465,33 @@ class ContextEngineMCP:
         except OSError:
             pass
 
+    def _spawn_vec_backfill(self) -> None:
+        """Run vec-table backfill on a daemon thread with its own DB connection.
+
+        sqlite3 connections are bound to the thread that opened them, so we
+        can't reuse `self._memory_conn` here. The thread opens its own
+        connection and closes it when done. Daemon=True means the thread
+        won't block process exit.
+        """
+        storage_base = self._storage_base
+        embedder = self._embedder
+
+        def _runner():
+            try:
+                conn = memory_db.connect(memory_db.memory_db_path(storage_base))
+                try:
+                    counts = memory_db.backfill_vec_tables(conn, embedder)
+                    if counts.get("decisions") or counts.get("turn_summaries"):
+                        log.info("memory.db vec backfill done: %s", counts)
+                finally:
+                    conn.close()
+            except Exception:
+                log.exception("memory.db vec backfill thread failed")
+
+        threading.Thread(
+            target=_runner, daemon=True, name="cce-vec-backfill"
+        ).start()
+
     def _record(self, raw_tokens: int, served_tokens: int, full_file_tokens: int = 0) -> None:
         self._stats["queries"] += 1
         self._stats["raw_tokens"] += raw_tokens
@@ -314,11 +553,43 @@ class ContextEngineMCP:
                 ),
                 Tool(
                     name="session_recall",
-                    description="Recall past decisions and code-area notes recorded in this or prior sessions",
+                    description=(
+                        "Recall past decisions, prompts, and turn summaries via topic search. "
+                        "Returns compact-index hits across the whole project history."
+                    ),
                     inputSchema={
                         "type": "object",
                         "properties": {"topic": {"type": "string"}},
                         "required": ["topic"],
+                    },
+                ),
+                Tool(
+                    name="session_timeline",
+                    description=(
+                        "List the turn summaries for a session, oldest first. "
+                        "Layer 2 of progressive disclosure — drill into a session_id "
+                        "returned by session_recall."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "session_id": {"type": "string"},
+                            "limit": {"type": "integer", "default": 20},
+                        },
+                        "required": ["session_id"],
+                    },
+                ),
+                Tool(
+                    name="session_event",
+                    description=(
+                        "Return the raw input/output payload for a single tool_event. "
+                        "Layer 3 of progressive disclosure — drill into an event_id "
+                        "from session_timeline."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {"event_id": {"type": "integer"}},
+                        "required": ["event_id"],
                     },
                 ),
                 Tool(
@@ -393,6 +664,10 @@ class ContextEngineMCP:
                     return await self._handle_related_context(arguments)
                 elif name == "session_recall":
                     return await self._handle_session_recall(arguments)
+                elif name == "session_timeline":
+                    return self._handle_session_timeline(arguments)
+                elif name == "session_event":
+                    return self._handle_session_event(arguments)
                 elif name == "record_decision":
                     return self._handle_record_decision(arguments)
                 elif name == "record_code_area":
@@ -569,8 +844,52 @@ class ContextEngineMCP:
                     ),
                 )
             ]
-        body = "\n".join(f"- {m}" for m in matches[:20])
+        body = self._format_recall(topic, matches)
         return [TextContent(type="text", text=body)]
+
+    def _format_recall(self, topic: str, matches: list[str]) -> str:
+        """Render recall hits as a TL;DR header + provenance-tagged matches.
+
+        The TL;DR is extractive — it picks real sentences from the top hits
+        using the same bge-small-driven extractive summariser the compressor
+        uses. No LLM call, no hallucination, ~50 ms wall-time on the asyncio
+        thread for a 10-match input. Header is suppressed when there are too
+        few matches to summarise meaningfully.
+        """
+        head_matches = matches[:20]
+        tldr_lines: list[str] = []
+        if len(head_matches) >= 3:
+            # Embed each match's clean content (no [tag] prefix, no affordance
+            # tail), pick the 3 most central by cosine-to-centroid, render
+            # them as bullets so the TL;DR is scannable instead of a wall of
+            # space-joined fragments.
+            from context_engine.memory.extractive import _cosine
+            try:
+                cleaned = [_content_key(m) for m in head_matches[:_TLDR_TOP_N]]
+                cleaned = [c for c in cleaned if c]
+                if cleaned:
+                    vecs = [list(self._embedder.embed_query(c)) for c in cleaned]
+                    centroid = [
+                        sum(col) / len(vecs) for col in zip(*vecs)
+                    ]
+                    scored = sorted(
+                        zip(cleaned, vecs),
+                        key=lambda pair: _cosine(pair[1], centroid),
+                        reverse=True,
+                    )
+                    tldr_lines = [c for c, _ in scored[:3]]
+            except Exception:
+                log.debug("recall TL;DR extractive failed; omitting header")
+                tldr_lines = []
+        body_lines = [f"- {m}" for m in head_matches]
+        if tldr_lines:
+            n = len(matches)
+            head = (
+                f"TL;DR ({n} match{'es' if n != 1 else ''} for '{topic}'):\n"
+                + "\n".join(f"  • {line}" for line in tldr_lines)
+            )
+            return head + "\n\nSource matches:\n" + "\n".join(body_lines)
+        return "\n".join(body_lines)
 
     def _handle_record_decision(self, args):
         decision = (args.get("decision") or "").strip()
@@ -579,6 +898,28 @@ class ContextEngineMCP:
             return [TextContent(type="text", text="decision is required.")]
         self._session_capture.record_decision(self._session_id, decision, reason)
         self._persist_current_session()
+        # Dual-write into memory.db so the FTS5-indexed decisions table picks
+        # this up — `_search_sessions` uses that index to prefilter candidates.
+        # Also write the row's embedding to decisions_vec for semantic recall.
+        if self._memory_conn is not None:
+            try:
+                import time as _time
+                epoch = int(_time.time())
+                cur = self._memory_conn.execute(
+                    "INSERT INTO decisions (session_id, decision, reason, source, "
+                    "created_at_epoch, created_at) "
+                    "VALUES (?, ?, ?, 'manual', ?, ?)",
+                    (self._session_id, decision, reason, epoch,
+                     _time.strftime("%Y-%m-%dT%H:%M:%S", _time.gmtime(epoch))),
+                )
+                memory_db.record_decision_vec(
+                    self._memory_conn, self._embedder,
+                    decision_id=cur.lastrowid,
+                    decision=decision, reason=reason,
+                )
+                self._memory_conn.commit()
+            except Exception:
+                log.exception("memory.db decision dual-write failed")
         return [
             TextContent(
                 type="text",
@@ -595,12 +936,121 @@ class ContextEngineMCP:
             self._session_id, file_path, description
         )
         self._persist_current_session()
+        if self._memory_conn is not None:
+            try:
+                import time as _time
+                epoch = int(_time.time())
+                self._memory_conn.execute(
+                    "INSERT INTO code_areas (session_id, file_path, description, "
+                    "source, created_at_epoch) VALUES (?, ?, ?, 'manual', ?)",
+                    (self._session_id, file_path, description, epoch),
+                )
+                self._memory_conn.commit()
+            except Exception:
+                log.exception("memory.db code_area dual-write failed")
         return [
             TextContent(
                 type="text",
                 text=f"✓ Code area noted: {file_path} — {description}",
             )
         ]
+
+    def _handle_session_timeline(self, args):
+        session_id = (args.get("session_id") or "").strip()
+        limit = _clamp_int(args.get("limit"), default=20, lo=1, hi=200)
+        if not session_id:
+            return [TextContent(type="text", text="session_id is required.")]
+        if self._memory_conn is None:
+            return [TextContent(type="text", text="Memory store not available.")]
+        try:
+            rows = list(self._memory_conn.execute(
+                "SELECT prompt_number, summary, tier FROM turn_summaries "
+                "WHERE session_id = ? ORDER BY prompt_number ASC LIMIT ?",
+                (session_id, limit),
+            ))
+        except Exception as exc:
+            return [TextContent(type="text", text=f"timeline query failed: {exc}")]
+        if not rows:
+            return [TextContent(
+                type="text",
+                text=f"No turn summaries for session {session_id} yet.",
+            )]
+        try:
+            meta = self._memory_conn.execute(
+                "SELECT project, started_at, ended_at, status, prompt_count, "
+                "rollup_summary FROM sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+        except Exception as exc:
+            return [TextContent(type="text", text=f"timeline query failed: {exc}")]
+        header = []
+        if meta:
+            header.append(f"session: {session_id} · {meta['project']} · {meta['status']}")
+            header.append(f"started: {meta['started_at']}  ended: {meta['ended_at'] or '—'}")
+            if meta["rollup_summary"]:
+                header.append(f"rollup: {meta['rollup_summary']}")
+        body = "\n".join(
+            f"  turn {r['prompt_number']:>3} [{r['tier']}] {r['summary']}"
+            for r in rows
+        )
+        return [TextContent(
+            type="text",
+            text="\n".join(header) + ("\n\n" + body if header else body),
+        )]
+
+    def _handle_session_event(self, args):
+        try:
+            event_id = int(args.get("event_id"))
+        except (TypeError, ValueError):
+            return [TextContent(type="text", text="event_id must be an integer.")]
+        if self._memory_conn is None:
+            return [TextContent(type="text", text="Memory store not available.")]
+        try:
+            row = self._memory_conn.execute(
+                "SELECT te.tool_name, te.session_id, te.prompt_number, te.created_at, "
+                "te.payload_id, p.raw_input, p.raw_output FROM tool_events te "
+                "LEFT JOIN tool_event_payloads p ON p.id = te.payload_id "
+                "WHERE te.id = ?",
+                (event_id,),
+            ).fetchone()
+        except Exception as exc:
+            return [TextContent(type="text", text=f"event query failed: {exc}")]
+        if row is None:
+            return [TextContent(
+                type="text",
+                text=f"No event with id={event_id}.",
+            )]
+        # Three states for the payload:
+        #  (a) payload_id IS NULL — event was captured without a payload row
+        #      (e.g. a hook that only logs the descriptor).
+        #  (b) payload_id present, raw_input='' / raw_output=NULL — pruned
+        #      by `cce sessions prune`'s retention pass.
+        #  (c) payload_id present, raws populated — normal case.
+        if row["payload_id"] is None:
+            return [TextContent(
+                type="text",
+                text=(
+                    f"Event {event_id} ({row['tool_name']}) has no captured payload "
+                    "— only its descriptor was recorded."
+                ),
+            )]
+        if not row["raw_input"] and row["raw_output"] is None:
+            return [TextContent(
+                type="text",
+                text=(
+                    f"Event {event_id} ({row['tool_name']}) was retained as a summary "
+                    "only — its raw payload aged out of the retention window."
+                ),
+            )]
+        raw_input = _truncate_payload(row["raw_input"], _EVENT_PAYLOAD_READ_CAP)
+        raw_output = _truncate_payload(row["raw_output"], _EVENT_PAYLOAD_READ_CAP)
+        body = (
+            f"event {event_id} · {row['tool_name']} · session {row['session_id']} · "
+            f"turn {row['prompt_number']} · {row['created_at']}\n\n"
+            f"input:\n{raw_input}\n\n"
+            f"output:\n{raw_output}"
+        )
+        return [TextContent(type="text", text=body)]
 
     async def _handle_index_status(self):
         queries = self._stats["queries"]
@@ -699,18 +1149,44 @@ class ContextEngineMCP:
             log.warning("Failed to persist session %s", self._session_id)
 
     def _search_sessions(self, topic: str) -> list[str]:
-        """Search decisions, code areas, and Q&A across recent sessions.
+        """Hybrid recall: union ranked candidates from JSON history, FTS5,
+        and sqlite-vec, then merge via reciprocal rank fusion.
 
-        Uses the same embedder as code search so paraphrases match — recording
-        "Use JWT with RS256" and querying "auth" now surfaces the decision
-        instead of returning empty as the prior substring grep did. Falls back
-        to substring matching only if embedding fails (e.g. embedder not loaded).
+        Each source produces its own ranked list; RRF fuses them so an item
+        that appears in multiple sources rises, and items unique to one
+        source still surface. The previous "embed every candidate" pipeline
+        is gone — vec hits already carry a rank from sqlite-vec, so we don't
+        re-embed them. JSON-history rows still go through cosine since
+        there's no index for them.
         """
         topic = topic.strip()
         if not topic:
             return []
 
-        # Collect candidate entries from current + recent sessions.
+        json_candidates = self._collect_json_candidates()
+        json_ranked = self._rank_json_candidates(topic, json_candidates)
+
+        memory_lists = self._collect_memory_db_candidates(topic)
+
+        ranked = _rrf_merge(json_ranked, *memory_lists, top=50)
+        if ranked:
+            return ranked
+        # Total fallback: tolerant substring match against everything we
+        # collected so callers always get *something* useful even if every
+        # ranking source failed.
+        needle = topic.lower()
+        all_candidates = list(json_candidates)
+        for items in memory_lists:
+            all_candidates.extend(items)
+        return [t for t in all_candidates if needle in t.lower()]
+
+    def _collect_json_candidates(self) -> list[str]:
+        """Decisions / code_areas / Q&A pulled from JSON sessions on disk.
+
+        These predate the memory.db path. Dedup is by formatted text so an
+        entry that exists in both stores (the dual-write window) doesn't
+        get scored twice.
+        """
         current = self._session_capture.get_session_snapshot(self._session_id)
         sessions: list[dict] = []
         if current:
@@ -719,69 +1195,206 @@ class ContextEngineMCP:
             self._session_capture.load_recent_sessions(limit=_SESSION_RECALL_WINDOW)
         )
 
-        candidates: list[str] = []
+        out: list[str] = []
         seen: set[str] = set()
         for session in sessions:
             for decision in session.get("decisions", []):
-                text = (
+                t = (
                     f"[decision] {decision.get('decision', '')} — "
                     f"{decision.get('reason', '')}"
                 )
-                if text not in seen:
-                    seen.add(text)
-                    candidates.append(text)
+                if t not in seen:
+                    seen.add(t)
+                    out.append(t)
             for area in session.get("code_areas", []):
-                text = (
+                t = (
                     f"[code_area] {area.get('file_path', '')} — "
                     f"{area.get('description', '')}"
                 )
-                if text not in seen:
-                    seen.add(text)
-                    candidates.append(text)
+                if t not in seen:
+                    seen.add(t)
+                    out.append(t)
             for question in session.get("questions", []):
-                text = (
+                t = (
                     f"[q&a] {question.get('question', '')} → "
                     f"{question.get('answer', '')}"
                 )
-                if text not in seen:
-                    seen.add(text)
-                    candidates.append(text)
-
-        # Also include the consolidated decisions archive — `prune_old_sessions`
-        # writes decisions into decisions_log.json before deleting the source
-        # session files, so without this step a recall on a long-lived project
-        # would silently forget anything past the most-recent
-        # _SESSION_RECALL_WINDOW files. The CLI's `cce sessions prune`
-        # docstring already promises this works.
+                if t not in seen:
+                    seen.add(t)
+                    out.append(t)
         for decision in self._session_capture._load_consolidated_decisions():
-            text = (
+            t = (
                 f"[decision] {decision.get('decision', '')} — "
                 f"{decision.get('reason', '')}"
             )
-            if text not in seen:
-                seen.add(text)
-                candidates.append(text)
+            if t not in seen:
+                seen.add(t)
+                out.append(t)
+        return out
 
+    def _rank_json_candidates(self, topic: str, candidates: list[str]) -> list[str]:
+        """Cosine-rank JSON candidates and drop sub-threshold entries.
+
+        Memory.db rows already get FTS/vec ranking, but JSON-history rows
+        have no index, so we still pay the per-candidate embed_query() here.
+        Mitigated by `Embedder.embed_query`'s @lru_cache.
+
+        Embeds the topic with stop words stripped — "how can we improve code
+        quality" → "improve code quality" — so the topic vector lands on
+        the topic words rather than the question framing. Sharpens the
+        signal substantially on conversational queries.
+        """
         if not candidates:
             return []
-
-        # Vector recall: embed topic + each candidate, rank by cosine similarity.
+        topic_for_embed = _strip_stop_words(topic) or topic
         try:
-            topic_vec = list(self._embedder.embed_query(topic))
-            scored: list[tuple[float, str]] = []
-            for text in candidates:
-                vec = list(self._embedder.embed_query(text))
-                sim = _cosine_sim(topic_vec, vec)
-                if sim >= _SESSION_RECALL_MIN_SIM:
-                    scored.append((sim, text))
-            scored.sort(key=lambda pair: pair[0], reverse=True)
-            return [text for _, text in scored]
+            topic_vec = list(self._embedder.embed_query(topic_for_embed))
         except Exception as exc:
-            # If embedding fails for any reason, fall back to a tolerant
-            # substring match so callers always get *something* useful.
-            log.debug("Session vector recall failed (%s); falling back to substring", exc)
-            needle = topic.lower()
-            return [t for t in candidates if needle in t.lower()]
+            log.debug("topic embed failed (%s); JSON candidates ranked by recency", exc)
+            return candidates
+        scored: list[tuple[float, str]] = []
+        for text in candidates:
+            # Embed the *content* (no [tag] prefix) so the metadata noise
+            # doesn't inflate similarity for unrelated topics. The agent
+            # still sees the tagged form in the output.
+            content = _content_key(text)
+            try:
+                vec = list(self._embedder.embed_query(content))
+            except Exception:
+                continue
+            sim = _cosine_sim(topic_vec, vec)
+            if sim >= _SESSION_RECALL_MIN_SIM:
+                scored.append((sim, text))
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+        return [text for _, text in scored]
+
+    def _collect_memory_db_candidates(self, topic: str) -> list[list[str]]:
+        """Return one ranked list per memory.db source (FTS5 + sqlite-vec).
+
+        Each list is in the source's own rank order; RRF combines them.
+        Empty lists are returned (not omitted) so callers see a stable shape.
+        """
+        if self._memory_conn is None:
+            return []
+        fts_q = _fts_match_query(topic)
+        like_needle = f"%{topic.strip()}%" if topic.strip() else None
+
+        fts_decisions: list[str] = []
+        fts_turns: list[str] = []
+        vec_decisions: list[str] = []
+        vec_turns: list[str] = []
+        code_areas_hits: list[str] = []
+
+        try:
+            if fts_q:
+                fts_decisions = self._fetch_decisions_by_query(
+                    "SELECT d.id FROM decisions d "
+                    "JOIN decisions_fts f ON f.rowid = d.id "
+                    "WHERE decisions_fts MATCH ? ORDER BY rank LIMIT ?",
+                    (fts_q, _FTS_RECALL_LIMIT),
+                )
+                fts_turns = self._fetch_turns_by_query(
+                    "SELECT t.id FROM turn_summaries t "
+                    "JOIN turn_summaries_fts f ON f.rowid = t.id "
+                    "WHERE turn_summaries_fts MATCH ? ORDER BY rank LIMIT ?",
+                    (fts_q, _FTS_RECALL_LIMIT),
+                )
+            # Embed the stop-word-stripped form so conversational queries
+            # ("how can we improve code") embed on their topic words rather
+            # than the question framing.
+            vec_topic = _strip_stop_words(topic) or topic
+            vec_decision_ids = memory_db.search_decisions_vec(
+                self._memory_conn, self._embedder, vec_topic, k=_VEC_RECALL_K,
+            )
+            if vec_decision_ids:
+                vec_decisions = self._format_decisions_in_id_order(vec_decision_ids)
+            vec_turn_ids = memory_db.search_turn_summaries_vec(
+                self._memory_conn, self._embedder, vec_topic, k=_VEC_RECALL_K,
+            )
+            if vec_turn_ids:
+                vec_turns = self._format_turns_in_id_order(vec_turn_ids)
+            if like_needle is not None:
+                for row in self._memory_conn.execute(
+                    "SELECT file_path, description, source, session_id "
+                    "FROM code_areas WHERE file_path LIKE ? OR description LIKE ? "
+                    "ORDER BY created_at_epoch DESC LIMIT ?",
+                    (like_needle, like_needle, _FTS_RECALL_LIMIT),
+                ):
+                    code_areas_hits.append(
+                        f"[code_area src={row['source']}|sid:{row['session_id'] or '-'}] "
+                        f"{row['file_path']} — {row['description']}"
+                    )
+        except Exception:
+            log.exception("memory.db recall query failed; FTS+vec lists may be partial")
+
+        return [fts_decisions, fts_turns, vec_decisions, vec_turns, code_areas_hits]
+
+    def _fetch_decisions_by_query(self, sql: str, params: tuple) -> list[str]:
+        """Run an id-returning query, fetch the rows, format in *query* order."""
+        ids = [r["id"] for r in self._memory_conn.execute(sql, params)]
+        return self._format_decisions_in_id_order(ids)
+
+    def _fetch_turns_by_query(self, sql: str, params: tuple) -> list[str]:
+        ids = [r["id"] for r in self._memory_conn.execute(sql, params)]
+        return self._format_turns_in_id_order(ids)
+
+    def _format_decisions_in_id_order(self, ids: list[int]) -> list[str]:
+        """Fetch decisions and emit them in the order of `ids` (preserves rank).
+
+        Each line includes a relative-time hint and a drill-down affordance
+        so the agent rarely needs a follow-up call to figure out how to
+        navigate from a recall hit back to its session.
+        """
+        if not ids:
+            return []
+        placeholders = ",".join("?" * len(ids))
+        rows = {
+            r["id"]: r for r in self._memory_conn.execute(
+                f"SELECT id, decision, reason, source, session_id, "
+                f"created_at_epoch FROM decisions WHERE id IN ({placeholders})",
+                tuple(ids),
+            )
+        }
+        out: list[str] = []
+        for rid in ids:
+            r = rows.get(rid)
+            if r is None:
+                continue
+            recency = _humanise_relative_time(r["created_at_epoch"])
+            sid = r["session_id"]
+            tail = f" · {recency}" if recency else ""
+            if sid:
+                tail += f' · → session_timeline("{sid}")'
+            out.append(
+                f"[decision src={r['source']}|sid:{sid or '-'}] "
+                f"{r['decision']} — {r['reason']}{tail}"
+            )
+        return out
+
+    def _format_turns_in_id_order(self, ids: list[int]) -> list[str]:
+        if not ids:
+            return []
+        placeholders = ",".join("?" * len(ids))
+        rows = {
+            r["id"]: r for r in self._memory_conn.execute(
+                f"SELECT id, session_id, prompt_number, summary, "
+                f"created_at_epoch FROM turn_summaries WHERE id IN ({placeholders})",
+                tuple(ids),
+            )
+        }
+        out: list[str] = []
+        for rid in ids:
+            r = rows.get(rid)
+            if r is None:
+                continue
+            recency = _humanise_relative_time(r["created_at_epoch"])
+            tail = f" · {recency}" if recency else ""
+            tail += f' · → session_event(id={r["id"]})'
+            out.append(
+                f"[turn sid:{r['session_id']}|n:{r['prompt_number']}] "
+                f"{r['summary']}{tail}"
+            )
+        return out
 
     # ── MCP prompts ─────────────────────────────────────────────────────────
 
