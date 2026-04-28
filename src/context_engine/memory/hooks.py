@@ -44,11 +44,83 @@ def _conn(request: web.Request) -> sqlite3.Connection:
     return request.app["memory_db"]
 
 
+_RESUME_RECENT_DECISIONS = 5
+_RESUME_DECISION_REASON_CHARS = 200
+
+
+def build_session_resume(conn: sqlite3.Connection, project: str) -> str:
+    """Compose a short text block summarising recent state for the model.
+
+    Returned as plain text and printed by the hook shell script to stdout.
+    Claude Code injects SessionStart hook stdout into the model's context at
+    conversation start — so this is the mechanism that prevents "decisions
+    you made last week have to be re-explained today." Empty string for
+    a brand-new project so there's no awkward header on the first session.
+    """
+    parts: list[str] = []
+
+    last_rollup = conn.execute(
+        "SELECT id, rollup_summary, ended_at "
+        "FROM sessions "
+        "WHERE rollup_summary IS NOT NULL AND rollup_summary != '' "
+        "ORDER BY started_at_epoch DESC LIMIT 1"
+    ).fetchone()
+
+    decisions = list(conn.execute(
+        "SELECT decision, reason, source, session_id, created_at "
+        "FROM decisions "
+        "ORDER BY created_at_epoch DESC LIMIT ?",
+        (_RESUME_RECENT_DECISIONS,),
+    ))
+
+    if not last_rollup and not decisions:
+        return ""
+
+    parts.append(f"## CCE memory · resuming {project}")
+    if last_rollup:
+        when = last_rollup["ended_at"] or "in progress"
+        parts.append("")
+        parts.append(f"**Previous session** ({when}):")
+        rollup = (last_rollup["rollup_summary"] or "").strip()
+        for line in rollup.split("\n"):
+            line = line.strip()
+            if line:
+                parts.append(f"  {line}")
+    if decisions:
+        parts.append("")
+        parts.append("**Recent decisions** (most-recent first):")
+        for d in decisions:
+            decision = (d["decision"] or "").strip()
+            reason = (d["reason"] or "").strip()
+            if reason and len(reason) > _RESUME_DECISION_REASON_CHARS:
+                reason = reason[:_RESUME_DECISION_REASON_CHARS] + "…"
+            tag = ""
+            if d["source"] != "manual":
+                tag = f" _[{d['source']}]_"
+            sid_hint = ""
+            if d["session_id"]:
+                sid_hint = f' (session: `{d["session_id"]}`)'
+            parts.append(f"  - {decision} — {reason}{tag}{sid_hint}")
+    parts.append("")
+    parts.append(
+        "Call `session_recall(\"<topic>\")` to find more, or "
+        "`session_timeline(\"<sid>\")` to drill into a session."
+    )
+    return "\n".join(parts)
+
+
 async def handle_session_start(request: web.Request) -> web.Response:
+    """Insert the new session row and return resume context as plain text.
+
+    The body of the response is captured by the hook shell script and
+    printed to stdout, which Claude Code injects into the model's context
+    at session start. That's how prior-week decisions surface without a
+    tool call.
+    """
     data = await _read_json(request)
     session_id = data.get("session_id") or data.get("sessionId")
     if not session_id:
-        return web.json_response({"error": "session_id required"}, status=400)
+        return web.Response(text="", status=400)
     project = data.get("project") or request.app.get("project_name", "")
     started_epoch = int(data.get("started_at") or _now_epoch())
 
@@ -63,8 +135,14 @@ async def handle_session_start(request: web.Request) -> web.Response:
         conn.commit()
     except Exception:
         log.exception("SessionStart insert failed")
-        return web.json_response({"ok": False}, status=202)
-    return web.json_response({"ok": True, "session_id": session_id})
+        return web.Response(text="", status=202)
+
+    try:
+        resume = build_session_resume(conn, project)
+    except Exception:
+        log.exception("SessionStart resume build failed")
+        resume = ""
+    return web.Response(text=resume, content_type="text/plain")
 
 
 async def handle_user_prompt_submit(request: web.Request) -> web.Response:

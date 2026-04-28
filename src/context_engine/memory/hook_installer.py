@@ -52,6 +52,11 @@ _HOOK_SCRIPT_BODY_POSIX = """#!/bin/sh
 #
 # Failure is silent — capture is best-effort and must never block the
 # user's flow. The hook name is passed as $1 (first argument).
+#
+# Special case: SessionStart's HTTP response is written to stdout so
+# Claude Code injects it into the model's context at session start
+# (this is what prevents last week's decisions from being re-explained).
+# Other hooks discard their response.
 set -u
 
 HOOK_NAME="${1:-unknown}"
@@ -60,15 +65,27 @@ PORT_FILE="${HOME}/.cce/projects/$(basename "${PWD}")/serve.port"
 PORT="$(cat "${PORT_FILE}" 2>/dev/null)"
 [ -n "${PORT}" ] || exit 0
 
-curl -sf -m 1 -X POST -H "Content-Type: application/json" \\
-    --data-binary @- "http://127.0.0.1:${PORT}/hooks/${HOOK_NAME}" \\
-    >/dev/null 2>&1 || true
+if [ "${HOOK_NAME}" = "SessionStart" ]; then
+    RESPONSE="$(curl -sf -m 2 -X POST -H "Content-Type: application/json" \\
+        --data-binary @- "http://127.0.0.1:${PORT}/hooks/${HOOK_NAME}" \\
+        2>/dev/null || true)"
+    if [ -n "${RESPONSE}" ]; then
+        printf "%s\\n" "${RESPONSE}"
+    fi
+else
+    curl -sf -m 1 -X POST -H "Content-Type: application/json" \\
+        --data-binary @- "http://127.0.0.1:${PORT}/hooks/${HOOK_NAME}" \\
+        >/dev/null 2>&1 || true
+fi
 exit 0
 """
 
 # Windows .cmd equivalent. PowerShell would be more flexible but cmd is
 # always present and avoids the execution-policy gotcha. The same fail-
 # closed semantics: any error → exit 0.
+#
+# SessionStart's response is written to stdout for context injection (see
+# the POSIX comment above); other hooks discard their response.
 _HOOK_SCRIPT_BODY_WIN = """@echo off
 REM CCE memory hook — installed by `cce init`. Forwards Claude Code hook
 REM payloads (JSON on stdin) to the local memory capture server.
@@ -85,8 +102,17 @@ if not exist "%PORT_FILE%" exit /b 0
 set /p PORT=<"%PORT_FILE%"
 if "%PORT%"=="" exit /b 0
 
-curl -sf -m 1 -X POST -H "Content-Type: application/json" ^
-    --data-binary @- "http://127.0.0.1:%PORT%/hooks/%HOOK_NAME%" >nul 2>&1
+if /i "%HOOK_NAME%"=="SessionStart" (
+    set "TMP_RESP=%TEMP%\\cce_hook_resp_%RANDOM%.txt"
+    curl -sf -m 2 -X POST -H "Content-Type: application/json" ^
+        --data-binary @- "http://127.0.0.1:%PORT%/hooks/%HOOK_NAME%" ^
+        > "%TMP_RESP%" 2>nul
+    if exist "%TMP_RESP%" type "%TMP_RESP%"
+    if exist "%TMP_RESP%" del "%TMP_RESP%" >nul 2>&1
+) else (
+    curl -sf -m 1 -X POST -H "Content-Type: application/json" ^
+        --data-binary @- "http://127.0.0.1:%PORT%/hooks/%HOOK_NAME%" >nul 2>&1
+)
 exit /b 0
 """
 

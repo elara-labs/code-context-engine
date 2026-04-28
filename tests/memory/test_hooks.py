@@ -32,8 +32,9 @@ async def test_session_start_inserts_session(hook_app, aiohttp_client):
         json={"session_id": "abc", "project": "demo", "started_at": 1700000000},
     )
     assert resp.status == 200
-    body = await resp.json()
-    assert body == {"ok": True, "session_id": "abc"}
+    # First-ever session — no prior decisions/rollups to surface.
+    text = await resp.text()
+    assert text == ""
 
     rows = list(conn.execute("SELECT id, project, status FROM sessions"))
     assert len(rows) == 1
@@ -53,6 +54,55 @@ async def test_session_start_idempotent(hook_app, aiohttp_client):
         assert resp.status == 200
     n = conn.execute("SELECT COUNT(*) AS n FROM sessions").fetchone()["n"]
     assert n == 1
+
+
+async def test_session_start_returns_resume_with_prior_rollup_and_decisions(
+    hook_app, aiohttp_client,
+):
+    """The big one — fixes 'decisions you made last week have to be re-explained today.'
+
+    A session with a rollup_summary and a few decisions should surface both
+    in the SessionStart hook's response, ready to be injected into the
+    model's context at the start of the new session.
+    """
+    app, conn = hook_app
+    # Seed a completed prior session.
+    conn.execute(
+        "INSERT INTO sessions (id, project, started_at_epoch, started_at, "
+        "ended_at_epoch, ended_at, status, prompt_count, "
+        "rollup_summary, rollup_summary_at_epoch) VALUES "
+        "('prev', 'demo', 1700000000, '2023-11-14T22:13:20', "
+        "1700003600, '2023-11-14T23:13:20', 'completed', 5, "
+        "'Worked on auth: chose JWT/RS256, refresh tokens rotate.', 1700003600)"
+    )
+    conn.execute(
+        "INSERT INTO decisions (decision, reason, source, session_id, "
+        "created_at_epoch, created_at) VALUES "
+        "('Use JWT with RS256', 'Mesh issues these', 'manual', 'prev', "
+        "1700001000, '2023-11-14T22:30:00')"
+    )
+    conn.execute(
+        "INSERT INTO decisions (decision, reason, source, session_id, "
+        "created_at_epoch, created_at) VALUES "
+        "('Risk limit at 2% per trade', 'Kelly criterion', 'manual', 'prev', "
+        "1700002000, '2023-11-14T22:46:40')"
+    )
+    conn.commit()
+
+    client = await aiohttp_client(app)
+    resp = await client.post(
+        "/hooks/SessionStart",
+        json={"session_id": "new", "project": "demo"},
+    )
+    assert resp.status == 200
+    text = await resp.text()
+    assert "## CCE memory · resuming demo" in text
+    assert "Previous session" in text
+    assert "JWT/RS256" in text
+    assert "Recent decisions" in text
+    assert "Use JWT with RS256" in text
+    assert "Risk limit at 2% per trade" in text
+    assert "session_recall" in text  # affordance hint at the bottom
 
 
 async def test_user_prompt_submit_inserts_and_assigns_number(hook_app, aiohttp_client):
