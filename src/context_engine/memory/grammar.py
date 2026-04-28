@@ -40,6 +40,16 @@ Level = Literal["lite", "full", "ultra"]
 # rollup), migrate (legacy import), and the bench (canonical-form match).
 # All five paths must agree, otherwise the bench gives misleading numbers
 # and the same decision can land in storage at different shapes.
+#
+# Savings-bucket invariant: at "lite" the dropped tokens are articles only,
+# and `expand()` does NOT restore them — so wire savings (what the model
+# sees on read) match storage savings (what was written). The `grammar`
+# bucket in `cce savings` reports both honestly.
+#
+# If this is bumped to "ultra", abbreviations like config↔configuration
+# round-trip via `expand()`, so the wire form is roughly the same length
+# as raw input and the bucket would over-claim. Update the renderer to
+# subtract the abbreviation round-trip before bumping the level.
 DEFAULT_LEVEL: Level = "lite"
 
 

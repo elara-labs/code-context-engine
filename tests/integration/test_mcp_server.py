@@ -25,7 +25,32 @@ def _make_server(tmp_path):
     server._output_level = "standard"
     server._stats_path = tmp_path / "stats.json"
     server._stats = server._load_stats()
+    # _record_bucket already guards on this; tests don't need a real db.
+    server._memory_conn = None
+    server._storage_base = tmp_path
     return server
+
+
+def test_apply_output_compression_appends_directive(tmp_path):
+    """When level != off, the helper appends the directive and bumps the bucket."""
+    server = _make_server(tmp_path)
+    server._output_level = "max"
+    out = server._apply_output_compression("body content")
+    assert "body content" in out
+    assert "[Respond using max output compression]" in out
+    # Bucket gained one event.
+    bucket = server._stats["buckets"]["output_compression"]
+    assert bucket["calls"] == 1
+    assert bucket["baseline"] > bucket["served"] > 0
+
+
+def test_apply_output_compression_noop_when_off(tmp_path):
+    """level=off returns the body untouched and records nothing."""
+    server = _make_server(tmp_path)
+    server._output_level = "off"
+    out = server._apply_output_compression("body content")
+    assert out == "body content"
+    assert server._stats["buckets"]["output_compression"]["calls"] == 0
 
 
 @pytest.mark.asyncio
