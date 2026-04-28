@@ -34,11 +34,12 @@ _MAX_TOP_K = 100
 # Older files past this window are silently dropped — see roadmap item
 # "persistent session search across projects" for how this should evolve.
 _SESSION_RECALL_WINDOW = 50
-# Minimum cosine-derived similarity (1 - distance) for a session entry to
-# qualify as a topic match. Tuned conservatively — substring grep would
-# return 0 results for paraphrases, vector recall now returns paraphrase
-# matches, but we want to avoid drowning the caller in unrelated decisions.
-_SESSION_RECALL_MIN_SIM = 0.35
+# Minimum cosine similarity for a JSON-history entry to qualify as a topic
+# match. bge-small's noise floor on short English is ~0.50 (a random off-
+# topic query against trading decisions hits 0.535), so anything below ~0.55
+# is statistical noise. 0.55 keeps real paraphrase matches (~0.59-0.65) and
+# rejects "how is the weather today" against unrelated decisions.
+_SESSION_RECALL_MIN_SIM = 0.55
 
 
 def _count_tokens(text: str) -> int:
@@ -103,10 +104,25 @@ _TLDR_TOP_N = 10
 # Strip the "[decision src=...|sid:...] " style prefix the formatter adds —
 # the summariser should see the actual content, not our metadata tags.
 _TAG_PREFIX_RE = re.compile(r"^\[[^\]]*\]\s*")
+# Strip the trailing " · 5m ago · → session_timeline(\"abc\")" affordance the
+# formatter appends. Used for dedup so the same decision rendered with vs.
+# without the affordance (e.g. JSON-history vs. memory.db dual-write) collapses.
+_AFFORDANCE_TAIL_RE = re.compile(r"\s*·\s+(?:just now|\d+[mhdy]o? ago|\d+[mhd] ago)(?:\s*·\s+→\s+session_(?:timeline|event)\([^)]*\))?\s*$")
 
 
 def _strip_tag(text: str) -> str:
     return _TAG_PREFIX_RE.sub("", text)
+
+
+def _content_key(text: str) -> str:
+    """Stable dedup key for a recall match. Strips both the [tag] prefix and
+    the " · 5m ago · → session_timeline(...)" affordance suffix so the same
+    decision rendered through different code paths (memory.db with hints,
+    JSON history without) collapses to one entry under RRF.
+    """
+    body = _TAG_PREFIX_RE.sub("", text)
+    body = _AFFORDANCE_TAIL_RE.sub("", body)
+    return body.strip()
 
 
 def _humanise_relative_time(epoch: int | None) -> str:
@@ -152,20 +168,25 @@ def _rrf_merge(*ranked_lists: list[str], top: int) -> list[str]:
     common across lists rise; items in only one list still surface
     proportional to their rank there. Returns up to `top` items.
 
-    Dedup key is the *content* (tag prefix stripped), so the same decision
-    showing up as both `[decision src=manual]` and `[decision src=migrated]`
-    during the JSON↔memory.db dual-write window collapses into a single
-    boosted entry instead of inflating recall output.
+    Dedup key strips both the [tag] prefix *and* the affordance tail
+    (" · 5m ago · → session_timeline(...)"), so the same decision rendered
+    through multiple paths (memory.db with hints + JSON history without)
+    collapses into a single boosted entry instead of inflating recall.
     """
     scores: dict[str, float] = {}
     repr_for_key: dict[str, str] = {}
     for items in ranked_lists:
         for rank, item in enumerate(items):
-            key = _strip_tag(item)
+            key = _content_key(item)
             scores[key] = scores.get(key, 0.0) + 1.0 / (_RRF_K + rank + 1)
-            # Keep the first-seen tagged form — typically the highest-ranked
-            # source's framing — as the user-visible label.
-            repr_for_key.setdefault(key, item)
+            # Prefer the richer-rendered form (with affordance hints) when
+            # multiple paths produced the same decision — same key, different
+            # text. The hint-bearing form is strictly more useful to the agent.
+            existing = repr_for_key.get(key)
+            if existing is None or (
+                len(item) > len(existing) and " · " in item
+            ):
+                repr_for_key[key] = item
     ordered_keys = sorted(scores, key=lambda k: scores[k], reverse=True)[:top]
     return [repr_for_key[k] for k in ordered_keys]
 
@@ -784,23 +805,38 @@ class ContextEngineMCP:
         few matches to summarise meaningfully.
         """
         head_matches = matches[:20]
-        tldr_text = ""
+        tldr_lines: list[str] = []
         if len(head_matches) >= 3:
-            corpus = " ".join(_strip_tag(m) for m in head_matches[:_TLDR_TOP_N])
+            # Embed each match's clean content (no [tag] prefix, no affordance
+            # tail), pick the 3 most central by cosine-to-centroid, render
+            # them as bullets so the TL;DR is scannable instead of a wall of
+            # space-joined fragments.
+            from context_engine.memory.extractive import _cosine
             try:
-                tldr_text = extractive_summary(
-                    corpus, embedder=self._embedder, top_k=3,
-                )
+                cleaned = [_content_key(m) for m in head_matches[:_TLDR_TOP_N]]
+                cleaned = [c for c in cleaned if c]
+                if cleaned:
+                    vecs = [list(self._embedder.embed_query(c)) for c in cleaned]
+                    centroid = [
+                        sum(col) / len(vecs) for col in zip(*vecs)
+                    ]
+                    scored = sorted(
+                        zip(cleaned, vecs),
+                        key=lambda pair: _cosine(pair[1], centroid),
+                        reverse=True,
+                    )
+                    tldr_lines = [c for c, _ in scored[:3]]
             except Exception:
                 log.debug("recall TL;DR extractive failed; omitting header")
-                tldr_text = ""
+                tldr_lines = []
         body_lines = [f"- {m}" for m in head_matches]
-        if tldr_text:
-            return (
-                f"TL;DR ({len(matches)} match{'es' if len(matches) != 1 else ''} "
-                f"for '{topic}'):\n{tldr_text}\n\n"
-                f"Source matches:\n" + "\n".join(body_lines)
+        if tldr_lines:
+            n = len(matches)
+            head = (
+                f"TL;DR ({n} match{'es' if n != 1 else ''} for '{topic}'):\n"
+                + "\n".join(f"  • {line}" for line in tldr_lines)
             )
+            return head + "\n\nSource matches:\n" + "\n".join(body_lines)
         return "\n".join(body_lines)
 
     def _handle_record_decision(self, args):
@@ -1160,8 +1196,12 @@ class ContextEngineMCP:
             return candidates
         scored: list[tuple[float, str]] = []
         for text in candidates:
+            # Embed the *content* (no [tag] prefix) so the metadata noise
+            # doesn't inflate similarity for unrelated topics. The agent
+            # still sees the tagged form in the output.
+            content = _content_key(text)
             try:
-                vec = list(self._embedder.embed_query(text))
+                vec = list(self._embedder.embed_query(content))
             except Exception:
                 continue
             sim = _cosine_sim(topic_vec, vec)

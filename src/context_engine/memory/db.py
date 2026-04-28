@@ -455,8 +455,26 @@ def backfill_vec_tables(conn, embedder) -> dict[str, int]:
     return counts
 
 
-def search_decisions_vec(conn, embedder, topic: str, *, k: int = 20) -> list[int]:
-    """Return decision rowids ranked by semantic similarity to `topic`. Empty list on failure."""
+# Maximum L2 distance accepted from sqlite-vec MATCH. bge-small produces
+# unit-normalised vectors, so L2² = 2·(1 - cosine_sim). Empirically bge-small's
+# *noise floor* on short English text is around cosine_sim ≈ 0.50 — random
+# unrelated queries land there. So we set the threshold at cosine_sim ≥ 0.58
+# (L2 ≤ √(2·0.42) ≈ 0.917) to keep paraphrases ("risk management" ↔ "Risk
+# limit at 2% per trade", measured at 0.638) while rejecting "how is the
+# weather today" (max 0.535 against the same corpus).
+_VEC_MAX_DISTANCE = 0.92
+
+
+def search_decisions_vec(
+    conn, embedder, topic: str, *, k: int = 20,
+    max_distance: float = _VEC_MAX_DISTANCE,
+) -> list[int]:
+    """Return decision rowids ranked by semantic similarity to `topic`,
+    filtered by `max_distance` (default `_VEC_MAX_DISTANCE`). Empty list
+    on failure or no good match. Tests can pass a permissive max_distance
+    to use a deterministic fake embedder whose vectors don't satisfy
+    bge-small-tuned thresholds.
+    """
     if not has_vec_tables(conn) or not topic.strip():
         return []
     try:
@@ -465,18 +483,22 @@ def search_decisions_vec(conn, embedder, topic: str, *, k: int = 20) -> list[int
         return []
     try:
         rows = conn.execute(
-            "SELECT rowid FROM decisions_vec WHERE embedding MATCH ? "
+            "SELECT rowid, distance FROM decisions_vec "
+            "WHERE embedding MATCH ? "
             "ORDER BY distance LIMIT ?",
             (_serialize_vec(vec), k),
         ).fetchall()
     except sqlite3.OperationalError as exc:
         log.debug("decisions_vec search failed: %s", exc)
         return []
-    return [r["rowid"] for r in rows]
+    return [r["rowid"] for r in rows if r["distance"] <= max_distance]
 
 
-def search_turn_summaries_vec(conn, embedder, topic: str, *, k: int = 20) -> list[int]:
-    """Return turn_summary rowids ranked by semantic similarity. Empty on failure."""
+def search_turn_summaries_vec(
+    conn, embedder, topic: str, *, k: int = 20,
+    max_distance: float = _VEC_MAX_DISTANCE,
+) -> list[int]:
+    """Return turn_summary rowids ranked by semantic similarity, distance-filtered."""
     if not has_vec_tables(conn) or not topic.strip():
         return []
     try:
@@ -485,14 +507,15 @@ def search_turn_summaries_vec(conn, embedder, topic: str, *, k: int = 20) -> lis
         return []
     try:
         rows = conn.execute(
-            "SELECT rowid FROM turn_summaries_vec WHERE embedding MATCH ? "
+            "SELECT rowid, distance FROM turn_summaries_vec "
+            "WHERE embedding MATCH ? "
             "ORDER BY distance LIMIT ?",
             (_serialize_vec(vec), k),
         ).fetchall()
     except sqlite3.OperationalError as exc:
         log.debug("turn_summaries_vec search failed: %s", exc)
         return []
-    return [r["rowid"] for r in rows]
+    return [r["rowid"] for r in rows if r["distance"] <= max_distance]
 
 
 # ── Retention ───────────────────────────────────────────────────────────────

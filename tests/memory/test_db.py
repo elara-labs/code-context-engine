@@ -153,7 +153,7 @@ def test_record_decision_vec_writes_and_searches(tmp_path: Path):
         )
         conn.commit()
         hits = memory_db.search_decisions_vec(
-            conn, embedder, "sqlite-vec semantic", k=5,
+            conn, embedder, "sqlite-vec semantic", k=5, max_distance=99.0,
         )
         assert cur.lastrowid in hits
 
@@ -184,7 +184,7 @@ def test_record_turn_summary_vec_roundtrip(tmp_path: Path):
         )
         conn.commit()
         hits = memory_db.search_turn_summaries_vec(
-            conn, embedder, "hybrid recall sqlite-vec", k=5,
+            conn, embedder, "hybrid recall sqlite-vec", k=5, max_distance=99.0,
         )
         assert cur.lastrowid in hits
     finally:
