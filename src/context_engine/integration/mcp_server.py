@@ -85,6 +85,7 @@ def _clamp_int(value, *, default: int, lo: int, hi: int) -> int:
 
 
 _FTS_RECALL_LIMIT = 100
+_VEC_RECALL_K = 30
 
 
 def _fts_match_query(topic: str) -> str:
@@ -207,6 +208,13 @@ class ContextEngineMCP:
                  _t.strftime("%Y-%m-%dT%H:%M:%S", _t.gmtime(_epoch))),
             )
             self._memory_conn.commit()
+            # One-shot semantic backfill — populates decisions_vec /
+            # turn_summaries_vec from any rows that predate v2. No-op once
+            # the vec tables are populated.
+            try:
+                memory_db.backfill_vec_tables(self._memory_conn, self._embedder)
+            except Exception:
+                log.exception("memory.db vec backfill failed; semantic recall may be incomplete")
         except Exception as exc:
             log.warning("memory.db open failed; recall will fall back to JSON: %s", exc)
             self._memory_conn = None
@@ -668,16 +676,22 @@ class ContextEngineMCP:
         self._persist_current_session()
         # Dual-write into memory.db so the FTS5-indexed decisions table picks
         # this up — `_search_sessions` uses that index to prefilter candidates.
+        # Also write the row's embedding to decisions_vec for semantic recall.
         if self._memory_conn is not None:
             try:
                 import time as _time
                 epoch = int(_time.time())
-                self._memory_conn.execute(
+                cur = self._memory_conn.execute(
                     "INSERT INTO decisions (session_id, decision, reason, source, "
                     "created_at_epoch, created_at) "
                     "VALUES (?, ?, ?, 'manual', ?, ?)",
                     (self._session_id, decision, reason, epoch,
                      _time.strftime("%Y-%m-%dT%H:%M:%S", _time.gmtime(epoch))),
+                )
+                memory_db.record_decision_vec(
+                    self._memory_conn, self._embedder,
+                    decision_id=cur.lastrowid,
+                    decision=decision, reason=reason,
                 )
                 self._memory_conn.commit()
             except Exception:
@@ -961,21 +975,47 @@ class ContextEngineMCP:
                 candidates.append(text)
 
         # Fold in memory.db rows: decisions / code_areas / turn_summaries.
-        # We use FTS5 MATCH to prefilter on `topic` rather than scanning the
-        # full tail — embedding hundreds of candidates per recall call is
-        # expensive (each is an embed_query() round-trip on the asyncio
-        # thread). Code_areas has no FTS table so we LIKE-filter on it.
-        # Tags ([layer:..|sid:..]) map onto session_timeline / session_event.
+        # Hybrid lexical + semantic candidate selection:
+        #   - FTS5 MATCH on decisions_fts / turn_summaries_fts for lexical hits
+        #   - sqlite-vec MATCH on decisions_vec / turn_summaries_vec for
+        #     semantic hits (paraphrases, synonyms — anything FTS misses)
+        # Union by row id so the same decision/turn isn't formatted twice.
+        # Code_areas has neither FTS nor vec, so a LIKE filter is best-effort.
         if self._memory_conn is not None:
             fts_q = _fts_match_query(topic)
             like_needle = f"%{topic.strip()}%" if topic.strip() else None
             try:
+                decision_ids: set[int] = set()
+                turn_ids: set[int] = set()
                 if fts_q:
                     for row in self._memory_conn.execute(
-                        "SELECT d.decision, d.reason, d.source, d.session_id "
-                        "FROM decisions d JOIN decisions_fts f ON f.rowid = d.id "
+                        "SELECT d.id FROM decisions d "
+                        "JOIN decisions_fts f ON f.rowid = d.id "
                         "WHERE decisions_fts MATCH ? ORDER BY rank LIMIT ?",
                         (fts_q, _FTS_RECALL_LIMIT),
+                    ):
+                        decision_ids.add(row["id"])
+                    for row in self._memory_conn.execute(
+                        "SELECT t.id FROM turn_summaries t "
+                        "JOIN turn_summaries_fts f ON f.rowid = t.id "
+                        "WHERE turn_summaries_fts MATCH ? ORDER BY rank LIMIT ?",
+                        (fts_q, _FTS_RECALL_LIMIT),
+                    ):
+                        turn_ids.add(row["id"])
+                # Semantic hits via sqlite-vec — empty list if extension/tables
+                # unavailable, in which case FTS-only behaviour is preserved.
+                decision_ids.update(memory_db.search_decisions_vec(
+                    self._memory_conn, self._embedder, topic, k=_VEC_RECALL_K,
+                ))
+                turn_ids.update(memory_db.search_turn_summaries_vec(
+                    self._memory_conn, self._embedder, topic, k=_VEC_RECALL_K,
+                ))
+                if decision_ids:
+                    placeholders = ",".join("?" * len(decision_ids))
+                    for row in self._memory_conn.execute(
+                        f"SELECT decision, reason, source, session_id "
+                        f"FROM decisions WHERE id IN ({placeholders})",
+                        tuple(decision_ids),
                     ):
                         text = (
                             f"[decision src={row['source']}|sid:{row['session_id'] or '-'}] "
@@ -984,12 +1024,12 @@ class ContextEngineMCP:
                         if text not in seen:
                             seen.add(text)
                             candidates.append(text)
+                if turn_ids:
+                    placeholders = ",".join("?" * len(turn_ids))
                     for row in self._memory_conn.execute(
-                        "SELECT t.session_id, t.prompt_number, t.summary "
-                        "FROM turn_summaries t JOIN turn_summaries_fts f "
-                        "ON f.rowid = t.id WHERE turn_summaries_fts MATCH ? "
-                        "ORDER BY rank LIMIT ?",
-                        (fts_q, _FTS_RECALL_LIMIT),
+                        f"SELECT session_id, prompt_number, summary "
+                        f"FROM turn_summaries WHERE id IN ({placeholders})",
+                        tuple(turn_ids),
                     ):
                         text = (
                             f"[turn sid:{row['session_id']}|n:{row['prompt_number']}] "

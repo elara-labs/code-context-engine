@@ -1,16 +1,31 @@
 """Per-project memory.db bootstrap and connection helper.
 
-Schema version 1 — see docs/specs/2026-04-28-memory-claude-mem-parity-design.md.
+Schema version 2 — see docs/specs/2026-04-28-memory-claude-mem-parity-design.md.
+
+v1: core memory tables + FTS5 virtual tables for lexical recall.
+v2: adds sqlite-vec `vec0` virtual tables for semantic recall on
+    decisions and turn_summaries (the two surfaces session_recall reads).
 
 Idempotent: opening an existing db is a no-op; opening an empty file creates
-the schema and stamps version=1.
+the schema and stamps version=2. Existing v1 dbs are upgraded in place by
+adding the empty vec tables; `backfill_vec_tables(conn, embedder)` populates
+them lazily once an embedder is available.
 """
 from __future__ import annotations
 
+import logging
 import sqlite3
+import struct
 from pathlib import Path
 
-CURRENT_VERSION = 1
+log = logging.getLogger(__name__)
+
+CURRENT_VERSION = 2
+
+# bge-small-en-v1.5 — the default embedder used everywhere else in cce.
+# If the project's embedder swaps to a different model, vec tables are
+# rebuilt on first access (see `_ensure_vec_dim`).
+_VEC_DIM = 384
 
 _SCHEMA_V1 = [
     """
@@ -191,11 +206,48 @@ _SCHEMA_V1 = [
 ]
 
 
+def _vec_table_stmts(dim: int) -> list[str]:
+    """vec0 virtual tables for the two surfaces session_recall actually reads.
+
+    We don't add vec for prompts (too noisy — the user's raw text is rarely
+    the right semantic anchor) or code_areas (already keyed by file path,
+    which a substring filter handles well enough).
+    """
+    return [
+        f"CREATE VIRTUAL TABLE IF NOT EXISTS decisions_vec USING vec0(embedding float[{dim}])",
+        f"CREATE VIRTUAL TABLE IF NOT EXISTS turn_summaries_vec USING vec0(embedding float[{dim}])",
+    ]
+
+
+def _serialize_vec(vec) -> bytes:
+    """Pack a float vector into bytes for sqlite-vec."""
+    v = list(vec) if not isinstance(vec, list) else vec
+    return struct.pack(f"{len(v)}f", *v)
+
+
+def _try_load_vec(conn: sqlite3.Connection) -> bool:
+    """Load the sqlite-vec extension. Returns False if unavailable.
+
+    A False return means the db opens fine but the v2 vec tables can't be
+    created or queried. Callers that need semantic recall should treat this
+    as a soft degradation and fall back to FTS5-only.
+    """
+    try:
+        import sqlite_vec
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+        return True
+    except Exception as exc:
+        log.warning("sqlite-vec load failed; semantic recall disabled: %s", exc)
+        return False
+
+
 def connect(db_path: str | Path) -> sqlite3.Connection:
     """Open (or create) the per-project memory.db at `db_path`.
 
-    Bootstraps the schema if the file is empty. Idempotent: re-opening an
-    initialised db just returns a configured connection.
+    Bootstraps the schema if the file is empty, upgrades v1 → v2 in place,
+    and loads the sqlite-vec extension. Idempotent.
     """
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -206,22 +258,44 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
     # WAL gives concurrent readers (the dashboard) decent isolation while the
     # MCP server writes; no impact on single-process use.
     conn.execute("PRAGMA journal_mode = WAL")
-    _ensure_schema(conn)
+    has_vec = _try_load_vec(conn)
+    _ensure_schema(conn, has_vec=has_vec)
     return conn
 
 
-def _ensure_schema(conn: sqlite3.Connection) -> None:
+def _ensure_schema(conn: sqlite3.Connection, *, has_vec: bool) -> None:
     cur = conn.cursor()
-    # If schema_versions exists, the schema has been bootstrapped at least
-    # once. Future migrations would compare CURRENT_VERSION here.
-    row = cur.execute(
+    bootstrap_row = cur.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_versions'"
     ).fetchone()
-    if row is not None:
+
+    if bootstrap_row is None:
+        cur.execute("BEGIN")
+        try:
+            for stmt in _SCHEMA_V1:
+                cur.execute(stmt)
+            if has_vec:
+                for stmt in _vec_table_stmts(_VEC_DIM):
+                    cur.execute(stmt)
+            cur.execute(
+                "INSERT INTO schema_versions (version, applied_at_epoch) "
+                "VALUES (?, strftime('%s','now'))",
+                (CURRENT_VERSION,),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        return
+
+    # Existing db — upgrade v1 → v2 by adding the vec tables. Backfill is
+    # deferred: callers with an embedder should run `backfill_vec_tables`.
+    current = schema_version(conn)
+    if current >= CURRENT_VERSION or not has_vec:
         return
     cur.execute("BEGIN")
     try:
-        for stmt in _SCHEMA_V1:
+        for stmt in _vec_table_stmts(_VEC_DIM):
             cur.execute(stmt)
         cur.execute(
             "INSERT INTO schema_versions (version, applied_at_epoch) "
@@ -244,3 +318,138 @@ def schema_version(conn: sqlite3.Connection) -> int:
 def memory_db_path(storage_base: str | Path) -> Path:
     """Canonical location of the memory db inside a project's storage dir."""
     return Path(storage_base) / "memory.db"
+
+
+# ── Vector helpers ──────────────────────────────────────────────────────────
+
+def has_vec_tables(conn: sqlite3.Connection) -> bool:
+    """True iff the v2 vec tables exist (extension loaded + schema upgraded)."""
+    rows = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' "
+        "AND name IN ('decisions_vec','turn_summaries_vec')"
+    ).fetchall()
+    return len(rows) == 2
+
+
+def _decision_vec_text(decision: str, reason: str) -> str:
+    if decision and reason:
+        return f"{decision} — {reason}"
+    return decision or reason or ""
+
+
+def _write_vec_row(conn, table: str, rowid: int, vec) -> None:
+    """Best-effort vec write. Swallows dim mismatches so a swapped embedder
+    doesn't break inserts on the source table — the failed row simply won't
+    be semantically searchable until the vec tables are rebuilt.
+    """
+    try:
+        conn.execute(f"DELETE FROM {table} WHERE rowid = ?", (rowid,))
+        conn.execute(
+            f"INSERT INTO {table}(rowid, embedding) VALUES (?, ?)",
+            (rowid, _serialize_vec(vec)),
+        )
+    except sqlite3.OperationalError as exc:
+        log.debug("vec write skipped on %s rowid=%s: %s", table, rowid, exc)
+
+
+def record_decision_vec(conn, embedder, *, decision_id: int, decision: str, reason: str) -> None:
+    """Embed a decision row and write it to decisions_vec. Idempotent on rowid."""
+    if not has_vec_tables(conn):
+        return
+    text = _decision_vec_text(decision, reason)
+    if not text.strip():
+        return
+    try:
+        vec = embedder.embed_query(text)
+    except Exception:
+        log.exception("embedder failed for decision %s", decision_id)
+        return
+    _write_vec_row(conn, "decisions_vec", decision_id, vec)
+
+
+def record_turn_summary_vec(conn, embedder, *, turn_id: int, summary: str) -> None:
+    """Embed a turn summary and write it to turn_summaries_vec."""
+    if not has_vec_tables(conn):
+        return
+    if not summary.strip():
+        return
+    try:
+        vec = embedder.embed_query(summary)
+    except Exception:
+        log.exception("embedder failed for turn_summary %s", turn_id)
+        return
+    _write_vec_row(conn, "turn_summaries_vec", turn_id, vec)
+
+
+def backfill_vec_tables(conn, embedder) -> dict[str, int]:
+    """Populate vec tables from existing rows when they're empty.
+
+    Called once at MCP server startup after an embedder is available, so a
+    project that ran on v1 picks up semantic recall on the next launch.
+    Returns counts per surface for logging.
+    """
+    counts = {"decisions": 0, "turn_summaries": 0}
+    if not has_vec_tables(conn):
+        return counts
+    if conn.execute("SELECT 1 FROM decisions_vec LIMIT 1").fetchone() is None:
+        for row in conn.execute("SELECT id, decision, reason FROM decisions"):
+            record_decision_vec(
+                conn, embedder,
+                decision_id=row["id"],
+                decision=row["decision"] or "",
+                reason=row["reason"] or "",
+            )
+            counts["decisions"] += 1
+    if conn.execute("SELECT 1 FROM turn_summaries_vec LIMIT 1").fetchone() is None:
+        for row in conn.execute("SELECT id, summary FROM turn_summaries"):
+            record_turn_summary_vec(
+                conn, embedder,
+                turn_id=row["id"],
+                summary=row["summary"] or "",
+            )
+            counts["turn_summaries"] += 1
+    if counts["decisions"] or counts["turn_summaries"]:
+        conn.commit()
+        log.info("vec backfill: decisions=%d turn_summaries=%d",
+                 counts["decisions"], counts["turn_summaries"])
+    return counts
+
+
+def search_decisions_vec(conn, embedder, topic: str, *, k: int = 20) -> list[int]:
+    """Return decision rowids ranked by semantic similarity to `topic`. Empty list on failure."""
+    if not has_vec_tables(conn) or not topic.strip():
+        return []
+    try:
+        vec = embedder.embed_query(topic)
+    except Exception:
+        return []
+    try:
+        rows = conn.execute(
+            "SELECT rowid FROM decisions_vec WHERE embedding MATCH ? "
+            "ORDER BY distance LIMIT ?",
+            (_serialize_vec(vec), k),
+        ).fetchall()
+    except sqlite3.OperationalError as exc:
+        log.debug("decisions_vec search failed: %s", exc)
+        return []
+    return [r["rowid"] for r in rows]
+
+
+def search_turn_summaries_vec(conn, embedder, topic: str, *, k: int = 20) -> list[int]:
+    """Return turn_summary rowids ranked by semantic similarity. Empty on failure."""
+    if not has_vec_tables(conn) or not topic.strip():
+        return []
+    try:
+        vec = embedder.embed_query(topic)
+    except Exception:
+        return []
+    try:
+        rows = conn.execute(
+            "SELECT rowid FROM turn_summaries_vec WHERE embedding MATCH ? "
+            "ORDER BY distance LIMIT ?",
+            (_serialize_vec(vec), k),
+        ).fetchall()
+    except sqlite3.OperationalError as exc:
+        log.debug("turn_summaries_vec search failed: %s", exc)
+        return []
+    return [r["rowid"] for r in rows]

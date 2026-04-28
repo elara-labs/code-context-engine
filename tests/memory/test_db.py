@@ -92,3 +92,168 @@ def test_status_check_constraint(tmp_path: Path):
             )
     finally:
         conn.close()
+
+
+# ── v2: sqlite-vec semantic recall ──────────────────────────────────────────
+
+
+class _FakeEmbedder:
+    """Deterministic stand-in for the real bge-small embedder.
+
+    Returns a 384-dim vector seeded by a stable hash of the input. Two
+    inputs that share words land near each other; otherwise vectors are
+    roughly orthogonal. Good enough to validate wiring without paying the
+    cost of loading fastembed in a unit test.
+    """
+
+    def __init__(self, dim: int = 384):
+        self._dim = dim
+
+    def embed_query(self, query: str):
+        import hashlib, struct
+        words = query.lower().split() or [query.lower()]
+        acc = [0.0] * self._dim
+        for w in words:
+            digest = hashlib.sha256(w.encode("utf-8")).digest()
+            # Tile the 32-byte digest across the vector deterministically.
+            for i in range(self._dim):
+                b = digest[i % 32]
+                acc[i] += (b / 255.0) - 0.5
+        # Normalise so cosine ~ dot.
+        n = sum(x * x for x in acc) ** 0.5 or 1.0
+        return tuple(x / n for x in acc)
+
+
+def test_v2_creates_vec_tables(tmp_path: Path):
+    db_path = tmp_path / "memory.db"
+    conn = memory_db.connect(db_path)
+    try:
+        assert memory_db.schema_version(conn) == 2
+        assert memory_db.has_vec_tables(conn)
+    finally:
+        conn.close()
+
+
+def test_record_decision_vec_writes_and_searches(tmp_path: Path):
+    db_path = tmp_path / "memory.db"
+    conn = memory_db.connect(db_path)
+    embedder = _FakeEmbedder()
+    try:
+        cur = conn.execute(
+            "INSERT INTO decisions (decision, reason, source, "
+            "created_at_epoch, created_at) "
+            "VALUES (?, ?, 'manual', 1700000000, '2023-11-14T22:13:20')",
+            ("Use sqlite-vec for semantic recall", "Tiny binary, hybrid w/ FTS"),
+        )
+        memory_db.record_decision_vec(
+            conn, embedder,
+            decision_id=cur.lastrowid,
+            decision="Use sqlite-vec for semantic recall",
+            reason="Tiny binary, hybrid w/ FTS",
+        )
+        conn.commit()
+        hits = memory_db.search_decisions_vec(
+            conn, embedder, "sqlite-vec semantic", k=5,
+        )
+        assert cur.lastrowid in hits
+
+
+    finally:
+        conn.close()
+
+
+def test_record_turn_summary_vec_roundtrip(tmp_path: Path):
+    db_path = tmp_path / "memory.db"
+    conn = memory_db.connect(db_path)
+    embedder = _FakeEmbedder()
+    try:
+        conn.execute(
+            "INSERT INTO sessions (id, project, started_at_epoch, "
+            "started_at, status) VALUES ('s1', 'demo', 1700000000, "
+            "'2023-11-14T22:13:20', 'active')"
+        )
+        cur = conn.execute(
+            "INSERT INTO turn_summaries (session_id, prompt_number, summary, "
+            "tier, created_at_epoch) VALUES ('s1', 1, ?, 'extractive', 1700000001)",
+            ("User asked about hybrid recall; suggested sqlite-vec union.",),
+        )
+        memory_db.record_turn_summary_vec(
+            conn, embedder,
+            turn_id=cur.lastrowid,
+            summary="User asked about hybrid recall; suggested sqlite-vec union.",
+        )
+        conn.commit()
+        hits = memory_db.search_turn_summaries_vec(
+            conn, embedder, "hybrid recall sqlite-vec", k=5,
+        )
+        assert cur.lastrowid in hits
+    finally:
+        conn.close()
+
+
+def test_backfill_populates_existing_rows(tmp_path: Path):
+    """A db that has decisions but an empty vec table gets backfilled."""
+    db_path = tmp_path / "memory.db"
+    conn = memory_db.connect(db_path)
+    embedder = _FakeEmbedder()
+    try:
+        conn.execute(
+            "INSERT INTO decisions (decision, reason, source, "
+            "created_at_epoch, created_at) "
+            "VALUES (?, ?, 'migrated', 1700000000, '2023-11-14T22:13:20')",
+            ("Pick option A", "Lower latency"),
+        )
+        conn.execute(
+            "INSERT INTO sessions (id, project, started_at_epoch, "
+            "started_at, status) VALUES ('s2', 'demo', 1700000000, "
+            "'2023-11-14T22:13:20', 'active')"
+        )
+        conn.execute(
+            "INSERT INTO turn_summaries (session_id, prompt_number, summary, "
+            "tier, created_at_epoch) VALUES ('s2', 1, ?, 'extractive', 1700000001)",
+            ("Discussion of option A latency tradeoffs.",),
+        )
+        conn.commit()
+
+        counts = memory_db.backfill_vec_tables(conn, embedder)
+        assert counts["decisions"] == 1
+        assert counts["turn_summaries"] == 1
+
+        # Second call is a no-op once the vec tables have any row.
+        counts2 = memory_db.backfill_vec_tables(conn, embedder)
+        assert counts2["decisions"] == 0
+        assert counts2["turn_summaries"] == 0
+    finally:
+        conn.close()
+
+
+def test_v1_to_v2_upgrade_in_place(tmp_path: Path):
+    """A db stamped at v1 (no vec tables) gains them on the next connect()."""
+    import sqlite3
+    db_path = tmp_path / "memory.db"
+    # Bootstrap a real db at v2 first, then forge it back to v1.
+    conn = memory_db.connect(db_path)
+    conn.execute("DROP TABLE decisions_vec")
+    conn.execute("DROP TABLE turn_summaries_vec")
+    conn.execute("DELETE FROM schema_versions WHERE version = 2")
+    conn.execute(
+        "INSERT INTO schema_versions (version, applied_at_epoch) "
+        "VALUES (1, strftime('%s','now'))"
+    )
+    conn.commit()
+    conn.close()
+    # Sanity: looks like v1 now.
+    raw = sqlite3.connect(str(db_path))
+    raw.row_factory = sqlite3.Row
+    assert raw.execute(
+        "SELECT MAX(version) AS v FROM schema_versions"
+    ).fetchone()["v"] == 1
+    raw.close()
+
+    # Reopening should run the v1 → v2 migration.
+    conn = memory_db.connect(db_path)
+    try:
+        assert memory_db.schema_version(conn) == 2
+        assert memory_db.has_vec_tables(conn)
+    finally:
+        conn.close()

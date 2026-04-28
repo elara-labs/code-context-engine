@@ -17,6 +17,7 @@ import logging
 import sqlite3
 import time
 
+from context_engine.memory import db as memory_db
 from context_engine.memory.extractive import extractive_summary, truncation_summary
 
 log = logging.getLogger(__name__)
@@ -39,12 +40,16 @@ def compress_turn(
     text = _build_turn_text(conn, session_id=session_id, prompt_number=prompt_number)
     summary, tier = _summarise(text, embedder=embedder, top_k=_DEFAULT_TURN_TOP_K)
     epoch = int(time.time())
-    conn.execute(
+    cur = conn.execute(
         "INSERT OR REPLACE INTO turn_summaries "
         "(session_id, prompt_number, summary, tier, created_at_epoch) "
         "VALUES (?, ?, ?, ?, ?)",
         (session_id, prompt_number, summary, tier, epoch),
     )
+    if summary:
+        memory_db.record_turn_summary_vec(
+            conn, embedder, turn_id=cur.lastrowid, summary=summary,
+        )
     return summary
 
 
