@@ -46,6 +46,19 @@ LIFECYCLE_HOOKS = [
     "SessionEnd",
 ]
 
+# Per-hook matcher overrides. Claude Code accepts a regex-like alternation
+# in the matcher field; SessionStart's subtypes are:
+#   startup  — fresh new conversation
+#   clear    — `/clear` command was run
+#   compact  — `/compact` command was run
+# Re-firing SessionStart on `clear`/`compact` is the trigger that re-
+# injects the memory resume after the model's context window is wiped —
+# without it, "/clear" would erase your prior-decisions context.
+# All other hooks default to matcher="" (any).
+HOOK_MATCHERS = {
+    "SessionStart": "startup|clear|compact",
+}
+
 _HOOK_SCRIPT_BODY_POSIX = """#!/bin/sh
 # CCE memory hook — installed by `cce init`. Forwards Claude Code hook
 # payloads (JSON on stdin) to the local memory capture server.
@@ -174,7 +187,7 @@ def install_settings(project_dir: Path) -> dict:
         # might appear.
         import shlex
         bucket.append({
-            "matcher": "",
+            "matcher": HOOK_MATCHERS.get(hook_name, ""),
             "hooks": [{
                 "type": "command",
                 "command": f"{shlex.quote(str(HOOK_PATH))} {hook_name}",

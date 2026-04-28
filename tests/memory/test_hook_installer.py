@@ -84,6 +84,25 @@ def test_install_settings_quotes_command_for_paths_with_spaces(tmp_path: Path, m
     assert cmd.endswith(f" {hi.LIFECYCLE_HOOKS[0]}")
 
 
+def test_session_start_matcher_covers_clear_and_compact(tmp_path: Path):
+    """SessionStart must fire on `/clear` and `/compact` too, not just startup.
+
+    Without that, the resume context (handle_session_start's stdout
+    response) doesn't re-inject after the user clears or compacts the
+    conversation — exactly when they need it most.
+    """
+    project = tmp_path / "myproj"
+    project.mkdir()
+    hi.install_settings(project)
+    data = json.loads((project / ".claude" / "settings.json").read_text())
+    matcher = data["hooks"]["SessionStart"][0]["matcher"]
+    for trigger in ("startup", "clear", "compact"):
+        assert trigger in matcher, f"SessionStart missing {trigger!r}: {matcher!r}"
+    # Other hooks keep an empty matcher (fire on every event).
+    for hook_name in ("UserPromptSubmit", "PostToolUse", "Stop", "SessionEnd"):
+        assert data["hooks"][hook_name][0]["matcher"] == ""
+
+
 def test_install_settings_idempotent(tmp_path: Path):
     project = tmp_path / "myproj"
     project.mkdir()
