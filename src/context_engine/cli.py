@@ -1115,27 +1115,30 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
 
     from context_engine.cli_style import header, label, value, dim, success, bold
 
-    _COLS = 10
+    # Opus 4 input pricing: $15 per 1M tokens
+    _COST_PER_TOKEN = 15 / 1_000_000
+    _BAR_WIDTH = 20
 
-    def _fmt_k(n: int) -> str:
-        return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
+    def _fmt_tokens(n: int) -> str:
+        if n >= 1_000_000:
+            return f"{n / 1_000_000:.1f}M"
+        if n >= 1000:
+            return f"{n / 1000:.1f}k"
+        return str(n)
 
-    _FILLED = "⛁"
-    _EMPTY = "⛶"
+    def _fmt_cost(n: int) -> str:
+        cost = n * _COST_PER_TOKEN
+        if cost < 0.01:
+            return "<$0.01"
+        return f"${cost:.2f}"
 
-    def _grid_rows(used_pct: float, rows: int) -> list[str]:
-        total = _COLS * rows
-        filled = max(0, min(total, round(used_pct * total)))
-        result = []
-        for r in range(rows):
-            cells = []
-            for c in range(_COLS):
-                if r * _COLS + c < filled:
-                    cells.append(click.style(_FILLED, fg="cyan"))
-                else:
-                    cells.append(click.style(_EMPTY, dim=True))
-            result.append("     " + " ".join(cells))
-        return result
+    def _bar(saved_pct: int) -> str:
+        filled = max(0, min(_BAR_WIDTH, round(saved_pct / 100 * _BAR_WIDTH)))
+        empty = _BAR_WIDTH - filled
+        return (
+            click.style("█" * filled, fg="green")
+            + click.style("░" * empty, dim=True)
+        )
 
     def _print_project(name: str, stats: dict) -> None:
         full_file = stats.get("full_file_tokens", 0)
@@ -1143,11 +1146,10 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
         queries = stats.get("queries", 0)
         raw = stats.get("raw_tokens", 0)
 
-        # Two distinct savings effects, reported separately so the headline
-        # number isn't muddled by mixing "we didn't dump full files" with
-        # "we summarised what we did serve":
-        #   retrieval = (full_file - raw)  / full_file
-        #   compression = (raw - served)   / raw
+        baseline = max(full_file, raw) if full_file > 0 else raw
+        tokens_saved = max(0, baseline - served)
+        saved_pct = int(tokens_saved / baseline * 100) if baseline > 0 else 0
+
         retrieval_pct = (
             int(round((1 - raw / full_file) * 100))
             if full_file > 0 and raw <= full_file
@@ -1161,26 +1163,49 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
         retrieval_pct = max(0, retrieval_pct)
         compression_pct = max(0, compression_pct)
 
-        baseline = max(full_file, raw) if full_file > 0 else raw
-        used_pct = served / baseline if baseline > 0 else 0
+        q_label = "query" if queries == 1 else "queries"
 
-        labels: list[str] = [
-            f"  {bold(name)} {dim('·')} {value(f'{queries:,}')} {dim('queries')}",
-            f"  {value(_fmt_k(served))} {dim('served')}  {dim('·')}  "
-            f"{value(_fmt_k(raw))} {dim('chunks raw')}  {dim('·')}  "
-            f"{value(_fmt_k(full_file))} {dim('full-file baseline')}",
-            "",
-            f"  {header('Token savings (split)')}",
-            f"  {click.style(_FILLED, fg='cyan')} {label('Retrieval:  ')}"
-            f"  {success(f'{retrieval_pct:>3}%')}  {dim('vs reading full files')}",
-            f"  {click.style(_EMPTY, dim=True)} {label('Compression:')}"
-            f"  {success(f'{compression_pct:>3}%')}  {dim('chunk → summary')}",
-        ]
-
-        grid = _grid_rows(used_pct, rows=len(labels))
         click.echo()
-        for g, l in zip(grid, labels):
-            click.echo(f"{g}   {l}")
+        click.echo(f"  {bold(name)} {dim('·')} {value(str(queries))} {dim(q_label)}")
+        click.echo()
+
+        # Headline: bar + percentage + cost
+        click.echo(
+            f"  {_bar(saved_pct)}  "
+            f"{click.style(f'{saved_pct}%', fg='green', bold=True)} "
+            f"{dim('tokens saved')}"
+        )
+        click.echo()
+
+        # Before / after / saved
+        click.echo(
+            f"  {dim('Without CCE')}   "
+            f"{value(_fmt_tokens(baseline)):>10}  {dim('tokens')}   "
+            f"{dim(_fmt_cost(baseline))}"
+        )
+        click.echo(
+            f"  {success('With CCE')}      "
+            f"{value(_fmt_tokens(served)):>10}  {dim('tokens')}   "
+            f"{dim(_fmt_cost(served))}"
+        )
+        click.echo(f"  {dim('─' * 42)}")
+        click.echo(
+            f"  {success('Saved')}         "
+            f"{click.style(_fmt_tokens(tokens_saved), fg='green', bold=True):>10}  {dim('tokens')}   "
+            f"{click.style(_fmt_cost(tokens_saved), fg='green', bold=True)}"
+        )
+        click.echo()
+
+        # One-line breakdown
+        click.echo(
+            f"  {dim('How:')}  "
+            f"{label('retrieval')} {value(f'{retrieval_pct}%')}"
+            f"  {dim('+')}  "
+            f"{label('compression')} {value(f'{compression_pct}%')}"
+        )
+        click.echo(
+            f"        {dim('(searched instead of reading full files + compressed before serving)')}"
+        )
 
     def _json_entry(name: str, stats: dict) -> dict:
         full_file = stats.get("full_file_tokens", 0)
@@ -1263,14 +1288,29 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             click.echo("  " + "─" * 52)
 
     if len(reports) > 1:
-        total_raw = sum(s.get("raw_tokens", 0) for _, s in reports)
+        total_baseline = sum(
+            max(s.get("full_file_tokens", 0), s.get("raw_tokens", 0))
+            if s.get("full_file_tokens", 0) > 0
+            else s.get("raw_tokens", 0)
+            for _, s in reports
+        )
         total_served = sum(s.get("served_tokens", 0) for _, s in reports)
         total_queries = sum(s.get("queries", 0) for _, s in reports)
-        total_saved = total_raw - total_served
-        total_pct = int(total_saved / total_raw * 100) if total_raw > 0 else 0
+        total_saved = max(0, total_baseline - total_served)
+        total_pct = int(total_saved / total_baseline * 100) if total_baseline > 0 else 0
         click.echo()
-        click.echo(f"  {bold('Total')} {dim('across')} {value(str(len(reports)))} {dim('projects ·')} {value(f'{total_queries:,}')} {dim('queries')}")
-        click.echo(f"  {success(f'Saved: {total_saved:,} tokens ({total_pct}%)')}")
+        click.echo(
+            f"  {bold('Total')} {dim('across')} {value(str(len(reports)))} "
+            f"{dim('projects ·')} {value(f'{total_queries:,}')} {dim('queries')}"
+        )
+        click.echo(
+            f"  {_bar(total_pct)}  "
+            f"{click.style(f'{total_pct}%', fg='green', bold=True)} "
+            f"{dim('saved ·')} "
+            f"{click.style(_fmt_tokens(total_saved), fg='green', bold=True)} "
+            f"{dim('tokens ·')} "
+            f"{click.style(_fmt_cost(total_saved), fg='green', bold=True)}"
+        )
 
     click.echo()
 
