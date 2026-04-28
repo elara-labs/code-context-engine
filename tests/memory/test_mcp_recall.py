@@ -213,6 +213,64 @@ def test_strip_tag_helper():
     assert _strip_tag("[a] [b] x") == "[b] x"
 
 
+def test_rrf_dedupes_by_stripped_text():
+    """Same content with different tag prefixes should collapse, not double up."""
+    from context_engine.integration.mcp_server import _rrf_merge
+    out = _rrf_merge(
+        ["[decision src=manual|sid:abc] use jwt — stateless"],
+        ["[decision src=migrated|sid:-] use jwt — stateless"],
+        top=10,
+    )
+    assert len(out) == 1
+    assert "use jwt — stateless" in out[0]
+
+
+def test_humanise_relative_time():
+    import time as _time
+    from context_engine.integration.mcp_server import _humanise_relative_time
+    now = int(_time.time())
+    assert _humanise_relative_time(now) == "just now"
+    assert _humanise_relative_time(now - 90) == "1m ago"
+    assert _humanise_relative_time(now - 3 * 3600) == "3h ago"
+    assert _humanise_relative_time(now - 5 * 86_400) == "5d ago"
+    assert _humanise_relative_time(None) == ""
+    assert _humanise_relative_time("not-an-int") == ""
+
+
+def test_truncate_payload_caps_long_strings():
+    from context_engine.integration.mcp_server import _truncate_payload
+    assert _truncate_payload(None, 10) == "<no value>"
+    assert _truncate_payload("hi", 10) == "hi"
+    out = _truncate_payload("x" * 5000, 100)
+    assert out.startswith("x" * 100)
+    assert "truncated" in out
+    assert "4900 more chars" in out
+
+
+def test_recall_format_includes_recency_and_drill_affordance(mcp):
+    """Each match should carry a relative-time hint and a callable drill hint."""
+    import time as _time
+    sid = "recency-test"
+    mcp._memory_conn.execute(
+        "INSERT INTO sessions (id, project, started_at_epoch, started_at, "
+        "status) VALUES (?, 'demo', 1700000000, '2023-11-14T22:13:20', 'active')",
+        (sid,),
+    )
+    one_hour_ago = int(_time.time()) - 3600
+    mcp._memory_conn.execute(
+        "INSERT INTO decisions (decision, reason, source, session_id, "
+        "created_at_epoch, created_at) VALUES (?, ?, 'manual', ?, ?, ?)",
+        ("Pick KEY library", "KEY rationale", sid, one_hour_ago,
+         "2025-01-01T00:00:00"),
+    )
+    mcp._memory_conn.commit()
+    matches = mcp._search_sessions("KEY")
+    assert any(
+        "1h ago" in m and 'session_timeline("recency-test")' in m
+        for m in matches
+    ), matches
+
+
 def test_recall_response_includes_tldr_when_enough_matches(mcp):
     """When ≥3 matches are returned, _handle_session_recall prepends a TL;DR."""
     import asyncio

@@ -89,6 +89,10 @@ def _clamp_int(value, *, default: int, lo: int, hi: int) -> int:
 
 _FTS_RECALL_LIMIT = 100
 _VEC_RECALL_K = 30
+# Read-time cap on session_event payloads. Inputs already have a 4 KB write
+# cap (compressor._TOOL_INPUT_CHAR_CAP) but outputs are stored uncapped, so a
+# 50 KB Bash stdout would re-feed ~12 k tokens on every fetch without this.
+_EVENT_PAYLOAD_READ_CAP = 4_000
 # RRF (reciprocal rank fusion) constant. 60 is the canonical value from the
 # Cormack/Clarke/Buettcher 2009 paper — small enough that early ranks
 # dominate, large enough to keep the late tail relevant.
@@ -101,22 +105,69 @@ _TLDR_TOP_N = 10
 _TAG_PREFIX_RE = re.compile(r"^\[[^\]]*\]\s*")
 
 
+def _strip_tag(text: str) -> str:
+    return _TAG_PREFIX_RE.sub("", text)
+
+
+def _humanise_relative_time(epoch: int | None) -> str:
+    """Best-effort "3d ago" / "5m ago" string. Empty on bad/missing input.
+
+    Only surfaces what's helpful to the model — sub-minute deltas would be
+    noise on a recall hit, so we round to minute granularity at minimum.
+    """
+    if epoch is None:
+        return ""
+    import time as _time
+    try:
+        delta = max(0, int(_time.time()) - int(epoch))
+    except (TypeError, ValueError):
+        return ""
+    if delta < 60:
+        return "just now"
+    if delta < 3600:
+        return f"{delta // 60}m ago"
+    if delta < 86_400:
+        return f"{delta // 3600}h ago"
+    if delta < 30 * 86_400:
+        return f"{delta // 86_400}d ago"
+    if delta < 365 * 86_400:
+        return f"{delta // (30 * 86_400)}mo ago"
+    return f"{delta // (365 * 86_400)}y ago"
+
+
+def _truncate_payload(text: str | None, cap: int) -> str:
+    """Trim a captured tool payload at read time. Empty NULL → placeholder."""
+    if text is None:
+        return "<no value>"
+    if len(text) <= cap:
+        return text
+    suffix = f"\n…[truncated, {len(text) - cap} more chars]"
+    return text[:cap] + suffix
+
+
 def _rrf_merge(*ranked_lists: list[str], top: int) -> list[str]:
     """Reciprocal rank fusion of multiple ranked lists.
 
     Each input list is `[item_at_rank_0, item_at_rank_1, ...]`. Items in
     common across lists rise; items in only one list still surface
     proportional to their rank there. Returns up to `top` items.
+
+    Dedup key is the *content* (tag prefix stripped), so the same decision
+    showing up as both `[decision src=manual]` and `[decision src=migrated]`
+    during the JSON↔memory.db dual-write window collapses into a single
+    boosted entry instead of inflating recall output.
     """
     scores: dict[str, float] = {}
+    repr_for_key: dict[str, str] = {}
     for items in ranked_lists:
         for rank, item in enumerate(items):
-            scores[item] = scores.get(item, 0.0) + 1.0 / (_RRF_K + rank + 1)
-    return sorted(scores, key=lambda it: scores[it], reverse=True)[:top]
-
-
-def _strip_tag(text: str) -> str:
-    return _TAG_PREFIX_RE.sub("", text)
+            key = _strip_tag(item)
+            scores[key] = scores.get(key, 0.0) + 1.0 / (_RRF_K + rank + 1)
+            # Keep the first-seen tagged form — typically the highest-ranked
+            # source's framing — as the user-visible label.
+            repr_for_key.setdefault(key, item)
+    ordered_keys = sorted(scores, key=lambda k: scores[k], reverse=True)[:top]
+    return [repr_for_key[k] for k in ordered_keys]
 
 
 def _fts_match_query(topic: str) -> str:
@@ -889,8 +940,8 @@ class ContextEngineMCP:
                     "only — its raw payload aged out of the retention window."
                 ),
             )]
-        raw_input = row["raw_input"] if row["raw_input"] is not None else "<no input>"
-        raw_output = row["raw_output"] if row["raw_output"] is not None else "<no output>"
+        raw_input = _truncate_payload(row["raw_input"], _EVENT_PAYLOAD_READ_CAP)
+        raw_output = _truncate_payload(row["raw_output"], _EVENT_PAYLOAD_READ_CAP)
         body = (
             f"event {event_id} · {row['tool_name']} · session {row['session_id']} · "
             f"turn {row['prompt_number']} · {row['created_at']}\n\n"
@@ -1172,14 +1223,19 @@ class ContextEngineMCP:
         return self._format_turns_in_id_order(ids)
 
     def _format_decisions_in_id_order(self, ids: list[int]) -> list[str]:
-        """Fetch decisions and emit them in the order of `ids` (preserves rank)."""
+        """Fetch decisions and emit them in the order of `ids` (preserves rank).
+
+        Each line includes a relative-time hint and a drill-down affordance
+        so the agent rarely needs a follow-up call to figure out how to
+        navigate from a recall hit back to its session.
+        """
         if not ids:
             return []
         placeholders = ",".join("?" * len(ids))
         rows = {
             r["id"]: r for r in self._memory_conn.execute(
-                f"SELECT id, decision, reason, source, session_id "
-                f"FROM decisions WHERE id IN ({placeholders})",
+                f"SELECT id, decision, reason, source, session_id, "
+                f"created_at_epoch FROM decisions WHERE id IN ({placeholders})",
                 tuple(ids),
             )
         }
@@ -1188,9 +1244,14 @@ class ContextEngineMCP:
             r = rows.get(rid)
             if r is None:
                 continue
+            recency = _humanise_relative_time(r["created_at_epoch"])
+            sid = r["session_id"]
+            tail = f" · {recency}" if recency else ""
+            if sid:
+                tail += f' · → session_timeline("{sid}")'
             out.append(
-                f"[decision src={r['source']}|sid:{r['session_id'] or '-'}] "
-                f"{r['decision']} — {r['reason']}"
+                f"[decision src={r['source']}|sid:{sid or '-'}] "
+                f"{r['decision']} — {r['reason']}{tail}"
             )
         return out
 
@@ -1200,8 +1261,8 @@ class ContextEngineMCP:
         placeholders = ",".join("?" * len(ids))
         rows = {
             r["id"]: r for r in self._memory_conn.execute(
-                f"SELECT id, session_id, prompt_number, summary "
-                f"FROM turn_summaries WHERE id IN ({placeholders})",
+                f"SELECT id, session_id, prompt_number, summary, "
+                f"created_at_epoch FROM turn_summaries WHERE id IN ({placeholders})",
                 tuple(ids),
             )
         }
@@ -1210,8 +1271,12 @@ class ContextEngineMCP:
             r = rows.get(rid)
             if r is None:
                 continue
+            recency = _humanise_relative_time(r["created_at_epoch"])
+            tail = f" · {recency}" if recency else ""
+            tail += f' · → session_event(id={r["id"]})'
             out.append(
-                f"[turn sid:{r['session_id']}|n:{r['prompt_number']}] {r['summary']}"
+                f"[turn sid:{r['session_id']}|n:{r['prompt_number']}] "
+                f"{r['summary']}{tail}"
             )
         return out
 
