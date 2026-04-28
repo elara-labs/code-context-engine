@@ -174,6 +174,59 @@ def _install_memory_hooks(project_dir: Path) -> None:
         _ok("Memory hooks already configured")
 
 
+def _check_memory_capture_reachable(config, project_dir: Path) -> None:
+    """Probe the loopback hook server so the user knows whether `cce serve` is
+    actually running before they restart Claude Code expecting capture to work.
+
+    Hooks fail closed (`curl ... || true`), so a missing daemon means capture
+    is *silently* disabled — exactly the onboarding footgun this guards
+    against. We never block init; we just print clear next steps.
+    """
+    import socket
+    project_name = project_dir.name
+    storage_base = Path(config.storage_path) / project_name
+    port_file = storage_base / "serve.port"
+
+    if not port_file.exists():
+        _warn(
+            "Memory capture not yet active — `cce serve` hasn't been started "
+            "for this project."
+        )
+        click.echo(
+            _dim(
+                "    Run `cce serve` in a separate terminal so the loopback "
+                "hook server starts;\n"
+                "    until it's running, hooks fire successfully but capture "
+                "is silently dropped.\n"
+                "    Verify any time with `cce sessions status`."
+            )
+        )
+        return
+    try:
+        port = int(port_file.read_text().strip())
+    except (OSError, ValueError):
+        _warn(f"Memory capture port file unreadable at {port_file}")
+        return
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=1.0):
+            pass
+    except OSError:
+        _warn(
+            f"Memory capture stale — found serve.port at :{port} but "
+            "nothing is listening."
+        )
+        click.echo(
+            _dim(
+                "    Either `cce serve` exited or is bound to a different "
+                "port now.\n"
+                "    Restart it; the new port replaces the stale file on "
+                "first hook fire."
+            )
+        )
+        return
+    _ok(f"Memory capture active  " + _dim(f"(127.0.0.1:{port} reachable)"))
+
+
 def _ensure_session_hook(project_dir: Path) -> None:
     """Add Claude Code hooks so CCE status shows on startup."""
     settings_dir = project_dir / ".claude"
@@ -592,6 +645,7 @@ def init(ctx: click.Context) -> None:
     _ensure_claude_md(project_dir)
     _ensure_session_hook(project_dir)
     _install_memory_hooks(project_dir)
+    _check_memory_capture_reachable(config, project_dir)
 
     # 6. .gitignore — add CCE per-machine entries
     ensure_gitignore(str(project_dir))

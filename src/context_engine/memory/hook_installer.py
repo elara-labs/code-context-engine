@@ -100,11 +100,16 @@ def install_settings(project_dir: Path) -> dict:
         if _has_cce_hook(bucket):
             skipped.append(hook_name)
             continue
+        # Claude Code passes `command` to `sh -c`, so an unquoted path
+        # tokenises on whitespace. shlex.quote handles `~/Users/Alice Smith/...`
+        # paths cleanly without us needing to know what shell-special chars
+        # might appear.
+        import shlex
         bucket.append({
             "matcher": "",
             "hooks": [{
                 "type": "command",
-                "command": f"{HOOK_PATH} {hook_name}",
+                "command": f"{shlex.quote(str(HOOK_PATH))} {hook_name}",
             }],
         })
         added.append(hook_name)

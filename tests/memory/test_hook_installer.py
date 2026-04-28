@@ -44,6 +44,29 @@ def test_install_settings_adds_all_5_hooks(tmp_path: Path):
         assert hook_name in cmd
 
 
+def test_install_settings_quotes_command_for_paths_with_spaces(tmp_path: Path, monkeypatch):
+    """A HOOK_PATH containing a space must be shell-quoted in the command.
+
+    Without quoting, Claude Code passes `command` to sh -c, which would
+    tokenise on the space and try to exec the wrong binary. This is the
+    classic /Users/Firstname Lastname onboarding footgun on macOS.
+    """
+    spaced_dir = tmp_path / "Alice Smith" / ".cce" / "hooks"
+    spaced_dir.mkdir(parents=True)
+    spaced_path = spaced_dir / hi.HOOK_SCRIPT_NAME
+    monkeypatch.setattr(hi, "HOOK_PATH", spaced_path)
+    project = tmp_path / "proj"
+    project.mkdir()
+    hi.install_settings(project)
+    data = json.loads((project / ".claude" / "settings.json").read_text())
+    cmd = data["hooks"][hi.LIFECYCLE_HOOKS[0]][0]["hooks"][0]["command"]
+    # The path must be shell-quoted (single quotes around the spaced path),
+    # and the hook name must appear unquoted after a space.
+    assert "'" in cmd, f"path with space should be shell-quoted: {cmd}"
+    assert "Alice Smith" in cmd
+    assert cmd.endswith(f" {hi.LIFECYCLE_HOOKS[0]}")
+
+
 def test_install_settings_idempotent(tmp_path: Path):
     project = tmp_path / "myproj"
     project.mkdir()
