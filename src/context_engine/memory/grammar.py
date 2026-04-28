@@ -89,22 +89,58 @@ _FILLERS = _ARTICLES | frozenset({
     "just", "very", "quite", "really", "actually", "basically",
 })
 
+# Aggressive drop set used at ultra. Adds discourse fillers, common
+# pronouns, weak verbs. Trades a few recall points for ~3× the byte
+# savings on conversational prose.
+_FILLERS_ULTRA = _FILLERS | frozenset({
+    "also", "still", "now", "when", "while", "since",
+    "i", "we", "you", "he", "she", "it", "they", "them",
+    "our", "their", "its", "my", "your", "his", "her",
+    "me", "us", "him",
+    "do", "does", "did",
+    "via", "into", "onto", "upon", "over", "under", "through",
+    "much", "more", "most", "less", "least", "some", "any", "all",
+    "such", "both", "each", "every", "other", "another",
+    "here", "there",
+    "let", "get", "got", "take", "took", "give", "gave",
+    "truly", "absolutely", "completely", "totally", "entirely",
+})
+
 # Abbreviation lexicon for ultra. expand() uses the inverse to restore on read.
 _ABBREVIATE: dict[str, str] = {
+    # Connectives / discourse
     "because": "b/c",
+    "however": "but",
+    "therefore": "so",
+    "additionally": "+",
+    "approximately": "~",
+    "particularly": "esp",
+    "specifically": "esp",
+    "currently": "now",
+    "previously": "before",
+    "subsequently": "then",
+    "throughout": "thru",
+    "instead": "vs",
     "without": "w/o",
     "with": "w/",
     "between": "btwn",
-    "approximately": "~",
+    "probably": "likely",
+    # Programming jargon
     "configuration": "config",
-    "reference": "ref",
+    "implementation": "impl",
+    "documentation": "docs",
+    "repository": "repo",
     "performance": "perf",
     "production": "prod",
     "development": "dev",
-    "documentation": "docs",
-    "repository": "repo",
-    "implementation": "impl",
-    "information": "info",
+    "environment": "env",
+    "infrastructure": "infra",
+    "architecture": "arch",
+    # Note: deliberately NOT abbreviating "authentication"/"authorization"/
+    # "library" — their natural abbreviations ("auth"/"authz"/"lib") are
+    # already real domain words, so expanding "auth" back to "authentication"
+    # corrupts text the user wrote as "auth" intentionally.
+    "framework": "fw",
     "function": "fn",
     "variable": "var",
     "parameter": "param",
@@ -114,6 +150,29 @@ _ABBREVIATE: dict[str, str] = {
     "database": "db",
     "language": "lang",
     "directory": "dir",
+    "execution": "exec",
+    "operation": "op",
+    "management": "mgmt",
+    "deployment": "deploy",
+    "synchronisation": "sync",
+    "synchronization": "sync",
+    "asynchronous": "async",
+    "synchronous": "sync",
+    "concurrent": "conc",
+    "optimisation": "opt",
+    "optimization": "opt",
+    "automatically": "auto",
+    "available": "avail",
+    "compatibility": "compat",
+    "incompatible": "incompat",
+    "information": "info",
+    "reference": "ref",
+    "different": "diff",
+    "specific": "spec",
+    "important": "imp",
+    "consider": "cons",
+    "additional": "extra",
+    "responsible": "resp",
 }
 
 _EXPAND: dict[str, str] = {abbr: word for word, abbr in _ABBREVIATE.items()}
@@ -193,7 +252,7 @@ def _transform_prose(text: str, level: Level) -> str:
         drop_set = _FILLERS
         do_abbreviate = False
     else:  # "ultra"
-        drop_set = _FILLERS
+        drop_set = _FILLERS_ULTRA
         do_abbreviate = True
 
     out: list[str] = []
