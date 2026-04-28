@@ -77,11 +77,15 @@ def build_session_resume(conn: sqlite3.Connection, project: str) -> str:
         return ""
 
     parts.append(f"## CCE memory · resuming {project}")
+    # Stored values went through grammar.compress on the write side; expand
+    # before display so the resume reads as natural prose.
+    from context_engine.memory.grammar import expand as _grammar_expand
+
     if last_rollup:
         when = last_rollup["ended_at"] or "in progress"
         parts.append("")
         parts.append(f"**Previous session** ({when}):")
-        rollup = (last_rollup["rollup_summary"] or "").strip()
+        rollup = _grammar_expand((last_rollup["rollup_summary"] or "").strip())
         for line in rollup.split("\n"):
             line = line.strip()
             if line:
@@ -90,8 +94,8 @@ def build_session_resume(conn: sqlite3.Connection, project: str) -> str:
         parts.append("")
         parts.append("**Recent decisions** (most-recent first):")
         for d in decisions:
-            decision = (d["decision"] or "").strip()
-            reason = (d["reason"] or "").strip()
+            decision = _grammar_expand((d["decision"] or "").strip())
+            reason = _grammar_expand((d["reason"] or "").strip())
             if reason and len(reason) > _RESUME_DECISION_REASON_CHARS:
                 reason = reason[:_RESUME_DECISION_REASON_CHARS] + "…"
             tag = ""

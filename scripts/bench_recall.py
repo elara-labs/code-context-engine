@@ -228,12 +228,24 @@ def _seed_corpus(mcp) -> None:
 
 
 def _returned_indices(mcp, query: str) -> list[int]:
+    """Map each formatted recall line back to its index in CORPUS.
+
+    After the grammar-compression layer, stored text is `compress(...)`'d
+    on write and `expand(...)`'d on display, so the line we see won't be
+    a substring of the original CORPUS row. We match against the
+    expand(compress(...)) of each candidate — the same round-trip the
+    real pipeline does — and look for that.
+    """
+    from context_engine.memory.grammar import compress, expand
+
     matches = mcp._search_sessions(query)
+    canonical = [
+        expand(compress(f"{d} — {r}", level="lite"))
+        for _, d, r in CORPUS
+    ]
     indices: list[int] = []
     for line in matches:
-        # Each match contains "<decision> — <reason>" somewhere in its body.
-        for i, (_, decision, reason) in enumerate(CORPUS):
-            needle = f"{decision} — {reason}"
+        for i, needle in enumerate(canonical):
             if needle in line and i not in indices:
                 indices.append(i)
                 break
@@ -286,6 +298,18 @@ def run_bench(args) -> dict:
 
         mcp._memory_conn.close()
 
+    # Compression telemetry — average bytes per stored decision row before
+    # vs after grammar.compress. Reads the actual bytes that landed in the
+    # CORPUS-seeded memory.db, so this measures end-to-end (extractive +
+    # grammar combined when the row goes through compress_turn; for the
+    # decisions table it's just grammar).
+    from context_engine.memory.grammar import compress as _g_compress
+    original_bytes = sum(len(d) + len(r) for _, d, r in CORPUS)
+    compressed_bytes = sum(
+        len(_g_compress(d, level="lite")) + len(_g_compress(r, level="lite"))
+        for _, d, r in CORPUS
+    )
+
     return {
         "config": {
             "k": args.k,
@@ -299,6 +323,16 @@ def run_bench(args) -> dict:
             "recall_at_k_mean": sum(recall_total) / len(recall_total),
             "precision_at_k_mean": sum(precision_total) / len(precision_total),
             "mrr_mean": sum(mrr_total) / len(mrr_total),
+        },
+        "compression": {
+            "original_bytes": original_bytes,
+            "compressed_bytes": compressed_bytes,
+            "saved_pct": (
+                100.0 * (1 - compressed_bytes / original_bytes)
+                if original_bytes else 0.0
+            ),
+            "avg_bytes_before": original_bytes / len(CORPUS),
+            "avg_bytes_after": compressed_bytes / len(CORPUS),
         },
     }
 
@@ -329,6 +363,14 @@ def _print_table(results: dict) -> None:
         f"{agg['precision_at_k_mean']:>6.2f} "
         f"{agg['mrr_mean']:>6.2f}"
     )
+    comp = results.get("compression")
+    if comp:
+        print()
+        print(
+            f"  storage: {comp['avg_bytes_before']:.0f} → "
+            f"{comp['avg_bytes_after']:.0f} bytes/decision  "
+            f"({comp['saved_pct']:.1f}% saved)"
+        )
     print()
 
 

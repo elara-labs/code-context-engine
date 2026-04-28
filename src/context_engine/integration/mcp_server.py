@@ -24,6 +24,7 @@ from context_engine.integration.git_context import (
 from context_engine.integration.session_capture import SessionCapture
 from context_engine.memory import db as memory_db
 from context_engine.memory.extractive import extractive_summary
+from context_engine.memory.grammar import compress as _grammar_compress, expand as _grammar_expand
 
 log = logging.getLogger(__name__)
 
@@ -898,24 +899,30 @@ class ContextEngineMCP:
             return [TextContent(type="text", text="decision is required.")]
         self._session_capture.record_decision(self._session_id, decision, reason)
         self._persist_current_session()
-        # Dual-write into memory.db so the FTS5-indexed decisions table picks
-        # this up — `_search_sessions` uses that index to prefilter candidates.
-        # Also write the row's embedding to decisions_vec for semantic recall.
+        # Dual-write into memory.db. `decision` and `reason` are compressed
+        # via the grammar module before INSERT — structured tokens (paths,
+        # versions, identifiers) are preserved byte-for-byte; only prose
+        # words get articles/fillers dropped. The vec embedding is computed
+        # on the *compressed* form so recall scores are consistent with
+        # what's stored. session_recall expands on the read side via
+        # `_format_*_in_id_order` so the agent sees natural prose.
         if self._memory_conn is not None:
             try:
                 import time as _time
                 epoch = int(_time.time())
+                stored_decision = _grammar_compress(decision, level="lite")
+                stored_reason = _grammar_compress(reason, level="lite")
                 cur = self._memory_conn.execute(
                     "INSERT INTO decisions (session_id, decision, reason, source, "
                     "created_at_epoch, created_at) "
                     "VALUES (?, ?, ?, 'manual', ?, ?)",
-                    (self._session_id, decision, reason, epoch,
+                    (self._session_id, stored_decision, stored_reason, epoch,
                      _time.strftime("%Y-%m-%dT%H:%M:%S", _time.gmtime(epoch))),
                 )
                 memory_db.record_decision_vec(
                     self._memory_conn, self._embedder,
                     decision_id=cur.lastrowid,
-                    decision=decision, reason=reason,
+                    decision=stored_decision, reason=stored_reason,
                 )
                 self._memory_conn.commit()
             except Exception:
@@ -988,9 +995,11 @@ class ContextEngineMCP:
             header.append(f"session: {session_id} · {meta['project']} · {meta['status']}")
             header.append(f"started: {meta['started_at']}  ended: {meta['ended_at'] or '—'}")
             if meta["rollup_summary"]:
-                header.append(f"rollup: {meta['rollup_summary']}")
+                # Stored compressed; expand for the agent's view.
+                header.append(f"rollup: {_grammar_expand(meta['rollup_summary'])}")
         body = "\n".join(
-            f"  turn {r['prompt_number']:>3} [{r['tier']}] {r['summary']}"
+            f"  turn {r['prompt_number']:>3} [{r['tier']}] "
+            f"{_grammar_expand(r['summary'] or '')}"
             for r in rows
         )
         return [TextContent(
@@ -1343,7 +1352,10 @@ class ContextEngineMCP:
 
         Each line includes a relative-time hint and a drill-down affordance
         so the agent rarely needs a follow-up call to figure out how to
-        navigate from a recall hit back to its session.
+        navigate from a recall hit back to its session. Decision text and
+        reason are run through `grammar.expand()` to restore well-known
+        abbreviations (b/c → because, prod → production) before display —
+        on-disk storage stays compressed.
         """
         if not ids:
             return []
@@ -1365,9 +1377,11 @@ class ContextEngineMCP:
             tail = f" · {recency}" if recency else ""
             if sid:
                 tail += f' · → session_timeline("{sid}")'
+            decision = _grammar_expand(r["decision"] or "")
+            reason = _grammar_expand(r["reason"] or "")
             out.append(
                 f"[decision src={r['source']}|sid:{sid or '-'}] "
-                f"{r['decision']} — {r['reason']}{tail}"
+                f"{decision} — {reason}{tail}"
             )
         return out
 
@@ -1390,9 +1404,10 @@ class ContextEngineMCP:
             recency = _humanise_relative_time(r["created_at_epoch"])
             tail = f" · {recency}" if recency else ""
             tail += f' · → session_event(id={r["id"]})'
+            summary = _grammar_expand(r["summary"] or "")
             out.append(
                 f"[turn sid:{r['session_id']}|n:{r['prompt_number']}] "
-                f"{r['summary']}{tail}"
+                f"{summary}{tail}"
             )
         return out
 
