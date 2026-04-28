@@ -566,3 +566,73 @@ def prune_old_payloads(conn, *, days: int = 30) -> dict[str, int]:
     log.info("pruned %d tool payloads older than %dd (~%d bytes freed)",
              len(ids), days, bytes_freed)
     return {"payloads_pruned": len(ids), "bytes_freed_estimate": bytes_freed}
+
+
+# Defaults exposed so tests can inject smaller values without monkey-patching.
+AUTO_PRUNE_INITIAL_DELAY_SECONDS = 120  # stagger past vec backfill / compress
+AUTO_PRUNE_INTERVAL_SECONDS = 86_400  # one pass per day
+
+
+async def auto_prune_loop(
+    storage_base,
+    *,
+    days: int = 30,
+    initial_delay: float = AUTO_PRUNE_INITIAL_DELAY_SECONDS,
+    interval: float = AUTO_PRUNE_INTERVAL_SECONDS,
+    stop_event=None,
+) -> None:
+    """Background task: periodically age out old raw tool payloads.
+
+    Runs forever, sleeping `interval` between passes. Each pass opens its
+    own SQLite connection (so we don't pin a long-lived conn across the
+    day-long sleep) and dispatches the actual prune to a worker thread.
+    Cancellable via `stop_event` (preferred) or `task.cancel()`.
+
+    Extracted from `cli._run_serve` so it's testable without spinning up
+    the whole MCP server. Exposed defaults for `initial_delay` and
+    `interval` let tests run iterations in milliseconds.
+    """
+    import asyncio
+    from pathlib import Path
+    db_path = memory_db_path(Path(storage_base))
+
+    if initial_delay > 0:
+        try:
+            if stop_event is not None:
+                await asyncio.wait_for(stop_event.wait(), timeout=initial_delay)
+                return  # stop_event fired during stagger
+            else:
+                await asyncio.sleep(initial_delay)
+        except asyncio.TimeoutError:
+            pass  # normal: timeout means stagger elapsed without stop
+
+    while True:
+        if stop_event is not None and stop_event.is_set():
+            return
+        try:
+            def _do_prune():
+                conn = connect(db_path)
+                try:
+                    return prune_old_payloads(conn, days=days)
+                finally:
+                    conn.close()
+            out = await asyncio.to_thread(_do_prune)
+            if out.get("payloads_pruned"):
+                log.info(
+                    "auto-prune: aged out %d raw payloads (~%d KB)",
+                    out["payloads_pruned"],
+                    out["bytes_freed_estimate"] // 1024,
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("auto-prune iteration failed; backing off")
+
+        try:
+            if stop_event is not None:
+                await asyncio.wait_for(stop_event.wait(), timeout=interval)
+                return
+            else:
+                await asyncio.sleep(interval)
+        except asyncio.TimeoutError:
+            pass

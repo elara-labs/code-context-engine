@@ -56,6 +56,55 @@ async def test_session_start_idempotent(hook_app, aiohttp_client):
     assert n == 1
 
 
+async def test_session_start_resume_with_only_decisions(hook_app, aiohttp_client):
+    """Common week-1 state: decisions exist but no session has rollup yet.
+    The resume must still surface the decisions section."""
+    app, conn = hook_app
+    conn.execute(
+        "INSERT INTO decisions (decision, reason, source, "
+        "created_at_epoch, created_at) VALUES "
+        "('Use Postgres for primary store', 'Boring, complete, ACID', 'manual', "
+        "1700000000, '2023-11-14T22:13:20')"
+    )
+    conn.commit()
+    client = await aiohttp_client(app)
+    resp = await client.post(
+        "/hooks/SessionStart",
+        json={"session_id": "newdec", "project": "demo"},
+    )
+    assert resp.status == 200
+    text = await resp.text()
+    assert "Recent decisions" in text
+    assert "Use Postgres" in text
+    assert "Previous session" not in text  # no rollup → no rollup section
+
+
+async def test_session_start_resume_with_only_rollup(hook_app, aiohttp_client):
+    """Inverse case: a prior session has a rollup but no decisions were
+    recorded. The resume must still show the rollup."""
+    app, conn = hook_app
+    conn.execute(
+        "INSERT INTO sessions (id, project, started_at_epoch, started_at, "
+        "ended_at_epoch, ended_at, status, rollup_summary, "
+        "rollup_summary_at_epoch) VALUES "
+        "('roll', 'demo', 1700000000, '2023-11-14T22:13:20', "
+        "1700003600, '2023-11-14T23:13:20', 'completed', "
+        "'Investigated cache miss on tag lookup; pinpointed serialiser fork.', "
+        "1700003600)"
+    )
+    conn.commit()
+    client = await aiohttp_client(app)
+    resp = await client.post(
+        "/hooks/SessionStart",
+        json={"session_id": "newroll", "project": "demo"},
+    )
+    assert resp.status == 200
+    text = await resp.text()
+    assert "Previous session" in text
+    assert "cache miss" in text
+    assert "Recent decisions" not in text  # no decisions → no decisions section
+
+
 async def test_session_start_returns_resume_with_prior_rollup_and_decisions(
     hook_app, aiohttp_client,
 ):

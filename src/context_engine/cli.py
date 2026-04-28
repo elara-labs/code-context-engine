@@ -55,7 +55,7 @@ _CCE_CLAUDE_MD_MARKER = "## Context Engine (CCE)"
 # Version stamp embedded as an HTML comment so it doesn't render in the final
 # Markdown but lets `_ensure_claude_md` detect when the installed block is
 # stale and needs replacing. Bump whenever _CCE_CLAUDE_MD_BLOCK changes.
-_CCE_CLAUDE_MD_VERSION = "2"
+_CCE_CLAUDE_MD_VERSION = "3"
 _CCE_CLAUDE_MD_VERSION_TAG = f"<!-- cce-block-version: {_CCE_CLAUDE_MD_VERSION} -->"
 _CCE_CLAUDE_MD_VERSION_PREFIX = "<!-- cce-block-version: "
 _CCE_CLAUDE_MD_END_MARKER = "<!-- /cce-block -->"
@@ -125,6 +125,21 @@ Format: `record_code_area(file_path="...", description="...")`.
 
 Skip recording for trivial reads, formatting changes, or one-off lookups —
 the goal is durable signal, not an event log.
+
+### Drilling deeper from a recall hit
+
+`session_recall` results are tagged with the source session id, e.g.
+`[turn sid:abc123|n:5]`. To drill in:
+
+- `session_timeline(session_id="abc123")` — walk the per-turn summaries of
+  that session in order. Use this when the user asks "what was the
+  reasoning?" or "how did we get there?".
+- `session_event(event_id=N)` — fetch a specific tool event's raw input
+  and output (capped at 4 KB at read time). Use this when a turn summary
+  references a tool result you actually need to inspect.
+
+Both are read-only and cheap. Prefer them over re-running tool calls or
+asking the user to re-paste context.
 
 ## Output Style
 
@@ -2311,37 +2326,12 @@ async def _run_serve(config) -> None:
 
     # Auto-prune — run prune_old_payloads in the background so users who
     # never invoke `cce sessions prune` manually still get bounded memory.db
-    # growth. Sleeps a day between passes; opens its own conn per pass to
-    # avoid pinning a connection across long sleeps.
-    async def _auto_prune_loop():
-        from context_engine.memory import db as memory_db
-        db_path = memory_db.memory_db_path(storage_base)
-        # Stagger startup so the first pass doesn't compete with
-        # vec-backfill / compression-loop on cold-start.
-        await asyncio.sleep(120)
-        while True:
-            try:
-                def _do_prune():
-                    conn = memory_db.connect(db_path)
-                    try:
-                        return memory_db.prune_old_payloads(conn, days=30)
-                    finally:
-                        conn.close()
-                out = await asyncio.to_thread(_do_prune)
-                if out.get("payloads_pruned"):
-                    _log.info(
-                        "auto-prune: aged out %d raw payloads (~%d KB)",
-                        out["payloads_pruned"],
-                        out["bytes_freed_estimate"] // 1024,
-                    )
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                _log.exception("auto-prune iteration failed; backing off")
-            await asyncio.sleep(86_400)  # 1 day
-
+    # growth.
     try:
-        auto_prune_task = asyncio.create_task(_auto_prune_loop())
+        from context_engine.memory.db import auto_prune_loop
+        auto_prune_task = asyncio.create_task(
+            auto_prune_loop(storage_base, days=30)
+        )
     except Exception as exc:
         _log.warning("Auto-prune worker failed to start: %s", exc)
 

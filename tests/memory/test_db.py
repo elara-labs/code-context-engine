@@ -371,6 +371,79 @@ def test_prune_old_payloads_nulls_aged_raws_and_keeps_summaries(tmp_path: Path):
         conn.close()
 
 
+async def test_auto_prune_loop_runs_one_iteration(tmp_path: Path):
+    """auto_prune_loop with initial_delay=0 + tiny interval drains old payloads
+    on its first pass and exits cleanly when stop_event is set."""
+    import asyncio
+    import time
+    db_path = tmp_path / "memory.db"
+    conn = memory_db.connect(db_path)
+    try:
+        old_epoch = int(time.time()) - 60 * 86_400
+        pid = conn.execute(
+            "INSERT INTO tool_event_payloads (raw_input, raw_output, size_bytes) "
+            "VALUES (?, ?, ?)",
+            ('{"x":1}', "y" * 200, 207),
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO sessions (id, project, started_at_epoch, started_at, "
+            "status) VALUES ('sap', 'demo', 1700000000, '2023-11-14T22:13:20', "
+            "'completed')"
+        )
+        conn.execute(
+            "INSERT INTO tool_events (session_id, prompt_number, tool_name, "
+            "payload_id, created_at_epoch, created_at) "
+            "VALUES ('sap', 1, 'Read', ?, ?, '2023-11-14T22:13:20')",
+            (pid, old_epoch),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    stop = asyncio.Event()
+    task = asyncio.create_task(
+        memory_db.auto_prune_loop(
+            tmp_path, days=30, initial_delay=0.0, interval=0.05,
+            stop_event=stop,
+        )
+    )
+    await asyncio.sleep(0.5)
+    stop.set()
+    await asyncio.wait_for(task, timeout=2.0)
+
+    conn = memory_db.connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT raw_input, raw_output FROM tool_event_payloads WHERE id = ?",
+            (pid,),
+        ).fetchone()
+        assert row["raw_input"] == ""
+        assert row["raw_output"] is None
+    finally:
+        conn.close()
+
+
+async def test_auto_prune_loop_stop_event_short_circuits_initial_delay(tmp_path: Path):
+    """stop_event firing during the initial_delay stagger exits the loop
+    cleanly without doing any work — matters for cce serve shutting down
+    before the first pass."""
+    import asyncio
+    db_path = tmp_path / "memory.db"
+    conn = memory_db.connect(db_path)
+    conn.close()
+
+    stop = asyncio.Event()
+    task = asyncio.create_task(
+        memory_db.auto_prune_loop(
+            tmp_path, days=30, initial_delay=10.0, interval=10.0,
+            stop_event=stop,
+        )
+    )
+    await asyncio.sleep(0.1)
+    stop.set()
+    await asyncio.wait_for(task, timeout=1.0)
+
+
 def test_v1_to_v2_upgrade_in_place(tmp_path: Path):
     """A db stamped at v1 (no vec tables) gains them on the next connect()."""
     import sqlite3

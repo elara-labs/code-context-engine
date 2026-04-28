@@ -83,3 +83,30 @@ def test_probe_warns_on_unparsable_port_file(setup):
     (storage_base / "serve.port").write_text("not-a-port")
     text = _capture(lambda: _check_memory_capture_reachable(config, project))
     assert "unreadable" in text
+
+
+def test_probe_falls_back_to_default_rendezvous_when_storage_local_missing(
+    setup, tmp_path, monkeypatch,
+):
+    """When storage_path is customised, hook_server writes the port to BOTH
+    the storage-local path AND the default-path rendezvous
+    (~/.cce/projects/<name>/serve.port). The probe must succeed when only
+    the rendezvous file is present (storage-local missing)."""
+    config, project, _ = setup
+    fake_home = tmp_path / "fakehome"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    rendezvous = fake_home / ".cce" / "projects" / project.name / "serve.port"
+    rendezvous.parent.mkdir(parents=True)
+
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    s.listen(1)
+    real_port = s.getsockname()[1]
+    try:
+        rendezvous.write_text(str(real_port))
+        text = _capture(lambda: _check_memory_capture_reachable(config, project))
+        assert "active" in text
+        assert str(real_port) in text
+    finally:
+        s.close()

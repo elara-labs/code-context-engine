@@ -61,6 +61,25 @@ def test_posix_hook_script_body_when_platform_not_win(monkeypatch):
     assert "curl -sf" in body
 
 
+def test_install_settings_uses_cmd_quoting_on_windows(tmp_path: Path, monkeypatch):
+    """On Windows, the hook command must use cmd.exe-style double quotes
+    around the path. POSIX single-quotes (shlex.quote) would not dequote
+    correctly under cmd.exe and would silently break capture."""
+    monkeypatch.setattr(hi, "_is_windows", lambda: True)
+    spaced_dir = tmp_path / "Alice Smith" / ".cce" / "hooks"
+    spaced_dir.mkdir(parents=True)
+    spaced_path = spaced_dir / "cce_hook.cmd"
+    monkeypatch.setattr(hi, "HOOK_PATH", spaced_path)
+    project = tmp_path / "proj"
+    project.mkdir()
+    hi.install_settings(project)
+    data = json.loads((project / ".claude" / "settings.json").read_text())
+    cmd = data["hooks"][hi.LIFECYCLE_HOOKS[0]][0]["hooks"][0]["command"]
+    assert cmd.startswith('"'), f"cmd.exe path should start with \": {cmd}"
+    assert "Alice Smith" in cmd
+    assert "'" not in cmd, f"Windows must not use POSIX single quotes: {cmd}"
+
+
 def test_install_settings_quotes_command_for_paths_with_spaces(tmp_path: Path, monkeypatch):
     """A HOOK_PATH containing a space must be shell-quoted in the command.
 

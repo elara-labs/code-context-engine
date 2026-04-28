@@ -134,6 +134,21 @@ def _hook_script_body() -> str:
     return _HOOK_SCRIPT_BODY_WIN if _is_windows() else _HOOK_SCRIPT_BODY_POSIX
 
 
+def _quote_hook_path(path: Path) -> str:
+    """Shell-quote `path` for the host shell. POSIX uses sh; Windows uses cmd.
+
+    sh accepts single quotes (via shlex.quote), cmd accepts double quotes.
+    The two are not interchangeable — POSIX single-quoting on cmd produces
+    a literal-quote'd path that cmd won't dequote.
+    """
+    s = str(path)
+    if _is_windows():
+        # Escape any embedded double quotes the cmd way (rare in real paths).
+        return '"' + s.replace('"', '""') + '"'
+    import shlex
+    return shlex.quote(s)
+
+
 def install_hook_script(target: Path = HOOK_PATH) -> bool:
     """Write the platform-appropriate hook script to ~/.cce/hooks/.
     Returns True if created/updated.
@@ -181,16 +196,17 @@ def install_settings(project_dir: Path) -> dict:
         if _has_cce_hook(bucket):
             skipped.append(hook_name)
             continue
-        # Claude Code passes `command` to `sh -c`, so an unquoted path
-        # tokenises on whitespace. shlex.quote handles `~/Users/Alice Smith/...`
-        # paths cleanly without us needing to know what shell-special chars
-        # might appear.
-        import shlex
+        # Claude Code passes `command` to `sh -c` on POSIX and to `cmd.exe`
+        # on Windows. Both tokenise on whitespace, but they understand
+        # *different* quoting: sh wants single quotes (shlex.quote), cmd
+        # wants double quotes. POSIX-only quoting on a Windows .cmd path
+        # like `C:\Users\Alice Smith\.cce\hooks\cce_hook.cmd` would emit
+        # single quotes that cmd doesn't recognise, breaking capture.
         bucket.append({
             "matcher": HOOK_MATCHERS.get(hook_name, ""),
             "hooks": [{
                 "type": "command",
-                "command": f"{shlex.quote(str(HOOK_PATH))} {hook_name}",
+                "command": f"{_quote_hook_path(HOOK_PATH)} {hook_name}",
             }],
         })
         added.append(hook_name)
