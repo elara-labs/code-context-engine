@@ -59,9 +59,25 @@ async def start_hook_server(
     site = web.TCPSite(runner, host="127.0.0.1", port=port)
     await site.start()
 
+    # Authoritative port file lives in the project's storage_base.
     port_file = Path(storage_base) / "serve.port"
     port_file.parent.mkdir(parents=True, exist_ok=True)
     port_file.write_text(str(port))
+
+    # Stable rendezvous file at the *default* storage location. The hook
+    # shell script always looks here (`${HOME}/.cce/projects/<name>/serve.port`)
+    # because it has no way to read the user's config.yaml. When storage_path
+    # is customised, this is the only way capture stays wired up.
+    default_rendezvous = (
+        Path.home() / ".cce" / "projects" / project_name / "serve.port"
+    )
+    try:
+        if default_rendezvous.resolve() != port_file.resolve():
+            default_rendezvous.parent.mkdir(parents=True, exist_ok=True)
+            default_rendezvous.write_text(str(port))
+    except OSError as exc:
+        # Non-fatal — capture still works for users with default storage.
+        log.warning("rendezvous port file write failed: %s", exc)
 
     log.info("Memory hook server listening on 127.0.0.1:%d", port)
     return runner, port

@@ -155,6 +155,20 @@ QUERIES: list[Query] = [
         relevant=[],
         notes="should reject as off-topic",
     ),
+    # Conversational queries — these phrase real engineering questions
+    # using natural English ("how can we...", "what should we do about...").
+    # The stop-word filter must NOT downgrade these into noise; the topic
+    # words must still surface their relevant decisions.
+    Query(
+        text="how can we improve code quality",
+        relevant=[32, 33, 34, 35, 36, 37, 38],
+        notes="conversational; topic words 'improve code quality'",
+    ),
+    Query(
+        text="what should we do about database performance",
+        relevant=[7, 8, 13, 27, 29],
+        notes="conversational; topic words 'database performance'",
+    ),
 ]
 
 

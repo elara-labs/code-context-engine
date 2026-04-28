@@ -191,15 +191,67 @@ def _rrf_merge(*ranked_lists: list[str], top: int) -> list[str]:
     return [repr_for_key[k] for k in ordered_keys]
 
 
-def _fts_match_query(topic: str) -> str:
-    """Build a safe FTS5 MATCH query from `topic` — OR of phrase-quoted tokens.
+# Conservative function-word list. We strip these from FTS5 queries so that
+# `is OR the OR today OR we OR can` doesn't match every decision in the
+# corpus. Restricted to genuine grammatical glue — articles, auxiliaries,
+# pronouns, prepositions, conjunctions, common interrogatives. Topic words
+# (code, auth, database, improve, scale, etc.) are NOT in this list.
+#
+# Vec search still runs in parallel against the original query, so even if
+# every token is filtered out, semantic recall still surfaces matches.
+_FTS_STOP_WORDS = frozenset({
+    # articles / determiners
+    "a", "an", "the", "this", "that", "these", "those", "some", "any",
+    "no", "all", "both", "each", "every", "other", "another", "such",
+    # auxiliaries / modals
+    "is", "are", "was", "were", "be", "been", "being", "am",
+    "have", "has", "had", "having",
+    "do", "does", "did", "doing", "done",
+    "will", "would", "shall", "should", "can", "could", "may", "might",
+    "must", "ought",
+    # pronouns
+    "i", "we", "you", "he", "she", "it", "they", "me", "us", "him", "her",
+    "them", "my", "our", "your", "his", "its", "their", "mine", "ours",
+    "yours", "hers", "theirs", "myself", "ourselves", "yourself",
+    "yourselves", "himself", "herself", "itself", "themselves",
+    # prepositions / conjunctions
+    "of", "in", "on", "at", "to", "for", "with", "by", "from", "as",
+    "into", "onto", "upon", "about", "above", "below", "under", "over",
+    "between", "among", "through", "during", "before", "after", "since",
+    "until", "while", "and", "or", "but", "nor", "so", "if", "than",
+    "then", "because", "though", "although", "unless",
+    # interrogatives / proforms
+    "how", "what", "when", "where", "which", "who", "whom", "whose",
+    "why", "here", "there",
+    # filler / generic time words
+    "just", "only", "even", "also", "very", "too", "still", "now",
+    "today", "tomorrow", "yesterday",
+    # common verbs that carry no topic signal in this domain
+    "get", "got", "make", "made", "go", "went", "see", "saw", "let",
+})
 
-    Returns "" when the topic has no usable tokens; callers should skip the
-    FTS query in that case rather than passing an empty MATCH (FTS5 would
-    raise).
+
+def _strip_stop_words(topic: str) -> str:
+    """Return `topic` with function words removed; falls back to the
+    original if every token is a stop word (rare)."""
+    tokens = [t.strip().lower() for t in topic.split() if t.strip()]
+    content = [t for t in tokens if t not in _FTS_STOP_WORDS]
+    return " ".join(content) if content else topic
+
+
+def _fts_match_query(topic: str) -> str:
+    """Build a safe FTS5 MATCH query from `topic` — OR of phrase-quoted
+    *content* tokens (function words like "is/the/today/we/can" stripped).
+
+    Returns "" when the topic has no usable content tokens left; callers
+    skip the FTS query in that case rather than passing an empty MATCH
+    (FTS5 would raise). When this happens, the vec semantic-search path
+    still runs against the original query string, so meaning isn't lost.
     """
-    tokens = [t.strip() for t in topic.split() if t.strip()]
-    safe = ['"' + t.replace('"', '""') + '"' for t in tokens]
+    content = _strip_stop_words(topic).split()
+    if not content:
+        return ""
+    safe = ['"' + t.replace('"', '""') + '"' for t in content]
     return " OR ".join(safe)
 
 
@@ -1186,11 +1238,17 @@ class ContextEngineMCP:
         Memory.db rows already get FTS/vec ranking, but JSON-history rows
         have no index, so we still pay the per-candidate embed_query() here.
         Mitigated by `Embedder.embed_query`'s @lru_cache.
+
+        Embeds the topic with stop words stripped — "how can we improve code
+        quality" → "improve code quality" — so the topic vector lands on
+        the topic words rather than the question framing. Sharpens the
+        signal substantially on conversational queries.
         """
         if not candidates:
             return []
+        topic_for_embed = _strip_stop_words(topic) or topic
         try:
-            topic_vec = list(self._embedder.embed_query(topic))
+            topic_vec = list(self._embedder.embed_query(topic_for_embed))
         except Exception as exc:
             log.debug("topic embed failed (%s); JSON candidates ranked by recency", exc)
             return candidates
@@ -1241,13 +1299,17 @@ class ContextEngineMCP:
                     "WHERE turn_summaries_fts MATCH ? ORDER BY rank LIMIT ?",
                     (fts_q, _FTS_RECALL_LIMIT),
                 )
+            # Embed the stop-word-stripped form so conversational queries
+            # ("how can we improve code") embed on their topic words rather
+            # than the question framing.
+            vec_topic = _strip_stop_words(topic) or topic
             vec_decision_ids = memory_db.search_decisions_vec(
-                self._memory_conn, self._embedder, topic, k=_VEC_RECALL_K,
+                self._memory_conn, self._embedder, vec_topic, k=_VEC_RECALL_K,
             )
             if vec_decision_ids:
                 vec_decisions = self._format_decisions_in_id_order(vec_decision_ids)
             vec_turn_ids = memory_db.search_turn_summaries_vec(
-                self._memory_conn, self._embedder, topic, k=_VEC_RECALL_K,
+                self._memory_conn, self._embedder, vec_topic, k=_VEC_RECALL_K,
             )
             if vec_turn_ids:
                 vec_turns = self._format_turns_in_id_order(vec_turn_ids)

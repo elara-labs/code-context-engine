@@ -44,6 +44,23 @@ def test_install_settings_adds_all_5_hooks(tmp_path: Path):
         assert hook_name in cmd
 
 
+def test_windows_hook_script_body_when_platform_win(monkeypatch):
+    """On Windows, install_hook_script writes the .cmd body."""
+    monkeypatch.setattr(hi, "_is_windows", lambda: True)
+    body = hi._hook_script_body()
+    assert body.startswith("@echo off")
+    assert "%PORT_FILE%" in body
+    assert "exit /b 0" in body
+
+
+def test_posix_hook_script_body_when_platform_not_win(monkeypatch):
+    monkeypatch.setattr(hi, "_is_windows", lambda: False)
+    body = hi._hook_script_body()
+    assert body.startswith("#!/bin/sh")
+    assert "${PORT_FILE}" in body
+    assert "curl -sf" in body
+
+
 def test_install_settings_quotes_command_for_paths_with_spaces(tmp_path: Path, monkeypatch):
     """A HOOK_PATH containing a space must be shell-quoted in the command.
 

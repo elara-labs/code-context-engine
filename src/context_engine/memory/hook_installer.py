@@ -18,17 +18,25 @@ from __future__ import annotations
 import json
 import logging
 import stat
+import sys
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-HOOK_SCRIPT_NAME = "cce_hook.sh"
+
+def _is_windows() -> bool:
+    return sys.platform.startswith("win")
+
+
+# On Windows, Claude Code hook commands are passed to cmd.exe rather than sh,
+# so we install a .cmd script. On POSIX (macOS/Linux), the original .sh.
+HOOK_SCRIPT_NAME = "cce_hook.cmd" if _is_windows() else "cce_hook.sh"
 HOOK_DIR = Path.home() / ".cce" / "hooks"
 HOOK_PATH = HOOK_DIR / HOOK_SCRIPT_NAME
 
 # Marker substring used to identify hooks we own — survives subsequent
 # format/path tweaks as long as the script name stays.
-HOOK_MARKER = HOOK_SCRIPT_NAME
+HOOK_MARKER = "cce_hook"
 
 LIFECYCLE_HOOKS = [
     "SessionStart",
@@ -38,7 +46,7 @@ LIFECYCLE_HOOKS = [
     "SessionEnd",
 ]
 
-_HOOK_SCRIPT_BODY = """#!/bin/sh
+_HOOK_SCRIPT_BODY_POSIX = """#!/bin/sh
 # CCE memory hook — installed by `cce init`. Forwards Claude Code hook
 # payloads (JSON on stdin) to the local memory capture server.
 #
@@ -58,15 +66,49 @@ curl -sf -m 1 -X POST -H "Content-Type: application/json" \\
 exit 0
 """
 
+# Windows .cmd equivalent. PowerShell would be more flexible but cmd is
+# always present and avoids the execution-policy gotcha. The same fail-
+# closed semantics: any error → exit 0.
+_HOOK_SCRIPT_BODY_WIN = """@echo off
+REM CCE memory hook — installed by `cce init`. Forwards Claude Code hook
+REM payloads (JSON on stdin) to the local memory capture server.
+REM Failure is silent (always exit 0) so capture never blocks the user.
+setlocal enabledelayedexpansion
+
+set "HOOK_NAME=%~1"
+if "%HOOK_NAME%"=="" set "HOOK_NAME=unknown"
+
+for %%I in ("%CD%") do set "PROJECT_NAME=%%~nxI"
+set "PORT_FILE=%USERPROFILE%\\.cce\\projects\\%PROJECT_NAME%\\serve.port"
+if not exist "%PORT_FILE%" exit /b 0
+
+set /p PORT=<"%PORT_FILE%"
+if "%PORT%"=="" exit /b 0
+
+curl -sf -m 1 -X POST -H "Content-Type: application/json" ^
+    --data-binary @- "http://127.0.0.1:%PORT%/hooks/%HOOK_NAME%" >nul 2>&1
+exit /b 0
+"""
+
+
+def _hook_script_body() -> str:
+    return _HOOK_SCRIPT_BODY_WIN if _is_windows() else _HOOK_SCRIPT_BODY_POSIX
+
 
 def install_hook_script(target: Path = HOOK_PATH) -> bool:
-    """Write `cce_hook.sh` to ~/.cce/hooks/. Returns True if created/updated."""
+    """Write the platform-appropriate hook script to ~/.cce/hooks/.
+    Returns True if created/updated.
+    """
     target.parent.mkdir(parents=True, exist_ok=True)
+    body = _hook_script_body()
     existing = target.read_text() if target.exists() else None
-    if existing == _HOOK_SCRIPT_BODY:
+    if existing == body:
         return False
-    target.write_text(_HOOK_SCRIPT_BODY)
-    target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    target.write_text(body)
+    if not _is_windows():
+        target.chmod(
+            target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+        )
     return True
 
 

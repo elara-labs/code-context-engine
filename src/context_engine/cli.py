@@ -185,9 +185,15 @@ def _check_memory_capture_reachable(config, project_dir: Path) -> None:
     import socket
     project_name = project_dir.name
     storage_base = Path(config.storage_path) / project_name
-    port_file = storage_base / "serve.port"
-
-    if not port_file.exists():
+    # Try the storage-local file first (authoritative), then fall back to
+    # the default-path rendezvous file `cce serve` writes for the hook
+    # shell script. Either is sufficient for the probe.
+    candidates = [
+        storage_base / "serve.port",
+        Path.home() / ".cce" / "projects" / project_name / "serve.port",
+    ]
+    port_file = next((p for p in candidates if p.exists()), None)
+    if port_file is None:
         _warn(
             "Memory capture not yet active — `cce serve` hasn't been started "
             "for this project."
@@ -2293,6 +2299,7 @@ async def _run_serve(config) -> None:
     # `asyncio.to_thread`, so this loop never holds the asyncio thread while
     # an embed + SQLite write is in flight.
     compression_task = None
+    auto_prune_task = None
     try:
         from context_engine.memory import db as memory_db
         from context_engine.memory.compressor import compression_loop
@@ -2301,6 +2308,42 @@ async def _run_serve(config) -> None:
         )
     except Exception as exc:
         _log.warning("Memory compression worker failed to start: %s", exc)
+
+    # Auto-prune — run prune_old_payloads in the background so users who
+    # never invoke `cce sessions prune` manually still get bounded memory.db
+    # growth. Sleeps a day between passes; opens its own conn per pass to
+    # avoid pinning a connection across long sleeps.
+    async def _auto_prune_loop():
+        from context_engine.memory import db as memory_db
+        db_path = memory_db.memory_db_path(storage_base)
+        # Stagger startup so the first pass doesn't compete with
+        # vec-backfill / compression-loop on cold-start.
+        await asyncio.sleep(120)
+        while True:
+            try:
+                def _do_prune():
+                    conn = memory_db.connect(db_path)
+                    try:
+                        return memory_db.prune_old_payloads(conn, days=30)
+                    finally:
+                        conn.close()
+                out = await asyncio.to_thread(_do_prune)
+                if out.get("payloads_pruned"):
+                    _log.info(
+                        "auto-prune: aged out %d raw payloads (~%d KB)",
+                        out["payloads_pruned"],
+                        out["bytes_freed_estimate"] // 1024,
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                _log.exception("auto-prune iteration failed; backing off")
+            await asyncio.sleep(86_400)  # 1 day
+
+    try:
+        auto_prune_task = asyncio.create_task(_auto_prune_loop())
+    except Exception as exc:
+        _log.warning("Auto-prune worker failed to start: %s", exc)
 
     watcher_label = " · live watcher active" if watcher else ""
     hook_label = f" · memory hooks :{hook_port}" if hook_port else ""
@@ -2325,6 +2368,12 @@ async def _run_serve(config) -> None:
             compression_task.cancel()
             try:
                 await compression_task
+            except asyncio.CancelledError:
+                pass
+        if auto_prune_task is not None:
+            auto_prune_task.cancel()
+            try:
+                await auto_prune_task
             except asyncio.CancelledError:
                 pass
         if hook_runner is not None:
