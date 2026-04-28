@@ -920,7 +920,7 @@ class ContextEngineMCP:
         try:
             row = self._memory_conn.execute(
                 "SELECT te.tool_name, te.session_id, te.prompt_number, te.created_at, "
-                "p.raw_input, p.raw_output FROM tool_events te "
+                "te.payload_id, p.raw_input, p.raw_output FROM tool_events te "
                 "LEFT JOIN tool_event_payloads p ON p.id = te.payload_id "
                 "WHERE te.id = ?",
                 (event_id,),
@@ -932,8 +932,20 @@ class ContextEngineMCP:
                 type="text",
                 text=f"No event with id={event_id}.",
             )]
-        # Aged-out check: retention writes raw_input='' and raw_output=NULL
-        # (raw_input has NOT NULL on the schema, so '' is its sentinel).
+        # Three states for the payload:
+        #  (a) payload_id IS NULL — event was captured without a payload row
+        #      (e.g. a hook that only logs the descriptor).
+        #  (b) payload_id present, raw_input='' / raw_output=NULL — pruned
+        #      by `cce sessions prune`'s retention pass.
+        #  (c) payload_id present, raws populated — normal case.
+        if row["payload_id"] is None:
+            return [TextContent(
+                type="text",
+                text=(
+                    f"Event {event_id} ({row['tool_name']}) has no captured payload "
+                    "— only its descriptor was recorded."
+                ),
+            )]
         if not row["raw_input"] and row["raw_output"] is None:
             return [TextContent(
                 type="text",

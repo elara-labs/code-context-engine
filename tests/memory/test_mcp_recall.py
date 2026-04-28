@@ -138,7 +138,8 @@ def test_session_event_returns_raw_payload(mcp):
     assert "x = 1" in text
 
 
-def test_session_event_returns_summary_only_message_when_payload_pruned(mcp):
+def test_session_event_returns_no_payload_message_when_payload_id_null(mcp):
+    """Event captured without a payload row (descriptor-only) shows that."""
     mcp._memory_conn.execute(
         "INSERT INTO sessions (id, project, started_at_epoch, started_at) "
         "VALUES ('sx', 'demo', 1700000000, '2023-11-14T22:13:20')"
@@ -152,7 +153,36 @@ def test_session_event_returns_summary_only_message_when_payload_pruned(mcp):
     mcp._memory_conn.commit()
 
     out = mcp._handle_session_event({"event_id": event_id})
+    assert "no captured payload" in out[0].text
+    assert "aged out" not in out[0].text
+
+
+def test_session_event_returns_aged_out_message_after_prune(mcp):
+    """A real prune-path event surfaces the 'aged out' message."""
+    from context_engine.memory import db as memory_db
+    mcp._memory_conn.execute(
+        "INSERT INTO sessions (id, project, started_at_epoch, started_at) "
+        "VALUES ('sxp', 'demo', 1700000000, '2023-11-14T22:13:20')"
+    )
+    pid = mcp._memory_conn.execute(
+        "INSERT INTO tool_event_payloads (raw_input, raw_output, size_bytes) "
+        "VALUES (?, ?, ?)",
+        ('{"file":"x"}', "old output", 22),
+    ).lastrowid
+    cur = mcp._memory_conn.execute(
+        "INSERT INTO tool_events (session_id, prompt_number, tool_name, "
+        "payload_id, created_at_epoch, created_at) "
+        "VALUES ('sxp', 1, 'Read', ?, 1700000000, '2023-11-14T22:13:20')",
+        (pid,),
+    )
+    event_id = cur.lastrowid
+    mcp._memory_conn.commit()
+    # Day-zero retention forces the prune for any payload not freshly written.
+    memory_db.prune_old_payloads(mcp._memory_conn, days=0)
+
+    out = mcp._handle_session_event({"event_id": event_id})
     assert "aged out" in out[0].text
+    assert "no captured payload" not in out[0].text
 
 
 def test_session_event_invalid_id(mcp):

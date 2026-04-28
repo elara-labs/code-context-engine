@@ -34,6 +34,10 @@ dependencies = [
     "httpx>=0.27",
     "fastapi>=0.110",
     "uvicorn>=0.29",
+    # Memory-capture loopback HTTP server — `cce serve` won't start the
+    # capture path without it. Was originally optional; promoted to core
+    # because hooks are core to the memory feature.
+    "aiohttp>=3.9",
 ]
 
 [project.urls]
@@ -49,7 +53,7 @@ dev = [
     "pytest-cov>=5.0",
     "pytest-xdist>=3.5",
 ]
-http = ["aiohttp>=3.9"]
+http = []  # back-compat: aiohttp is now a core dependency
 
 [project.scripts]
 cce = "context_engine.cli:main"

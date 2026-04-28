@@ -407,32 +407,47 @@ def record_turn_summary_vec(conn, embedder, *, turn_id: int, summary: str) -> No
 
 
 def backfill_vec_tables(conn, embedder) -> dict[str, int]:
-    """Populate vec tables from existing rows when they're empty.
+    """Embed any source rows that don't yet have a vec entry.
 
-    Called once at MCP server startup after an embedder is available, so a
-    project that ran on v1 picks up semantic recall on the next launch.
-    Returns counts per surface for logging.
+    Idempotent and incremental — runs at MCP startup so:
+      - Projects upgrading from v1 get their full backlog embedded.
+      - Decisions imported by `cce sessions migrate` (which runs without
+        an embedder) pick up semantic recall on next `cce serve`.
+      - Sessions captured while the vec extension was unavailable get
+        retroactively indexed once it loads.
+
+    The previous "only run if the vec table is empty" guard meant a single
+    manually-recorded decision permanently disabled all future backfill,
+    so any subsequent migrated rows were invisible to semantic recall.
     """
     counts = {"decisions": 0, "turn_summaries": 0}
     if not has_vec_tables(conn):
         return counts
-    if conn.execute("SELECT 1 FROM decisions_vec LIMIT 1").fetchone() is None:
-        for row in conn.execute("SELECT id, decision, reason FROM decisions"):
-            record_decision_vec(
-                conn, embedder,
-                decision_id=row["id"],
-                decision=row["decision"] or "",
-                reason=row["reason"] or "",
-            )
-            counts["decisions"] += 1
-    if conn.execute("SELECT 1 FROM turn_summaries_vec LIMIT 1").fetchone() is None:
-        for row in conn.execute("SELECT id, summary FROM turn_summaries"):
-            record_turn_summary_vec(
-                conn, embedder,
-                turn_id=row["id"],
-                summary=row["summary"] or "",
-            )
-            counts["turn_summaries"] += 1
+    for row in conn.execute(
+        "SELECT d.id, d.decision, d.reason FROM decisions d "
+        "WHERE NOT EXISTS ("
+        "  SELECT 1 FROM decisions_vec v WHERE v.rowid = d.id"
+        ")"
+    ):
+        record_decision_vec(
+            conn, embedder,
+            decision_id=row["id"],
+            decision=row["decision"] or "",
+            reason=row["reason"] or "",
+        )
+        counts["decisions"] += 1
+    for row in conn.execute(
+        "SELECT t.id, t.summary FROM turn_summaries t "
+        "WHERE NOT EXISTS ("
+        "  SELECT 1 FROM turn_summaries_vec v WHERE v.rowid = t.id"
+        ")"
+    ):
+        record_turn_summary_vec(
+            conn, embedder,
+            turn_id=row["id"],
+            summary=row["summary"] or "",
+        )
+        counts["turn_summaries"] += 1
     if counts["decisions"] or counts["turn_summaries"]:
         conn.commit()
         log.info("vec backfill: decisions=%d turn_summaries=%d",
