@@ -65,6 +65,9 @@ class Config:
     indexer_debounce_ms: int = 500
     indexer_ignore: list[str] = field(default_factory=lambda: list(DEFAULT_IGNORE))
 
+    # Pricing (for savings estimates)
+    pricing_model: str = "opus"
+
     # Storage
     storage_path: str = str(_CCE_HOME / "projects")
 
@@ -103,6 +106,7 @@ _EXPECTED_TYPES: dict[str, type | tuple[type, ...]] = {
     "indexer_debounce_ms": int,
     "indexer_ignore": list,
     "storage_path": str,
+    "pricing_model": str,
 }
 
 
@@ -119,6 +123,7 @@ def _apply_dict_to_config(config: Config, data: dict) -> None:
         ("indexer", "debounce_ms"): "indexer_debounce_ms",
         ("indexer", "ignore"): "indexer_ignore",
         ("storage", "path"): "storage_path",
+        ("pricing", "model"): "pricing_model",
     }
     for (section, key), attr in mapping.items():
         if section in data and isinstance(data[section], dict) and key in data[section]:

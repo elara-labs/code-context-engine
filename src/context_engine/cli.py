@@ -1114,9 +1114,13 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             return None
 
     from context_engine.cli_style import header, label, value, dim, success, bold
+    from context_engine.pricing import get_model_pricing
 
-    # Opus 4 input pricing: $15 per 1M tokens
-    _COST_PER_TOKEN = 15 / 1_000_000
+    _all_pricing = get_model_pricing()
+    _pricing_model = config.pricing_model.lower()
+    _price_per_m = _all_pricing.get(_pricing_model, _all_pricing.get("opus", 5.0))
+    _COST_PER_TOKEN = _price_per_m / 1_000_000
+    _model_label = _pricing_model.capitalize()
     _GRID_COLS = 10
     _FILLED = "⛁"
     _EMPTY = "⛶"
@@ -1211,6 +1215,9 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
         )
         click.echo(
             f"        {dim('(searched instead of reading full files + compressed before serving)')}"
+        )
+        click.echo(
+            f"        {dim(f'Cost estimate based on {_model_label} input pricing (${_price_per_m:.0f}/1M tokens)')}"
         )
 
     def _json_entry(name: str, stats: dict) -> dict:
