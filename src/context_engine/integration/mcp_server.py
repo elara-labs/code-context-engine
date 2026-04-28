@@ -2,6 +2,7 @@
 import json
 import logging
 import re
+import sqlite3
 import threading
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from mcp.server import Server
 from mcp.types import Tool, TextContent
 
 from context_engine.compression.output_rules import (
+    ADVERTISED_PCT,
+    ESTIMATED_AVG_REPLY_TOKENS,
     get_output_rules,
     get_level_description,
     LEVELS,
@@ -26,6 +29,7 @@ from context_engine.memory import db as memory_db
 from context_engine.memory.extractive import extractive_summary
 from context_engine.memory.grammar import (
     compress as _grammar_compress,
+    compress_with_counts as _grammar_compress_counted,
     expand as _grammar_expand,
     DEFAULT_LEVEL as _GRAMMAR_LEVEL,
 )
@@ -410,6 +414,10 @@ class ContextEngineMCP:
     # ── state / stats persistence ───────────────────────────────────────────
 
     def _load_stats(self) -> dict:
+        empty_buckets = {
+            b: {"baseline": 0, "served": 0, "calls": 0}
+            for b in memory_db.BUCKETS
+        }
         if self._stats_path.exists():
             try:
                 data = json.loads(self._stats_path.read_text())
@@ -418,6 +426,17 @@ class ContextEngineMCP:
                 data.setdefault("raw_tokens", 0)
                 data.setdefault("served_tokens", 0)
                 data.setdefault("full_file_tokens", 0)
+                # v3: per-bucket breakdown. Merge so older files gain any
+                # newly-added buckets without losing existing totals.
+                buckets = data.get("buckets") or {}
+                for name, default in empty_buckets.items():
+                    b = buckets.get(name) or {}
+                    buckets[name] = {
+                        "baseline": int(b.get("baseline", 0)),
+                        "served": int(b.get("served", 0)),
+                        "calls": int(b.get("calls", 0)),
+                    }
+                data["buckets"] = buckets
                 return data
             except (json.JSONDecodeError, OSError):
                 pass
@@ -426,6 +445,7 @@ class ContextEngineMCP:
             "raw_tokens": 0,
             "served_tokens": 0,
             "full_file_tokens": 0,
+            "buckets": empty_buckets,
         }
 
     def _save_stats(self) -> None:
@@ -505,13 +525,59 @@ class ContextEngineMCP:
         ).start()
 
     def _record(self, raw_tokens: int, served_tokens: int, full_file_tokens: int = 0) -> None:
+        """Legacy retrieval-pipeline writer. Splits into two bucket events:
+        retrieval (full_file → raw) and chunk_compression (raw → served),
+        so per-bucket attribution matches what `cce savings` displays.
+        """
         self._stats["queries"] += 1
         self._stats["raw_tokens"] += raw_tokens
         self._stats["served_tokens"] += served_tokens
         self._stats.setdefault("full_file_tokens", 0)
         self._stats["full_file_tokens"] += full_file_tokens
-        self._save_stats()
+        if full_file_tokens > 0:
+            self._record_bucket("retrieval", full_file_tokens, raw_tokens)
+        if raw_tokens > 0:
+            self._record_bucket("chunk_compression", raw_tokens, served_tokens)
+        # Cover the no-bucket path (raw_tokens == 0) — _record_bucket would
+        # have saved otherwise.
+        if raw_tokens <= 0 and full_file_tokens <= 0:
+            self._save_stats()
         self._append_query_log()
+
+    def _record_bucket(
+        self,
+        bucket: str,
+        baseline: int,
+        served: int,
+        meta: dict | None = None,
+    ) -> None:
+        """Append one savings event to memory.db and the in-memory totals.
+
+        Best-effort — never raises so a misbehaving instrumentation point
+        can't break a tool response. Callers don't need to call _save_stats
+        unless they also want the legacy top-level fields refreshed.
+        """
+        baseline = max(0, int(baseline))
+        served = max(0, int(served))
+        b = self._stats.setdefault("buckets", {}).setdefault(
+            bucket, {"baseline": 0, "served": 0, "calls": 0},
+        )
+        b["baseline"] += baseline
+        b["served"] += served
+        b["calls"] += 1
+        if self._memory_conn is not None:
+            try:
+                memory_db.record_savings(
+                    self._memory_conn,
+                    bucket=bucket,
+                    baseline=baseline,
+                    served=served,
+                    meta=meta,
+                )
+            except Exception as exc:  # pragma: no cover — defensive
+                self._append_error_log(f"_record_bucket({bucket}) failed: {exc}")
+        # Persist the in-memory rollup. Cheap (~few hundred bytes JSON write).
+        self._save_stats()
 
     def get_tool_names(self) -> list[str]:
         return list(self.TOOL_NAMES)
@@ -778,6 +844,19 @@ class ContextEngineMCP:
             body += (
                 f"\n\n---\n[Respond using {self._output_level} output compression]"
             )
+            # output_compression bucket — estimate-only. We can't see Claude's
+            # actual reply, so per affected response we attribute one
+            # ESTIMATED_AVG_REPLY_TOKENS baseline reduced by the advertised
+            # rate for the active level. Renderer marks the bucket with an
+            # asterisk so users know it's an estimate.
+            pct = ADVERTISED_PCT.get(self._output_level, 0.0)
+            if pct > 0.0:
+                self._record_bucket(
+                    "output_compression",
+                    baseline=ESTIMATED_AVG_REPLY_TOKENS,
+                    served=int(ESTIMATED_AVG_REPLY_TOKENS * (1 - pct)),
+                    meta={"level": self._output_level},
+                )
         self._record(raw_tokens, served_tokens, full_file_tokens)
         return [TextContent(type="text", text=body)]
 
@@ -857,6 +936,16 @@ class ContextEngineMCP:
                 )
             ]
         body = self._format_recall(topic, matches)
+        # memory_recall savings: baseline = all matched entries dumped raw,
+        # served = TL;DR + top-20 bullets actually returned. Filtering and
+        # summarisation are the two compression mechanics in this path.
+        baseline = sum(_count_tokens(m) for m in matches)
+        served = _count_tokens(body)
+        if baseline > 0:
+            self._record_bucket(
+                "memory_recall", baseline=baseline, served=served,
+                meta={"matches": len(matches), "topic_len": len(topic)},
+            )
         return [TextContent(type="text", text=body)]
 
     def _format_recall(self, topic: str, matches: list[str]) -> str:
@@ -921,8 +1010,18 @@ class ContextEngineMCP:
             try:
                 import time as _time
                 epoch = int(_time.time())
-                stored_decision = _grammar_compress(decision, level=_GRAMMAR_LEVEL)
-                stored_reason = _grammar_compress(reason, level=_GRAMMAR_LEVEL)
+                stored_decision, dec_raw, dec_comp = _grammar_compress_counted(
+                    decision, level=_GRAMMAR_LEVEL,
+                )
+                stored_reason, rsn_raw, rsn_comp = _grammar_compress_counted(
+                    reason, level=_GRAMMAR_LEVEL,
+                )
+                # One bucket event for the combined decision+reason write.
+                self._record_bucket(
+                    "grammar",
+                    baseline=dec_raw + rsn_raw,
+                    served=dec_comp + rsn_comp,
+                )
                 cur = self._memory_conn.execute(
                     "INSERT INTO decisions (session_id, decision, reason, source, "
                     "created_at_epoch, created_at) "
@@ -1013,10 +1112,30 @@ class ContextEngineMCP:
             f"{_grammar_expand(r['summary'] or '')}"
             for r in rows
         )
-        return [TextContent(
-            type="text",
-            text="\n".join(header) + ("\n\n" + body if header else body),
-        )]
+        text = "\n".join(header) + ("\n\n" + body if header else body)
+        # progressive_disclosure: what we didn't deliver at this layer is the
+        # raw event payloads. Counterfactual baseline = sum of every payload
+        # in this session (what a "dump it all" tool would have returned);
+        # served = the timeline body the agent actually got.
+        try:
+            row = self._memory_conn.execute(
+                "SELECT COALESCE(SUM(p.size_bytes), 0) AS total "
+                "FROM tool_events te "
+                "LEFT JOIN tool_event_payloads p ON p.id = te.payload_id "
+                "WHERE te.session_id = ?",
+                (session_id,),
+            ).fetchone()
+            payload_bytes = int(row["total"] or 0)
+        except sqlite3.Error:
+            payload_bytes = 0
+        if payload_bytes > 0:
+            self._record_bucket(
+                "progressive_disclosure",
+                baseline=payload_bytes // _CHARS_PER_TOKEN,
+                served=_count_tokens(text),
+                meta={"layer": "timeline", "session_id": session_id},
+            )
+        return [TextContent(type="text", text=text)]
 
     def _handle_session_event(self, args):
         try:
@@ -1070,6 +1189,26 @@ class ContextEngineMCP:
             f"input:\n{raw_input}\n\n"
             f"output:\n{raw_output}"
         )
+        # progressive_disclosure: counterfactual = full session payload dump
+        # (every event's raw payload). Served = just this one event's body.
+        try:
+            sib = self._memory_conn.execute(
+                "SELECT COALESCE(SUM(p.size_bytes), 0) AS total "
+                "FROM tool_events te "
+                "LEFT JOIN tool_event_payloads p ON p.id = te.payload_id "
+                "WHERE te.session_id = ?",
+                (row["session_id"],),
+            ).fetchone()
+            session_bytes = int(sib["total"] or 0)
+        except sqlite3.Error:
+            session_bytes = 0
+        if session_bytes > 0:
+            self._record_bucket(
+                "progressive_disclosure",
+                baseline=session_bytes // _CHARS_PER_TOKEN,
+                served=_count_tokens(body),
+                meta={"layer": "event", "event_id": event_id},
+            )
         return [TextContent(type="text", text=body)]
 
     async def _handle_index_status(self):

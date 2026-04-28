@@ -21,8 +21,16 @@ from context_engine.memory import db as memory_db
 from context_engine.memory.extractive import extractive_summary, truncation_summary
 from context_engine.memory.grammar import (
     compress as _grammar_compress,
+    compress_with_counts as _grammar_compress_counted,
     DEFAULT_LEVEL as _GRAMMAR_LEVEL,
 )
+
+
+def _approx_tokens(text: str) -> int:
+    """Cheap heuristic — chars // 4. Matches mcp_server._count_tokens so
+    bucket totals across writers stay comparable.
+    """
+    return max(1, len(text) // 4) if text else 0
 
 log = logging.getLogger(__name__)
 
@@ -52,9 +60,24 @@ def compress_turn(
     after expand() on the read side).
     """
     text = _build_turn_text(conn, session_id=session_id, prompt_number=prompt_number)
+    raw_tokens = _approx_tokens(text)
     summary, tier = _summarise(text, embedder=embedder, top_k=_DEFAULT_TURN_TOP_K)
+    extractive_tokens = _approx_tokens(summary)
     if summary:
-        summary = _grammar_compress(summary, level=_GRAMMAR_LEVEL)
+        summary, gram_raw, gram_comp = _grammar_compress_counted(
+            summary, level=_GRAMMAR_LEVEL,
+        )
+        memory_db.record_savings(
+            conn, bucket="grammar", baseline=gram_raw, served=gram_comp,
+        )
+    # Turn-summarization savings: raw turn text (prompt + tool inputs/outputs)
+    # vs the extractive summary that ends up in turn_summaries.
+    if raw_tokens > 0 and extractive_tokens > 0:
+        memory_db.record_savings(
+            conn, bucket="turn_summarization",
+            baseline=raw_tokens, served=extractive_tokens,
+            meta={"kind": "turn", "tier": tier},
+        )
     epoch = int(time.time())
     cur = conn.execute(
         "INSERT OR REPLACE INTO turn_summaries "
@@ -87,16 +110,29 @@ def compress_session_rollup(
         (session_id,),
     ))
     text = "\n".join(r["summary"] for r in rows if r["summary"])
+    raw_tokens = _approx_tokens(text)
     if not text:
         rollup = ""
         tier = "empty"
     else:
         rollup, tier = _summarise(text, embedder=embedder, top_k=_DEFAULT_ROLLUP_TOP_K)
+        extractive_tokens = _approx_tokens(rollup)
         # Re-pass through grammar — turn summaries are already compressed,
         # so this is mostly idempotent, but extractive may concatenate
         # sentences with newlines that re-introduce articles via the join
         # mechanics. Cheap, makes the on-disk form consistent.
-        rollup = _grammar_compress(rollup, level=_GRAMMAR_LEVEL)
+        rollup, gram_raw, gram_comp = _grammar_compress_counted(
+            rollup, level=_GRAMMAR_LEVEL,
+        )
+        memory_db.record_savings(
+            conn, bucket="grammar", baseline=gram_raw, served=gram_comp,
+        )
+        if raw_tokens > 0 and extractive_tokens > 0:
+            memory_db.record_savings(
+                conn, bucket="turn_summarization",
+                baseline=raw_tokens, served=extractive_tokens,
+                meta={"kind": "session_rollup", "tier": tier},
+            )
     epoch = int(time.time())
     conn.execute(
         "UPDATE sessions SET rollup_summary = ?, rollup_summary_at_epoch = ? "

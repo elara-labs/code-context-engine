@@ -67,8 +67,11 @@ def test_savings_with_data(runner, stats_dir):
     # Retrieval = (5000-3000)/5000 = 40%; Compression = (3000-2000)/3000 = 33%.
     assert "40%" in result.output
     assert "33%" in result.output
-    assert "Retrieval" in result.output
-    assert "Compression" in result.output
+    # Bucket / fallback labels — case-insensitive so renderer styling can shift
+    # without churning the test.
+    lower = result.output.lower()
+    assert "retrieval" in lower
+    assert "compression" in lower
 
 
 def test_savings_json_output(runner, stats_dir):
