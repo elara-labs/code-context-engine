@@ -336,3 +336,29 @@ def test_compression_ratio_meaningful_for_compressed():
 
 def test_compression_ratio_handles_empty_input():
     assert compression_ratio("", "") == 0.0
+
+
+# ── ULTRA-only fillers (added in d319e23) ──────────────────────────────────
+
+
+@pytest.mark.parametrize("filler", [
+    "also", "still", "now", "when", "while", "since",
+    "we", "you", "they", "us", "them",
+    "let", "get", "got", "take", "took",
+    "truly", "absolutely", "completely", "totally", "entirely",
+])
+def test_ultra_drops_filler_that_full_keeps(filler):
+    """Each ULTRA-only filler must be dropped at ultra and preserved at
+    full. Without this parametrised test a regression that silently
+    removes a filler from `_FILLERS_ULTRA` would only show up via the
+    aggregate inequality assertion — which would still pass.
+    """
+    text = f"the test {filler} keeps working"
+    full_out = compress(text, level="full")
+    ultra_out = compress(text, level="ultra")
+    assert filler in full_out.split(), (
+        f"{filler!r} unexpectedly dropped at full level: {full_out!r}"
+    )
+    assert filler not in ultra_out.split(), (
+        f"{filler!r} should be dropped at ultra: {ultra_out!r}"
+    )

@@ -236,11 +236,14 @@ def _returned_indices(mcp, query: str) -> list[int]:
     expand(compress(...)) of each candidate — the same round-trip the
     real pipeline does — and look for that.
     """
-    from context_engine.memory.grammar import compress, expand
+    # Use the same compression level the source code applies on write —
+    # otherwise this canonical match is comparing against a different shape
+    # than what landed in memory.db.
+    from context_engine.memory.grammar import compress, expand, DEFAULT_LEVEL
 
     matches = mcp._search_sessions(query)
     canonical = [
-        expand(compress(f"{d} — {r}", level="lite"))
+        expand(compress(f"{d} — {r}", level=DEFAULT_LEVEL))
         for _, d, r in CORPUS
     ]
     indices: list[int] = []
@@ -303,10 +306,13 @@ def run_bench(args) -> dict:
     # CORPUS-seeded memory.db, so this measures end-to-end (extractive +
     # grammar combined when the row goes through compress_turn; for the
     # decisions table it's just grammar).
-    from context_engine.memory.grammar import compress as _g_compress
+    from context_engine.memory.grammar import (
+        compress as _g_compress,
+        DEFAULT_LEVEL as _G_LEVEL,
+    )
     original_bytes = sum(len(d) + len(r) for _, d, r in CORPUS)
     compressed_bytes = sum(
-        len(_g_compress(d, level="lite")) + len(_g_compress(r, level="lite"))
+        len(_g_compress(d, level=_G_LEVEL)) + len(_g_compress(r, level=_G_LEVEL))
         for _, d, r in CORPUS
     )
 

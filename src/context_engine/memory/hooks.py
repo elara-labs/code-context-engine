@@ -95,9 +95,14 @@ def build_session_resume(conn: sqlite3.Connection, project: str) -> str:
         parts.append("**Recent decisions** (most-recent first):")
         for d in decisions:
             decision = _grammar_expand((d["decision"] or "").strip())
-            reason = _grammar_expand((d["reason"] or "").strip())
-            if reason and len(reason) > _RESUME_DECISION_REASON_CHARS:
-                reason = reason[:_RESUME_DECISION_REASON_CHARS] + "…"
+            # Truncate before expand so the cap operates on stored bytes,
+            # not on post-expand bytes — otherwise two reasons that stored
+            # equal length display unequal length depending on how many
+            # abbreviations expand.
+            stored_reason = (d["reason"] or "").strip()
+            if len(stored_reason) > _RESUME_DECISION_REASON_CHARS:
+                stored_reason = stored_reason[:_RESUME_DECISION_REASON_CHARS] + "…"
+            reason = _grammar_expand(stored_reason)
             tag = ""
             if d["source"] != "manual":
                 tag = f" _[{d['source']}]_"

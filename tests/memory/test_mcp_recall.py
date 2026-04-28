@@ -255,6 +255,28 @@ def test_rrf_dedupes_by_stripped_text():
     assert "use jwt — stateless" in out[0]
 
 
+def test_rrf_dedupes_across_compression_boundary():
+    """The audit case: same decision stored compressed in memory.db and
+    raw in JSON history must collapse to ONE entry. This was a real
+    production bug live-confirmed before this fix — the same decision
+    surfaced twice in `session_recall` output because `_content_key`
+    didn't normalise the article-drop difference between compressed and
+    raw forms.
+    """
+    from context_engine.integration.mcp_server import _rrf_merge
+    out = _rrf_merge(
+        # memory.db form: compressed (article dropped)
+        ["[decision src=manual|sid:abc] Adopt JWT — Mesh issues these keys"],
+        # JSON history form: raw (article intact)
+        ["[decision] Adopt the JWT — Mesh issues these keys"],
+        top=10,
+    )
+    assert len(out) == 1, (
+        f"compressed + raw forms of the same decision should collapse to "
+        f"one RRF entry, got {len(out)}: {out!r}"
+    )
+
+
 def test_humanise_relative_time():
     import time as _time
     from context_engine.integration.mcp_server import _humanise_relative_time
