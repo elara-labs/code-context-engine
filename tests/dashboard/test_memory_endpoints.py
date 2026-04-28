@@ -162,3 +162,52 @@ def test_memory_decisions_handles_special_chars(client):
     rows = resp.json()
     assert len(rows) == 1
     assert "bge-small" in rows[0]["decision"]
+
+
+def test_memory_decisions_endpoint_expands_compressed_storage(client):
+    """The dashboard reads stored bytes that went through grammar.compress.
+    Render must expand abbreviations so users see "because" not "b/c"."""
+    c, storage = client
+    db_path = memory_db.memory_db_path(storage)
+    conn = memory_db.connect(db_path)
+    conn.execute(
+        "INSERT INTO decisions (decision, reason, source, "
+        "created_at_epoch, created_at) VALUES "
+        "('Use prod config b/c env drift', 'Avoids dev/prod mismatch', "
+        "'manual', 1700000000, '2023-11-14T22:13:20')"
+    )
+    conn.commit()
+    conn.close()
+
+    rows = c.get("/api/memory/decisions").json()
+    target = next((r for r in rows if "prod" in r["decision"]), None)
+    assert target is not None, rows
+    # b/c → because, prod → production
+    assert "because" in target["decision"]
+    assert "production" in target["decision"]
+
+
+def test_memory_session_timeline_expands_summary_and_rollup(client):
+    """rollup_summary and per-turn summary are both stored compressed;
+    timeline endpoint must run them through expand."""
+    c, storage = client
+    db_path = memory_db.memory_db_path(storage)
+    conn = memory_db.connect(db_path)
+    conn.execute(
+        "INSERT INTO sessions (id, project, started_at_epoch, started_at, "
+        "status, prompt_count, rollup_summary, rollup_summary_at_epoch) "
+        "VALUES ('s-comp', 'demo', 1700000000, '2023-11-14T22:13:20', "
+        "'completed', 1, 'Picked auth flow b/c mesh keys', 1700000300)"
+    )
+    conn.execute(
+        "INSERT INTO turn_summaries (session_id, prompt_number, summary, "
+        "tier, created_at_epoch) VALUES ('s-comp', 1, "
+        "'Discussed perf w/ team', 'extractive', 1700000200)"
+    )
+    conn.commit()
+    conn.close()
+
+    body = c.get("/api/memory/sessions/s-comp/timeline").json()
+    assert "because" in body["session"]["rollup_summary"]
+    assert "performance" in body["turns"][0]["summary"]
+    assert "with" in body["turns"][0]["summary"]

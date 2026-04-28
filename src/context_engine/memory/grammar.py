@@ -35,6 +35,13 @@ from typing import Literal
 
 Level = Literal["lite", "full", "ultra"]
 
+# Single source of truth for the compression level applied to memory.db
+# storage. Imported by mcp_server (record_decision), compressor (turn +
+# rollup), migrate (legacy import), and the bench (canonical-form match).
+# All five paths must agree, otherwise the bench gives misleading numbers
+# and the same decision can land in storage at different shapes.
+DEFAULT_LEVEL: Level = "lite"
+
 
 # ── Token classes ──────────────────────────────────────────────────────────
 # Any string fragment that matches a structured-token pattern is preserved

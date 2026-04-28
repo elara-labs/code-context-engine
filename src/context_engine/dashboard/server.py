@@ -203,7 +203,13 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
 
     @app.get("/api/memory/sessions")
     async def memory_sessions_list(limit: int = 50) -> list:
-        """Sessions list: most-recent first. Limited to `limit` rows."""
+        """Sessions list: most-recent first. Limited to `limit` rows.
+
+        Stored `rollup_summary` was passed through grammar.compress on write;
+        we expand here so the dashboard renders natural prose, not the
+        article-stripped storage form.
+        """
+        from context_engine.memory.grammar import expand as _grammar_expand
         conn = _open_memory_conn()
         if conn is None:
             return []
@@ -216,11 +222,18 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
             ))
         finally:
             conn.close()
-        return [dict(r) for r in rows]
+        out = []
+        for r in rows:
+            d = dict(r)
+            if d.get("rollup_summary"):
+                d["rollup_summary"] = _grammar_expand(d["rollup_summary"])
+            out.append(d)
+        return out
 
     @app.get("/api/memory/sessions/{session_id}/timeline")
     async def memory_session_timeline(session_id: str) -> dict:
         """A single session's turn summaries plus header metadata."""
+        from context_engine.memory.grammar import expand as _grammar_expand
         conn = _open_memory_conn()
         if conn is None:
             return {"session": None, "turns": []}
@@ -240,10 +253,16 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
             ))
         finally:
             conn.close()
-        return {
-            "session": dict(session_row),
-            "turns": [dict(r) for r in turn_rows],
-        }
+        session_d = dict(session_row)
+        if session_d.get("rollup_summary"):
+            session_d["rollup_summary"] = _grammar_expand(session_d["rollup_summary"])
+        turns = []
+        for r in turn_rows:
+            d = dict(r)
+            if d.get("summary"):
+                d["summary"] = _grammar_expand(d["summary"])
+            turns.append(d)
+        return {"session": session_d, "turns": turns}
 
     @app.get("/api/memory/decisions")
     async def memory_decisions_search(
@@ -289,7 +308,17 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
                 ))
         finally:
             conn.close()
-        return [dict(r) for r in rows]
+        # Stored decision/reason are compressed; expand for display.
+        from context_engine.memory.grammar import expand as _grammar_expand
+        out = []
+        for r in rows:
+            d = dict(r)
+            if d.get("decision"):
+                d["decision"] = _grammar_expand(d["decision"])
+            if d.get("reason"):
+                d["reason"] = _grammar_expand(d["reason"])
+            out.append(d)
+        return out
 
     @app.get("/api/savings")
     async def get_savings() -> dict:

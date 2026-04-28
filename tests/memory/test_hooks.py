@@ -56,6 +56,40 @@ async def test_session_start_idempotent(hook_app, aiohttp_client):
     assert n == 1
 
 
+async def test_session_start_resume_expands_compressed_text(hook_app, aiohttp_client):
+    """Stored decisions / rollups went through grammar.compress on write.
+    The resume body must run them through expand() so the agent sees natural
+    prose ("because") rather than the storage form ("b/c"). This guards
+    against a regression where someone removes the expand call."""
+    app, conn = hook_app
+    conn.execute(
+        "INSERT INTO sessions (id, project, started_at_epoch, started_at, "
+        "ended_at_epoch, ended_at, status, rollup_summary, "
+        "rollup_summary_at_epoch) VALUES "
+        "('compr', 'demo', 1700000000, '2023-11-14T22:13:20', "
+        "1700003600, '2023-11-14T23:13:20', 'completed', "
+        "'Picked auth via JWT b/c mesh issues keys', 1700003600)"
+    )
+    conn.execute(
+        "INSERT INTO decisions (decision, reason, source, "
+        "created_at_epoch, created_at) VALUES "
+        "('Use prod config for tests', 'Avoids dev/prod drift', 'manual', "
+        "1700001000, '2023-11-14T22:30:00')"
+    )
+    conn.commit()
+
+    client = await aiohttp_client(app)
+    resp = await client.post(
+        "/hooks/SessionStart",
+        json={"session_id": "newcompr", "project": "demo"},
+    )
+    text = await resp.text()
+    # b/c → because (rollup), prod → production (decision)
+    assert "because" in text, f"expand() not applied: {text!r}"
+    assert "production" in text, f"expand() not applied to decision: {text!r}"
+    assert "b/c" not in text
+
+
 async def test_session_start_resume_with_only_decisions(hook_app, aiohttp_client):
     """Common week-1 state: decisions exist but no session has rollup yet.
     The resume must still surface the decisions section."""

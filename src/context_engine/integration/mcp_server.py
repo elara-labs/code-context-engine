@@ -24,7 +24,11 @@ from context_engine.integration.git_context import (
 from context_engine.integration.session_capture import SessionCapture
 from context_engine.memory import db as memory_db
 from context_engine.memory.extractive import extractive_summary
-from context_engine.memory.grammar import compress as _grammar_compress, expand as _grammar_expand
+from context_engine.memory.grammar import (
+    compress as _grammar_compress,
+    expand as _grammar_expand,
+    DEFAULT_LEVEL as _GRAMMAR_LEVEL,
+)
 
 log = logging.getLogger(__name__)
 
@@ -116,14 +120,21 @@ def _strip_tag(text: str) -> str:
 
 
 def _content_key(text: str) -> str:
-    """Stable dedup key for a recall match. Strips both the [tag] prefix and
-    the " · 5m ago · → session_timeline(...)" affordance suffix so the same
-    decision rendered through different code paths (memory.db with hints,
-    JSON history without) collapses to one entry under RRF.
+    """Stable dedup key for a recall match.
+
+    Strips:
+      1. The `[tag]` prefix the formatter adds.
+      2. The " · 5m ago · → session_timeline(...)" affordance suffix.
+      3. Articles (via grammar.compress at lite level), so the SAME decision
+         stored compressed in memory.db and stored raw in JSON history
+         collapses to one canonical key. Without (3), `_handle_record_decision`
+         dual-writes produce two recall hits in the dual-write window — one
+         from memory.db ("Adopt JWT") and one from JSON ("Adopt the JWT") —
+         that look distinct to RRF but are the same decision.
     """
     body = _TAG_PREFIX_RE.sub("", text)
     body = _AFFORDANCE_TAIL_RE.sub("", body)
-    return body.strip()
+    return _grammar_compress(body.strip(), level="lite")
 
 
 def _humanise_relative_time(epoch: int | None) -> str:
@@ -910,8 +921,8 @@ class ContextEngineMCP:
             try:
                 import time as _time
                 epoch = int(_time.time())
-                stored_decision = _grammar_compress(decision, level="lite")
-                stored_reason = _grammar_compress(reason, level="lite")
+                stored_decision = _grammar_compress(decision, level=_GRAMMAR_LEVEL)
+                stored_reason = _grammar_compress(reason, level=_GRAMMAR_LEVEL)
                 cur = self._memory_conn.execute(
                     "INSERT INTO decisions (session_id, decision, reason, source, "
                     "created_at_epoch, created_at) "

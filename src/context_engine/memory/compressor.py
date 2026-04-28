@@ -19,7 +19,10 @@ import time
 
 from context_engine.memory import db as memory_db
 from context_engine.memory.extractive import extractive_summary, truncation_summary
-from context_engine.memory.grammar import compress as _grammar_compress
+from context_engine.memory.grammar import (
+    compress as _grammar_compress,
+    DEFAULT_LEVEL as _GRAMMAR_LEVEL,
+)
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +54,7 @@ def compress_turn(
     text = _build_turn_text(conn, session_id=session_id, prompt_number=prompt_number)
     summary, tier = _summarise(text, embedder=embedder, top_k=_DEFAULT_TURN_TOP_K)
     if summary:
-        summary = _grammar_compress(summary, level="lite")
+        summary = _grammar_compress(summary, level=_GRAMMAR_LEVEL)
     epoch = int(time.time())
     cur = conn.execute(
         "INSERT OR REPLACE INTO turn_summaries "
@@ -93,7 +96,7 @@ def compress_session_rollup(
         # so this is mostly idempotent, but extractive may concatenate
         # sentences with newlines that re-introduce articles via the join
         # mechanics. Cheap, makes the on-disk form consistent.
-        rollup = _grammar_compress(rollup, level="lite")
+        rollup = _grammar_compress(rollup, level=_GRAMMAR_LEVEL)
     epoch = int(time.time())
     conn.execute(
         "UPDATE sessions SET rollup_summary = ?, rollup_summary_at_epoch = ? "

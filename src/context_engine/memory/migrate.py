@@ -176,19 +176,43 @@ def _insert_decision(conn, *, session_id, decision, reason, timestamp):
     # their original ordering instead of being stamped to "now".
     epoch = int(timestamp) if timestamp is not None else int(time.time())
     iso = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(epoch))
+    # Mirror the live record_decision write path: pass through grammar.compress
+    # at the project default level so migrated rows land in storage at the
+    # same shape as freshly recorded ones. Without this the FTS5 index sits
+    # over a heterogeneous corpus (compressed-with-articles-dropped + raw),
+    # and `_content_key` dedup would fail across the same boundary.
+    from context_engine.memory.grammar import (
+        compress as _grammar_compress, DEFAULT_LEVEL as _GRAMMAR_LEVEL,
+    )
     conn.execute(
         "INSERT INTO decisions (session_id, decision, reason, source, "
         "created_at_epoch, created_at) VALUES (?, ?, ?, 'migrated', ?, ?)",
-        (session_id, decision, reason, epoch, iso),
+        (
+            session_id,
+            _grammar_compress(decision or "", level=_GRAMMAR_LEVEL),
+            _grammar_compress(reason or "", level=_GRAMMAR_LEVEL),
+            epoch,
+            iso,
+        ),
     )
 
 
 def _insert_code_area(conn, *, session_id, file_path, description, timestamp):
     epoch = int(timestamp) if timestamp is not None else int(time.time())
+    # description is prose; file_path is a structured token preserved by
+    # grammar.compress's tokeniser. Compressing both is safe + symmetric.
+    from context_engine.memory.grammar import (
+        compress as _grammar_compress, DEFAULT_LEVEL as _GRAMMAR_LEVEL,
+    )
     conn.execute(
         "INSERT INTO code_areas (session_id, file_path, description, source, "
         "created_at_epoch) VALUES (?, ?, ?, 'migrated', ?)",
-        (session_id, file_path, description, epoch),
+        (
+            session_id,
+            file_path,  # path is a structured token; no point compressing
+            _grammar_compress(description or "", level=_GRAMMAR_LEVEL),
+            epoch,
+        ),
     )
 
 
