@@ -2173,10 +2173,27 @@ async def _run_index(
             _render_bar(current, total, "chunks embedded")
             _showed_embed_progress = True
 
+    def phase_fn(msg: str) -> None:
+        """Print a status line between indexing phases.
+
+        Closes any in-place progress bar (chunking or embedding) on its own
+        line first, so subsequent phase messages don't overwrite or mash
+        into the bar. Complementary to embed_progress_fn — phase_fn is
+        per-phase ("starting embedding"), embed_progress_fn is per-batch
+        ("embedded 1024/32000 chunks"). Both keep large-repo indexing from
+        looking like a hang.
+        """
+        nonlocal _showed_progress, _showed_embed_progress
+        if _showed_progress or _showed_embed_progress:
+            click.echo()  # finalise the in-place bar line
+            _showed_progress = False
+            _showed_embed_progress = False
+        click.echo(f"    {_dim(msg)}")
+
     result = await run_indexing(
         config, project_dir, full=full, target_path=target_path,
         log_fn=log_fn, progress_fn=progress_fn,
-        embed_progress_fn=embed_progress_fn,
+        embed_progress_fn=embed_progress_fn, phase_fn=phase_fn,
     )
 
     if _showed_progress or _showed_embed_progress:

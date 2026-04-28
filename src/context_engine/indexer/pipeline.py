@@ -241,6 +241,7 @@ async def run_indexing(
     log_fn=None,
     progress_fn=None,
     embed_progress_fn=None,
+    phase_fn=None,
 ) -> IndexResult:
     """Run the indexing pipeline. Returns a structured `IndexResult`.
 
@@ -250,6 +251,12 @@ async def run_indexing(
     `progress_fn(current, total)` is called after each batch with file counts.
     `embed_progress_fn(current, total)` is called as embedding proceeds with
     chunk counts (only for cache misses; cache hits return instantly).
+    `phase_fn(msg)` (if provided) is called between major phases —
+    "Embedding 32k chunks…", "Writing to index…" — so non-verbose callers
+    can announce *what* is starting; embed_progress_fn then drives motion
+    *within* the embed phase. Both serve the same goal (don't look hung
+    on large repos) and are complementary: phase_fn is per-phase, embed_
+    progress_fn is per-batch.
     """
     project_dir = Path(project_dir)
     project_name = project_dir.name
@@ -266,6 +273,7 @@ async def run_indexing(
             log_fn=log_fn,
             progress_fn=progress_fn,
             embed_progress_fn=embed_progress_fn,
+            phase_fn=phase_fn,
         )
 
 
@@ -279,6 +287,7 @@ async def _run_indexing_locked(
     log_fn,
     progress_fn=None,
     embed_progress_fn=None,
+    phase_fn=None,
 ) -> IndexResult:
     backend = LocalBackend(base_path=str(storage_base))
     chunker = Chunker()
@@ -460,6 +469,11 @@ async def _run_indexing_locked(
         )
         try:
             embedder = Embedder(model_name=config.embedding_model, cache=cache)
+            if phase_fn:
+                phase_fn(
+                    f"Embedding {len(all_chunks):,} chunks "
+                    f"(CPU-bound, can take several minutes on large repos)…"
+                )
             try:
                 embedder.embed(all_chunks, progress_fn=embed_progress_fn)
             except Exception as exc:
@@ -502,6 +516,8 @@ async def _run_indexing_locked(
                 log.warning(msg, exc_info=exc)
                 return result
 
+        if phase_fn:
+            phase_fn(f"Writing {len(all_chunks):,} chunks to vector + FTS + graph index…")
         try:
             await backend.ingest(all_chunks, all_nodes, all_edges)
         except Exception as exc:
