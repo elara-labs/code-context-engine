@@ -108,9 +108,22 @@ _VEC_RECALL_K = 30
 # Display cap for session_recall body. Empirically the RRF score drops
 # sharply after rank ~5 across decisions/turns/code-areas, so showing 20
 # matches dilutes the response with low-signal entries that aren't worth
-# the tokens. Tuned conservatively; can be raised via experiment if recall
-# regression bench shows the lift comes from ranks 7-20.
-_RECALL_DISPLAY_CAP = 7
+# the tokens.
+#
+# Tunable via CCE_RECALL_DISPLAY_CAP (positive integer). Power users with
+# a mature decisions corpus may want to raise this if the rank 7-20 tail
+# carries useful matches in their workflow — the previous default was 20.
+# Invalid values fall back to the default so a typo can't break recall.
+def _recall_display_cap() -> int:
+    import os
+    raw = os.environ.get("CCE_RECALL_DISPLAY_CAP")
+    if raw is None:
+        return 7
+    try:
+        n = int(raw)
+        return n if n > 0 else 7
+    except ValueError:
+        return 7
 # Read-time cap on session_event payloads. Inputs already have a 4 KB write
 # cap (compressor._TOOL_INPUT_CHAR_CAP) but outputs are stored uncapped, so a
 # 50 KB Bash stdout would re-feed ~12 k tokens on every fetch without this.
@@ -980,7 +993,7 @@ class ContextEngineMCP:
         thread for a 10-match input. Header is suppressed when there are too
         few matches to summarise meaningfully.
         """
-        head_matches = matches[:_RECALL_DISPLAY_CAP]
+        head_matches = matches[:_recall_display_cap()]
         tldr_lines: list[str] = []
         if len(head_matches) >= 3:
             # Embed each match's clean content (no [tag] prefix, no affordance

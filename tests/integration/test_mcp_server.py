@@ -53,6 +53,34 @@ def test_apply_output_compression_noop_when_off(tmp_path):
     assert server._stats["buckets"]["output_compression"]["calls"] == 0
 
 
+def test_recall_display_cap_default():
+    """Without the env var, cap defaults to 7."""
+    import os
+    from context_engine.integration.mcp_server import _recall_display_cap
+    os.environ.pop("CCE_RECALL_DISPLAY_CAP", None)
+    assert _recall_display_cap() == 7
+
+
+def test_recall_display_cap_env_override(monkeypatch):
+    """CCE_RECALL_DISPLAY_CAP raises (or lowers) the cap for power users."""
+    from context_engine.integration.mcp_server import _recall_display_cap
+    monkeypatch.setenv("CCE_RECALL_DISPLAY_CAP", "20")
+    assert _recall_display_cap() == 20
+    monkeypatch.setenv("CCE_RECALL_DISPLAY_CAP", "3")
+    assert _recall_display_cap() == 3
+
+
+def test_recall_display_cap_invalid_falls_back(monkeypatch):
+    """Garbage values are ignored — never break recall on a typo."""
+    from context_engine.integration.mcp_server import _recall_display_cap
+    monkeypatch.setenv("CCE_RECALL_DISPLAY_CAP", "not-a-number")
+    assert _recall_display_cap() == 7
+    monkeypatch.setenv("CCE_RECALL_DISPLAY_CAP", "0")
+    assert _recall_display_cap() == 7
+    monkeypatch.setenv("CCE_RECALL_DISPLAY_CAP", "-5")
+    assert _recall_display_cap() == 7
+
+
 @pytest.mark.asyncio
 async def test_index_status_no_queries(tmp_path):
     server = _make_server(tmp_path)
