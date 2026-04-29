@@ -4,20 +4,29 @@ import hashlib
 import tree_sitter_python as tspython
 import tree_sitter_javascript as tsjavascript
 import tree_sitter_typescript as tstypescript
+import tree_sitter_php as tsphp
+import tree_sitter_go as tsgo
+import tree_sitter_rust as tsrust
+import tree_sitter_java as tsjava
 from tree_sitter import Language, Parser
 
 from context_engine.models import Chunk, ChunkType
 
 _FUNCTION_TYPES = {
-    "function_definition", "function_declaration", "method_definition", "arrow_function",
+    "function_definition", "function_declaration",  # Python, PHP, JS
+    "method_definition", "method_declaration",       # JS/TS, PHP/Go/Java
+    "arrow_function",                                # JS/TS
+    "function_item",                                 # Rust
 }
 _CLASS_TYPES = {
-    "class_definition", "class_declaration",
+    "class_definition", "class_declaration",  # Python, JS/TS, PHP, Java
+    "type_declaration",                        # Go (struct/interface)
+    "struct_item", "impl_item", "enum_item",   # Rust
 }
 _IMPORT_TYPES = {
     "import_statement", "import_from_statement",  # Python
-    "import_declaration",  # TypeScript (tree-sitter-typescript)
-    # Note: JavaScript tree-sitter also uses "import_statement"
+    "import_declaration",                          # TypeScript, Go, Java
+    "use_declaration",                             # PHP, Rust
 }
 
 _LANGUAGES = {
@@ -25,6 +34,10 @@ _LANGUAGES = {
     "javascript": Language(tsjavascript.language()),
     "typescript": Language(tstypescript.language_typescript()),
     "tsx": Language(tstypescript.language_tsx()),
+    "php": Language(tsphp.language_php()),
+    "go": Language(tsgo.language()),
+    "rust": Language(tsrust.language()),
+    "java": Language(tsjava.language()),
 }
 
 

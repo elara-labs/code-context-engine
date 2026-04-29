@@ -247,9 +247,19 @@ No GPU required. Embedding model runs on CPU via ONNX Runtime.
 
 ## Supported Languages
 
-**AST-aware chunking:** Python, JavaScript, TypeScript (`.py`, `.js`, `.jsx`, `.ts`, `.tsx`)
+**AST-aware chunking (10 extensions):**
 
-**Fallback chunking:** All other text files (Markdown, YAML, PHP, config, etc.) chunked by line range.
+| Language | Extensions |
+|----------|-----------|
+| Python | `.py` |
+| JavaScript | `.js`, `.jsx` |
+| TypeScript | `.ts`, `.tsx` |
+| PHP | `.php` |
+| Go | `.go` |
+| Rust | `.rs` |
+| Java | `.java` |
+
+**Fallback chunking:** All other text files (Markdown, YAML, config, etc.) chunked by line range.
 
 ---
 
@@ -278,8 +288,9 @@ No GPU required. Embedding model runs on CPU via ONNX Runtime.
 - [x] Dynamic pricing from Anthropic docs
 - [x] 7-layer security (secrets, PII, path traversal, audit log)
 - [x] Clean uninstall (removes all CCE artifacts)
+- [x] AST-aware chunking for PHP, Go, Rust, Java (tree-sitter)
 - [ ] Multi-agent support (Cursor, Copilot, Gemini CLI)
-- [ ] Tree-sitter support for Go, Rust, Java, C, C++
+- [ ] Tree-sitter support for C, C++, Ruby, Swift, Kotlin
 - [ ] Docker support for remote mode
 
 ---
