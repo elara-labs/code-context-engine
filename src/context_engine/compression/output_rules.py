@@ -2,6 +2,24 @@
 
 LEVELS = ("off", "lite", "standard", "max")
 
+# Estimated baseline reply size (tokens) when no compression is active.
+# Used to estimate output_compression savings: the MCP server can't see
+# Claude's actual reply length, so we assume an average per affected
+# response and apply the advertised reduction. Tunable — the renderer
+# footnotes the value so users can interpret the estimate.
+ESTIMATED_AVG_REPLY_TOKENS = 500
+
+# Advertised output-token reduction per level. Sourced from the level
+# descriptions ("~65% savings", "~75% savings"). `lite` has no advertised
+# number; we use a conservative 20% based on how much filler/hedging
+# typically lives in default-mode replies.
+ADVERTISED_PCT = {
+    "off": 0.0,
+    "lite": 0.20,
+    "standard": 0.65,
+    "max": 0.75,
+}
+
 _RULES = {
     "lite": (
         "## Output Compression: Lite\n"

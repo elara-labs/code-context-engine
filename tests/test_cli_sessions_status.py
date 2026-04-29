@@ -59,7 +59,7 @@ def test_status_reports_db_size_and_schema(runner, tmp_path):
     assert result.exit_code == 0, result.output
     out = result.output
     assert "schema:" in out
-    assert "v2" in out
+    assert f"v{memory_db.CURRENT_VERSION}" in out
     assert "completed=1" in out
     assert "manual=1" in out
     assert "queue:" in out

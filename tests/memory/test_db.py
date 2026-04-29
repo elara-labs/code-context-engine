@@ -128,7 +128,7 @@ def test_v2_creates_vec_tables(tmp_path: Path):
     db_path = tmp_path / "memory.db"
     conn = memory_db.connect(db_path)
     try:
-        assert memory_db.schema_version(conn) == 2
+        assert memory_db.schema_version(conn) == memory_db.CURRENT_VERSION
         assert memory_db.has_vec_tables(conn)
     finally:
         conn.close()
@@ -448,11 +448,13 @@ def test_v1_to_v2_upgrade_in_place(tmp_path: Path):
     """A db stamped at v1 (no vec tables) gains them on the next connect()."""
     import sqlite3
     db_path = tmp_path / "memory.db"
-    # Bootstrap a real db at v2 first, then forge it back to v1.
+    # Bootstrap a real db at the current version, then forge it back to v1
+    # by dropping every later-version table and version stamp.
     conn = memory_db.connect(db_path)
     conn.execute("DROP TABLE decisions_vec")
     conn.execute("DROP TABLE turn_summaries_vec")
-    conn.execute("DELETE FROM schema_versions WHERE version = 2")
+    conn.execute("DROP TABLE IF EXISTS savings_log")
+    conn.execute("DELETE FROM schema_versions WHERE version > 1")
     conn.execute(
         "INSERT INTO schema_versions (version, applied_at_epoch) "
         "VALUES (1, strftime('%s','now'))"
@@ -467,10 +469,10 @@ def test_v1_to_v2_upgrade_in_place(tmp_path: Path):
     ).fetchone()["v"] == 1
     raw.close()
 
-    # Reopening should run the v1 → v2 migration.
+    # Reopening should run the v1 → CURRENT_VERSION migration.
     conn = memory_db.connect(db_path)
     try:
-        assert memory_db.schema_version(conn) == 2
+        assert memory_db.schema_version(conn) == memory_db.CURRENT_VERSION
         assert memory_db.has_vec_tables(conn)
     finally:
         conn.close()

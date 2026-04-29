@@ -1,26 +1,29 @@
 """Per-project memory.db bootstrap and connection helper.
 
-Schema version 2 — see docs/specs/2026-04-28-memory-claude-mem-parity-design.md.
+Schema version 3 — see docs/specs/2026-04-28-memory-claude-mem-parity-design.md.
 
 v1: core memory tables + FTS5 virtual tables for lexical recall.
 v2: adds sqlite-vec `vec0` virtual tables for semantic recall on
     decisions and turn_summaries (the two surfaces session_recall reads).
+v3: adds `savings_log` — append-only ledger of token savings per bucket
+    (retrieval, chunk_compression, output_compression, memory_recall,
+    grammar, turn_summarization, progressive_disclosure). Feeds the
+    `cce savings` per-bucket breakdown.
 
 Idempotent: opening an existing db is a no-op; opening an empty file creates
-the schema and stamps version=2. Existing v1 dbs are upgraded in place by
-adding the empty vec tables; `backfill_vec_tables(conn, embedder)` populates
-them lazily once an embedder is available.
+the schema and stamps version=3. Older dbs are upgraded in place additively.
 """
 from __future__ import annotations
 
 import logging
 import sqlite3
 import struct
+import time
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-CURRENT_VERSION = 2
+CURRENT_VERSION = 3
 
 # bge-small-en-v1.5 — the default embedder used everywhere else in cce.
 # If the project's embedder swaps to a different model, vec tables are
@@ -206,6 +209,26 @@ _SCHEMA_V1 = [
 ]
 
 
+_SCHEMA_V3 = [
+    # Append-only savings ledger. Each row is one accounting event from a
+    # bucket (retrieval, grammar, memory_recall, etc.) with baseline (what
+    # would have been spent without CCE) and served (what was actually
+    # spent). `meta` carries bucket-specific context as JSON — e.g.
+    # {"level": "max"} for output_compression.
+    """
+    CREATE TABLE IF NOT EXISTS savings_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bucket TEXT NOT NULL,
+      baseline INTEGER NOT NULL,
+      served INTEGER NOT NULL,
+      meta TEXT,
+      ts INTEGER NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_savings_bucket_ts ON savings_log(bucket, ts)",
+]
+
+
 def _vec_table_stmts(dim: int) -> list[str]:
     """vec0 virtual tables for the two surfaces session_recall actually reads.
 
@@ -299,6 +322,8 @@ def _ensure_schema(conn: sqlite3.Connection, *, has_vec: bool) -> None:
                     cur.execute(stmt)
                 for stmt in _vec_trigger_stmts():
                     cur.execute(stmt)
+            for stmt in _SCHEMA_V3:
+                cur.execute(stmt)
             cur.execute(
                 "INSERT INTO schema_versions (version, applied_at_epoch) "
                 "VALUES (?, strftime('%s','now'))",
@@ -310,18 +335,29 @@ def _ensure_schema(conn: sqlite3.Connection, *, has_vec: bool) -> None:
             raise
         return
 
-    # Existing db — upgrade v1 → v2 by adding the vec tables and their
-    # cleanup triggers. Backfill is deferred: callers with an embedder
-    # should run `backfill_vec_tables`.
+    # Existing db — apply additive upgrades up to CURRENT_VERSION.
+    # v1 → v2: add vec tables + cleanup triggers (needs sqlite-vec).
+    # v2 → v3: add savings_log (no extension dependency).
+    # If sqlite-vec is unavailable we can still apply v3, but we don't
+    # stamp the version row so a future connection with vec loaded will
+    # complete the v1 → v2 step.
     current = schema_version(conn)
-    if current >= CURRENT_VERSION or not has_vec:
+    if current >= CURRENT_VERSION:
         return
     cur.execute("BEGIN")
     try:
-        for stmt in _vec_table_stmts(_VEC_DIM):
-            cur.execute(stmt)
-        for stmt in _vec_trigger_stmts():
-            cur.execute(stmt)
+        if current < 2 and has_vec:
+            for stmt in _vec_table_stmts(_VEC_DIM):
+                cur.execute(stmt)
+            for stmt in _vec_trigger_stmts():
+                cur.execute(stmt)
+        if current < 3:
+            for stmt in _SCHEMA_V3:
+                cur.execute(stmt)
+        if current < 2 and not has_vec:
+            # No version bump — vec step still pending.
+            conn.commit()
+            return
         cur.execute(
             "INSERT INTO schema_versions (version, applied_at_epoch) "
             "VALUES (?, strftime('%s','now'))",
@@ -516,6 +552,106 @@ def search_turn_summaries_vec(
         log.debug("turn_summaries_vec search failed: %s", exc)
         return []
     return [r["rowid"] for r in rows if r["distance"] <= max_distance]
+
+
+# ── Savings ledger ──────────────────────────────────────────────────────────
+
+# Canonical bucket names — keep in sync with the renderer in cli.py.
+BUCKETS = (
+    "retrieval",
+    "chunk_compression",
+    "output_compression",
+    "memory_recall",
+    "grammar",
+    "turn_summarization",
+    "progressive_disclosure",
+)
+
+
+def record_savings(
+    conn: sqlite3.Connection,
+    *,
+    bucket: str,
+    baseline: int,
+    served: int,
+    meta: dict | None = None,
+) -> None:
+    """Append one savings event. Best-effort — swallows write errors so a
+    misbehaving instrumentation point can never break a tool response.
+    """
+    if bucket not in BUCKETS:
+        log.warning("record_savings: unknown bucket %r — skipping", bucket)
+        return
+    try:
+        import json as _json
+        conn.execute(
+            "INSERT INTO savings_log (bucket, baseline, served, meta, ts) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                bucket,
+                int(baseline),
+                int(served),
+                _json.dumps(meta) if meta else None,
+                int(time.time()),
+            ),
+        )
+        conn.commit()
+    except sqlite3.Error as exc:
+        log.debug("record_savings(%s) failed: %s", bucket, exc)
+
+
+def aggregate_savings(conn: sqlite3.Connection) -> dict[str, dict]:
+    """Roll up `savings_log` into per-bucket totals for the savings report.
+
+    Returns a dict keyed by bucket name with `{baseline, served, calls}`.
+    Missing buckets are filled with zeros so the renderer can iterate
+    over the canonical BUCKETS tuple unconditionally.
+    """
+    out = {b: {"baseline": 0, "served": 0, "calls": 0} for b in BUCKETS}
+    try:
+        rows = conn.execute(
+            "SELECT bucket, SUM(baseline) AS baseline, SUM(served) AS served, "
+            "COUNT(*) AS calls FROM savings_log GROUP BY bucket"
+        ).fetchall()
+    except sqlite3.Error:
+        return out
+    for r in rows:
+        b = r["bucket"]
+        if b in out:
+            out[b] = {
+                "baseline": int(r["baseline"] or 0),
+                "served": int(r["served"] or 0),
+                "calls": int(r["calls"] or 0),
+            }
+    return out
+
+
+def aggregate_output_compression_levels(conn: sqlite3.Connection) -> dict[str, int]:
+    """Histogram of output_compression levels seen in the ledger.
+
+    Reads `meta.level` from each output_compression row. Used by the
+    renderer to show "max=21 calls, standard=4 calls" alongside the
+    estimated savings.
+    """
+    out: dict[str, int] = {}
+    try:
+        import json as _json
+        rows = conn.execute(
+            "SELECT meta FROM savings_log WHERE bucket = 'output_compression'"
+        ).fetchall()
+    except sqlite3.Error:
+        return out
+    for r in rows:
+        if not r["meta"]:
+            continue
+        try:
+            meta = _json.loads(r["meta"])
+            level = meta.get("level")
+            if level:
+                out[level] = out.get(level, 0) + 1
+        except (ValueError, TypeError):
+            continue
+    return out
 
 
 # ── Retention ───────────────────────────────────────────────────────────────

@@ -361,6 +361,7 @@ name = "code-context-engine"
 version = "0.3.1"
 source = { editable = "." }
 dependencies = [
+    { name = "aiohttp" },
     { name = "click" },
     { name = "fastapi" },
     { name = "fastembed" },
@@ -385,9 +386,6 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
 ]
-http = [
-    { name = "aiohttp" },
-]
 
 [package.dev-dependencies]
 dev = [
@@ -399,7 +397,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiohttp", marker = "extra == 'http'", specifier = ">=3.9" },
+    { name = "aiohttp", specifier = ">=3.9" },
     { name = "click", specifier = ">=8.1" },
     { name = "fastapi", specifier = ">=0.110" },
     { name = "fastembed", specifier = ">=0.4" },

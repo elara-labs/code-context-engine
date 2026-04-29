@@ -1113,6 +1113,28 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
         except (KeyError, _json.JSONDecodeError):
             return None
 
+    def _load_buckets(project_dir: Path) -> tuple[dict, dict]:
+        """Open memory.db and pull per-bucket savings + the
+        output_compression level histogram. Falls back to whatever lives
+        in stats.json if the db is missing (older projects). Returns
+        ({bucket: {baseline, served, calls}}, {level: count}).
+        """
+        from context_engine.memory import db as _memory_db
+        db_path = project_dir / "memory.db"
+        empty = {b: {"baseline": 0, "served": 0, "calls": 0} for b in _memory_db.BUCKETS}
+        if not db_path.exists():
+            return empty, {}
+        try:
+            conn = _memory_db.connect(db_path)
+        except Exception:
+            return empty, {}
+        try:
+            buckets = _memory_db.aggregate_savings(conn)
+            levels = _memory_db.aggregate_output_compression_levels(conn)
+            return buckets, levels
+        finally:
+            conn.close()
+
     from context_engine.cli_style import header, label, value, dim, success, bold
     from context_engine.pricing import get_model_pricing
 
@@ -1150,28 +1172,42 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
                 cells.append(click.style(_EMPTY, dim=True))
         return " ".join(cells)
 
-    def _print_project(name: str, stats: dict) -> None:
-        full_file = stats.get("full_file_tokens", 0)
-        served = stats.get("served_tokens", 0)
-        queries = stats.get("queries", 0)
-        raw = stats.get("raw_tokens", 0)
+    # Bucket display metadata. Order = render order. `estimate=True` adds a
+    # trailing asterisk and a footnote so users know it's a counterfactual.
+    _BUCKET_DISPLAY = [
+        ("retrieval",            "retrieval",             False),
+        ("chunk_compression",    "chunk compression",     False),
+        ("output_compression",   "output compression",    True),
+        ("memory_recall",        "memory recall",         False),
+        ("grammar",              "grammar",               False),
+        ("turn_summarization",   "turn summarization",    False),
+        ("progressive_disclosure", "progressive disclosure", True),
+    ]
 
-        baseline = max(full_file, raw) if full_file > 0 else raw
+    def _bucket_totals(buckets: dict) -> tuple[int, int]:
+        """Sum baseline/served across all buckets."""
+        b = sum(int(v.get("baseline", 0)) for v in buckets.values())
+        s = sum(int(v.get("served", 0)) for v in buckets.values())
+        return b, s
+
+    def _print_project(name: str, stats: dict, buckets: dict, levels: dict) -> None:
+        queries = stats.get("queries", 0)
+
+        # Prefer canonical bucket totals; fall back to legacy stats.json
+        # fields if the project hasn't accumulated any bucket events yet.
+        bucket_baseline, bucket_served = _bucket_totals(buckets)
+        if bucket_baseline > 0:
+            baseline = bucket_baseline
+            served = bucket_served
+        else:
+            full_file = stats.get("full_file_tokens", 0)
+            raw = stats.get("raw_tokens", 0)
+            served_legacy = stats.get("served_tokens", 0)
+            baseline = max(full_file, raw) if full_file > 0 else raw
+            served = served_legacy
+
         tokens_saved = max(0, baseline - served)
         saved_pct = int(tokens_saved / baseline * 100) if baseline > 0 else 0
-
-        retrieval_pct = (
-            int(round((1 - raw / full_file) * 100))
-            if full_file > 0 and raw <= full_file
-            else 0
-        )
-        compression_pct = (
-            int(round((1 - served / raw) * 100))
-            if raw > 0 and served <= raw
-            else 0
-        )
-        retrieval_pct = max(0, retrieval_pct)
-        compression_pct = max(0, compression_pct)
 
         q_label = "query" if queries == 1 else "queries"
 
@@ -1179,7 +1215,7 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
         click.echo(f"  {bold(name)} {dim('·')} {value(str(queries))} {dim(q_label)}")
         click.echo()
 
-        # Headline: bar + percentage + cost
+        # Headline bar + percentage
         click.echo(
             f"  {_bar(saved_pct)}  "
             f"{click.style(f'{saved_pct}%', fg='green', bold=True)} "
@@ -1206,26 +1242,98 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
         )
         click.echo()
 
-        # One-line breakdown
+        # Per-bucket breakdown — only rows with non-zero savings render.
+        rows = []
+        for key, display, is_est in _BUCKET_DISPLAY:
+            b = buckets.get(key, {"baseline": 0, "served": 0, "calls": 0})
+            base = int(b.get("baseline", 0))
+            srv = int(b.get("served", 0))
+            saved = max(0, base - srv)
+            if saved <= 0:
+                continue
+            pct = int(saved / baseline * 100) if baseline > 0 else 0
+            rows.append((display, pct, saved, int(b.get("calls", 0)), is_est))
+
+        if rows:
+            click.echo(f"  {dim('Breakdown:')}")
+            label_width = max(len(r[0]) for r in rows) + 1
+            any_estimate = False
+            for display, pct, saved, calls, is_est in rows:
+                marker = "*" if is_est else " "
+                if is_est:
+                    any_estimate = True
+                # Compact bar — proportional to this bucket's share of total.
+                fill = max(1, min(_GRID_COLS, round(pct / 100 * _GRID_COLS))) if pct > 0 else 0
+                mini_bar = (
+                    click.style("▰" * fill, fg="cyan")
+                    + click.style("▱" * (_GRID_COLS - fill), dim=True)
+                )
+                # Pad the raw text first, then style — otherwise :>N counts
+                # ANSI escape bytes and visible columns drift out of line.
+                pct_text = f"{pct}%".rjust(4)
+                click.echo(
+                    f"    {label(display.ljust(label_width))}{marker}  "
+                    f"{value(pct_text)}  {mini_bar}  "
+                    f"{dim(_fmt_tokens(saved).rjust(6))} "
+                    f"{dim(_fmt_cost(saved).rjust(8))} "
+                    f"{dim(f'· {calls} calls')}"
+                )
+            click.echo()
+            if any_estimate:
+                from context_engine.compression.output_rules import (
+                    ESTIMATED_AVG_REPLY_TOKENS as _EST_REPLY,
+                )
+                click.echo(
+                    "  " + dim(
+                        f"* estimated. output compression assumes a "
+                        f"{_EST_REPLY}-token avg reply; "
+                        "progressive disclosure compares against full payload dump."
+                    )
+                )
+            if levels:
+                lv = ", ".join(f"{k}={v}" for k, v in sorted(levels.items()))
+                click.echo(f"  {dim(f'Output compression levels seen: {lv}')}")
+        else:
+            # Legacy fallback: project has stats.json but no per-bucket data
+            # yet (older deployment, or memory.db not present). Compute the
+            # retrieval / chunk-compression split from legacy fields so
+            # users still see *some* breakdown.
+            full_file_legacy = stats.get("full_file_tokens", 0)
+            raw_legacy = stats.get("raw_tokens", 0)
+            served_legacy = stats.get("served_tokens", 0)
+            retrieval_pct = (
+                int(round((1 - raw_legacy / full_file_legacy) * 100))
+                if full_file_legacy > 0 and raw_legacy <= full_file_legacy
+                else 0
+            )
+            compression_pct = (
+                int(round((1 - served_legacy / raw_legacy) * 100))
+                if raw_legacy > 0 and served_legacy <= raw_legacy
+                else 0
+            )
+            click.echo(
+                f"  {dim('How:')}  "
+                f"{label('retrieval')} {value(f'{max(0, retrieval_pct)}%')}"
+                f"  {dim('+')}  "
+                f"{label('compression')} {value(f'{max(0, compression_pct)}%')}"
+            )
+
         click.echo(
-            f"  {dim('How:')}  "
-            f"{label('retrieval')} {value(f'{retrieval_pct}%')}"
-            f"  {dim('+')}  "
-            f"{label('compression')} {value(f'{compression_pct}%')}"
-        )
-        click.echo(
-            f"        {dim('(searched instead of reading full files + compressed before serving)')}"
-        )
-        click.echo(
-            f"        {dim(f'Cost estimate based on {_model_label} input pricing (${_price_per_m:.0f}/1M tokens)')}"
+            f"  {dim(f'Cost estimate based on {_model_label} input pricing (${_price_per_m:.0f}/1M tokens)')}"
         )
 
-    def _json_entry(name: str, stats: dict) -> dict:
+    def _json_entry(name: str, stats: dict, buckets: dict, levels: dict) -> dict:
         full_file = stats.get("full_file_tokens", 0)
         raw = stats.get("raw_tokens", 0)
         served = stats.get("served_tokens", 0)
-        baseline = max(full_file, raw) if full_file > 0 else raw
-        saved = baseline - served
+        bucket_baseline, bucket_served = _bucket_totals(buckets)
+        if bucket_baseline > 0:
+            baseline = bucket_baseline
+            served_total = bucket_served
+        else:
+            baseline = max(full_file, raw) if full_file > 0 else raw
+            served_total = served
+        saved = max(0, baseline - served_total)
         retrieval_pct = (
             int(round((1 - raw / full_file) * 100))
             if full_file > 0 and raw <= full_file
@@ -1247,6 +1355,9 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             "savings_pct": int(saved / baseline * 100) if baseline > 0 else 0,
             "retrieval_savings_pct": max(0, retrieval_pct),
             "compression_savings_pct": max(0, compression_pct),
+            # New per-bucket breakdown.
+            "buckets": buckets,
+            "output_compression_levels": levels,
         }
 
     # Collect projects
@@ -1265,20 +1376,32 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
         project_name = Path.cwd().name
         project_dirs = [storage_root / project_name]
 
-    reports: list[tuple[str, dict]] = []
+    # Each report carries its bucket totals and level histogram alongside
+    # the legacy stats.json so downstream renderers/JSON emitters can
+    # pick the canonical source.
+    reports: list[tuple[str, dict, dict, dict]] = []
     for pd in project_dirs:
         stats = _load_stats(pd)
-        if stats is not None:
-            reports.append((pd.name, stats))
+        buckets, levels = _load_buckets(pd)
+        bucket_baseline = sum(int(v.get("baseline", 0)) for v in buckets.values())
+        if stats is not None or bucket_baseline > 0:
+            reports.append((pd.name, stats or {
+                "queries": 0, "raw_tokens": 0, "served_tokens": 0,
+                "full_file_tokens": 0,
+            }, buckets, levels))
 
     if not reports:
         if as_json:
             if all_projects:
                 click.echo(_json.dumps({"projects": []}))
             else:
+                empty_buckets = {b: {"baseline": 0, "served": 0, "calls": 0}
+                                 for b in __import__(
+                                     "context_engine.memory.db", fromlist=["BUCKETS"],
+                                 ).BUCKETS}
                 click.echo(_json.dumps(_json_entry(Path.cwd().name, {
                     "raw_tokens": 0, "served_tokens": 0, "queries": 0,
-                })))
+                }, empty_buckets, {})))
         else:
             click.echo(f"  {dim('No usage recorded yet.')}")
             click.echo(f"  {dim('Run context_search queries via MCP to start tracking savings.')}")
@@ -1287,28 +1410,37 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
     if as_json:
         if all_projects:
             click.echo(_json.dumps(
-                {"projects": [_json_entry(n, s) for n, s in reports]}, indent=2,
+                {"projects": [_json_entry(n, s, b, lv) for n, s, b, lv in reports]},
+                indent=2,
             ))
         else:
             click.echo(_json.dumps(_json_entry(*reports[0]), indent=2))
         return
 
     # Text output
-    for name, stats in reports:
-        _print_project(name, stats)
+    for name, stats, buckets, levels in reports:
+        _print_project(name, stats, buckets, levels)
         if len(reports) > 1:
             click.echo()
             click.echo("  " + "─" * 52)
 
     if len(reports) > 1:
-        total_baseline = sum(
-            max(s.get("full_file_tokens", 0), s.get("raw_tokens", 0))
-            if s.get("full_file_tokens", 0) > 0
-            else s.get("raw_tokens", 0)
-            for _, s in reports
-        )
-        total_served = sum(s.get("served_tokens", 0) for _, s in reports)
-        total_queries = sum(s.get("queries", 0) for _, s in reports)
+        # Prefer canonical bucket totals; fall back to legacy fields.
+        def _proj_baseline(s, b):
+            bt = sum(int(v.get("baseline", 0)) for v in b.values())
+            if bt > 0:
+                return bt
+            ff = s.get("full_file_tokens", 0)
+            r = s.get("raw_tokens", 0)
+            return max(ff, r) if ff > 0 else r
+        def _proj_served(s, b):
+            bt = sum(int(v.get("served", 0)) for v in b.values())
+            if bt > 0:
+                return bt
+            return s.get("served_tokens", 0)
+        total_baseline = sum(_proj_baseline(s, b) for _, s, b, _ in reports)
+        total_served = sum(_proj_served(s, b) for _, s, b, _ in reports)
+        total_queries = sum(s.get("queries", 0) for _, s, _, _ in reports)
         total_saved = max(0, total_baseline - total_served)
         total_pct = int(total_saved / total_baseline * 100) if total_baseline > 0 else 0
         click.echo()

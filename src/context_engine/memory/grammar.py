@@ -345,6 +345,19 @@ def compress(text: str, level: Level = "full") -> str:
     return "".join(out)
 
 
+def compress_with_counts(text: str, level: Level = "full") -> tuple[str, int, int]:
+    """Same as `compress()` but also returns approximate input/output token
+    counts (chars // 4 heuristic, matching mcp_server._count_tokens).
+
+    Used by instrumentation sites that feed the `grammar` bucket of
+    `cce savings`. Pure function — adds no IO.
+    """
+    out = compress(text, level=level)
+    raw_tokens = max(1, len(text) // 4) if text else 0
+    compressed_tokens = max(1, len(out) // 4) if out else 0
+    return out, raw_tokens, compressed_tokens
+
+
 def expand(text: str) -> str:
     """Restore well-known abbreviations to their full forms and tidy
     spacing. Structured tokens pass through unchanged. Lossy: dropped
