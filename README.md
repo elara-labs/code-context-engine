@@ -356,6 +356,49 @@ When Claude records a decision (`record_decision`) or a code area (`record_code_
 
 ---
 
+## Engineering Highlights
+
+These are the design decisions that make CCE fast, reliable, and cheap to run.
+
+### Content-Hash Embedding Cache
+
+Re-indexing a 1,000-file project should take seconds, not minutes. CCE fingerprints every chunk by SHA-256 of its content (salted with the model name so switching models auto-invalidates). On re-index, only chunks whose content changed go through the embedding model. Embeddings are stored as binary float32 (`struct.pack`), 10x smaller than JSON.
+
+```
+First index:    1,247 chunks embedded                 12.4s
+Re-index:       1,247 chunks, 1,203 from cache (96%)   0.8s
+```
+
+### Hybrid Retrieval with RRF
+
+Vector search finds semantically similar code. BM25 keyword search finds exact identifier matches. Neither alone is sufficient: vector search misses `calculate_shipping` when the query says "shipping calculator", and BM25 misses conceptual matches. CCE runs both in parallel and merges with Reciprocal Rank Fusion (K=60, the canonical Cormack/Clarke value). The confidence scorer blends vector similarity (50%), keyword match (30%), and recency (20%, 7-day half-life). A query parser detects code-lookup intent and boosts FTS weight 1.5x for exact identifier searches.
+
+### sqlite-vec: 2 MB instead of 217 MB
+
+CCE replaced LanceDB with sqlite-vec for vector storage. Same cosine-distance search quality, 99% smaller install footprint. WAL mode with `PRAGMA synchronous=NORMAL` gives 80% write speedup without risking data loss on crash. The entire index (vectors, FTS5, code graph, compression cache, embedding cache) lives in three SQLite files.
+
+### Deterministic Grammar Compression
+
+Memory entries (decisions, turn summaries, session rollups) are compressed with a rule-based system that drops articles, fillers, and pronouns without any LLM call. Three levels: lite (drop "a/an/the", 20% savings), full (drop "is/was/and/or/that", 40%), ultra (abbreviate config/impl/etc, 60%). Structured tokens (code, paths, URLs, identifiers) are preserved byte-for-byte. The transform is deterministic: same input + level always yields same output.
+
+### Fail-Closed Hook Design
+
+CCE captures session context via 5 Claude Code lifecycle hooks (SessionStart, UserPromptSubmit, PostToolUse, Stop, SessionEnd). Every hook runs `curl ... || true`, so a crashed memory server never blocks the user. SessionStart injects bootstrap context (recent commits, decisions, working state) into Claude's context window. Other hooks capture data silently in the background.
+
+### Dynamic Pricing from Anthropic Docs
+
+`cce savings` shows dollar estimates based on live pricing fetched from Anthropic's models page. The HTML table is parsed with regex, cached in `~/.cce/pricing_cache.json` for 7 days, and falls back to hardcoded defaults if offline. No manual price updates needed when Anthropic changes rates.
+
+### Path Traversal Protection
+
+All file paths in MCP tool arguments pass through `_resolve_within()`, which verifies the resolved path stays inside the project directory. Prevents path-escape attacks from malicious tool inputs.
+
+### Savings Tracking Ledger
+
+Every token-saving event is recorded in an append-only `savings_log` table with 7 buckets (retrieval, chunk compression, output compression, memory recall, grammar, turn summarization, progressive disclosure). The ledger survives restarts, feeds `cce savings` without historical reconstruction, and powers the dashboard analytics.
+
+---
+
 ## CLI Commands
 
 Run `cce list` to see all commands:

@@ -997,6 +997,58 @@
   </div>
 </section>
 
+<!-- ── UNDER THE HOOD ────────────────────────────────── -->
+<section class="how-section" style="border-top:1px solid var(--border)">
+  <div class="wrap">
+    <span class="section-tag">Under the hood</span>
+    <h2>Clever engineering.<br>Zero magic.</h2>
+    <p class="sec-sub" style="margin-bottom:42px">Every decision optimizes for speed, cost, or reliability. Here is what makes CCE tick.</p>
+
+    <div class="how-grid" style="grid-template-columns:repeat(2,1fr)">
+      <div class="how-card">
+        <div class="how-icon" style="background:var(--cyan-dim)">⚡</div>
+        <div class="how-title">Content-Hash Embedding Cache</div>
+        <p class="how-body">SHA-256 fingerprint per chunk, salted with model name. Re-index skips unchanged code. Binary-packed embeddings (struct.pack) are 10x smaller than JSON. Typical re-index: 96% cache hit, under 1 second.</p>
+      </div>
+      <div class="how-card">
+        <div class="how-icon" style="background:var(--purple-dim)">🔀</div>
+        <div class="how-title">Hybrid Retrieval + RRF</div>
+        <p class="how-body">Vector search (semantic) and BM25 (exact keyword) run in parallel. Merged via Reciprocal Rank Fusion (K=60). Confidence blends similarity (50%), keyword match (30%), and recency (20%). Code-lookup queries boost FTS 1.5x.</p>
+      </div>
+      <div class="how-card">
+        <div class="how-icon" style="background:var(--green-dim)">🪶</div>
+        <div class="how-title">sqlite-vec: 2 MB, not 217 MB</div>
+        <p class="how-body">Replaced LanceDB with sqlite-vec. Same search quality, 99% smaller install. WAL mode + PRAGMA NORMAL for 80% write speedup. Vectors, FTS5, code graph, compression cache all in three SQLite files.</p>
+      </div>
+      <div class="how-card">
+        <div class="how-icon" style="background:var(--cyan-dim)">📐</div>
+        <div class="how-title">Deterministic Grammar Compression</div>
+        <p class="how-body">No LLM needed. Drops articles, fillers, pronouns from memory entries. Three levels (lite/full/ultra, 20-60% savings). Code, paths, URLs preserved byte-for-byte. Same input always yields same output.</p>
+      </div>
+      <div class="how-card">
+        <div class="how-icon" style="background:var(--purple-dim)">🔒</div>
+        <div class="how-title">Fail-Closed Hooks</div>
+        <p class="how-body">5 Claude Code lifecycle hooks capture session context. Every hook runs <code>curl ... || true</code> so a crashed server never blocks the user. SessionStart injects bootstrap context; others capture silently.</p>
+      </div>
+      <div class="how-card">
+        <div class="how-icon" style="background:var(--green-dim)">💰</div>
+        <div class="how-title">Dynamic Pricing</div>
+        <p class="how-body"><code>cce savings</code> shows dollar estimates from live Anthropic pricing (fetched, cached 7 days, offline fallback). No manual updates when rates change. Per-bucket breakdown: retrieval, compression, grammar, memory.</p>
+      </div>
+      <div class="how-card">
+        <div class="how-icon" style="background:var(--cyan-dim)">🛡</div>
+        <div class="how-title">Security by Default</div>
+        <p class="how-body">Path traversal protection on all MCP inputs. PII scrubbing (emails, IPs, SSNs, credit cards) on memory writes. Secret file detection (.env, *.pem) during indexing. Audit log with hashed queries.</p>
+      </div>
+      <div class="how-card">
+        <div class="how-icon" style="background:var(--purple-dim)">📊</div>
+        <div class="how-title">Append-Only Savings Ledger</div>
+        <p class="how-body">7 buckets track every token saved: retrieval, chunk compression, output compression, memory recall, grammar, turn summarization, progressive disclosure. Survives restarts. Powers CLI and dashboard analytics.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ── COMPARE ────────────────────────────────────────── -->
 <section class="compare-section">
   <div class="wrap">
