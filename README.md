@@ -21,6 +21,10 @@
   Local, zero-cloud, zero-config. Runs on any laptop.
 </p>
 
+<p align="center">
+  <img src="docs/demo.gif" alt="CCE Demo" width="800">
+</p>
+
 ---
 
 ## Install and see savings in 60 seconds
