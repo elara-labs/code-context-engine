@@ -11,6 +11,40 @@ import click
 from context_engine.config import load_config, PROJECT_CONFIG_NAME
 
 
+def _safe_cwd() -> Path:
+    """Return `Path.cwd()` or raise a `click.ClickException` with a
+    friendly, actionable error if the OS denies access.
+
+    On macOS, `os.getcwd()` can fail with `PermissionError` /
+    `FileNotFoundError` / `OSError` when:
+      · The terminal lacks Full Disk Access (newer macOS sandboxing).
+      · The current directory was deleted or renamed while the shell
+        was sitting in it (the shell remembers the inode but the OS
+        won't let the process read it).
+      · iCloud Drive / Dropbox is mid-sync on the path.
+      · The directory lives behind a fuse / virtualised mount whose
+        permissions changed under us.
+
+    Without this wrapper every cce subcommand crashes with a 30-line
+    pathlib stack trace that gives the user nothing to act on. With it,
+    Click's exception machinery prints `Error: <message>` and exits 1
+    cleanly. Used at every Path.cwd() callsite in this module.
+    """
+    try:
+        return Path.cwd()
+    except (PermissionError, FileNotFoundError, OSError) as exc:
+        raise click.ClickException(
+            f"Cannot read the current working directory "
+            f"({exc.__class__.__name__}: {exc}).\n\n"
+            "On macOS this usually means your terminal lacks Full Disk Access:\n"
+            "  System Settings → Privacy & Security → Full Disk Access\n"
+            "  → enable for your terminal app, then restart it.\n\n"
+            "Otherwise the directory may have been deleted/renamed while "
+            "the shell was open — `cd` into a directory you can read "
+            "and try again."
+        ) from exc
+
+
 def _configure_mcp(project_dir: Path) -> bool:
     """Write MCP server config to .mcp.json in the project directory.
 
@@ -310,7 +344,7 @@ def _show_welcome_banner(config) -> None:
     except Exception:
         ver = "?"
 
-    project_dir = Path.cwd()
+    project_dir = _safe_cwd()
     project_name = project_dir.name
     storage_dir = Path(config.storage_path) / project_name
 
@@ -609,7 +643,7 @@ def _extract_existing_cce_block(content: str) -> str | None:
 def main(ctx: click.Context, verbose: bool) -> None:
     """code-context-engine — Local context engine for AI coding assistants."""
     ctx.ensure_object(dict)
-    project_path = Path.cwd() / PROJECT_CONFIG_NAME
+    project_path = _safe_cwd() / PROJECT_CONFIG_NAME
     ctx.obj["config"] = load_config(project_path=project_path if project_path.exists() else None)
     ctx.obj["verbose"] = verbose
 
@@ -624,7 +658,7 @@ def init(ctx: click.Context) -> None:
     from context_engine.indexer.git_hooks import install_hooks
     from context_engine.project_commands import ensure_gitignore
     config = ctx.obj["config"]
-    project_dir = Path.cwd()
+    project_dir = _safe_cwd()
 
     click.echo("")
     click.echo(
@@ -693,9 +727,9 @@ def index(ctx: click.Context, full: bool, path: str | None) -> None:
     """Index or re-index project files."""
     config = ctx.obj["config"]
     verbose = ctx.obj["verbose"]
-    project_dir = str(Path.cwd())
+    project_dir = str(_safe_cwd())
     from context_engine.cli_style import section, animate
-    lines = ["", section("Indexing " + Path.cwd().name)]
+    lines = ["", section("Indexing " + _safe_cwd().name)]
     animate(lines)
     asyncio.run(_run_index(config, project_dir, full=full, target_path=path, verbose=verbose))
 
@@ -716,7 +750,7 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
             ver = pkg_version("code-context-engine")
         except Exception:
             ver = "?"
-        project_name = Path.cwd().name
+        project_name = _safe_cwd().name
         storage = Path(config.storage_path) / project_name
         stats_path = storage / "stats.json"
         chunks = 0
@@ -760,7 +794,7 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
 
     lines: list[str] = []
     lines.append("")
-    lines.append(section("Status · " + Path.cwd().name))
+    lines.append(section("Status · " + _safe_cwd().name))
     lines.append("")
     lines.append(f"    {BULLET} {label('Storage')}       {value(config.storage_path)}")
     lines.append(f"    {BULLET} {label('Compression')}   {value(config.compression_level)}")
@@ -792,7 +826,7 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
     lines.append(f"    {BULLET} {label('Compress')}      {value(compression_mode)}")
 
     # Token savings
-    project_name = Path.cwd().name
+    project_name = _safe_cwd().name
     stats_path = Path(config.storage_path) / project_name / "stats.json"
     lines.append("")
     lines.append(section("Token Savings"))
@@ -814,7 +848,7 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
         except (KeyError, _json.JSONDecodeError):
             lines.append(f"    {DOT} {dim('Error reading stats')}")
     else:
-        storage_dir = Path(config.storage_path) / Path.cwd().name
+        storage_dir = Path(config.storage_path) / _safe_cwd().name
         vectors_dir = storage_dir / "vectors"
         if not vectors_dir.exists():
             lines.append(f"    {DOT} {dim('Project not indexed yet')}  {label('cce init')}")
@@ -822,7 +856,7 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
             lines.append(f"    {DOT} {dim('No usage recorded yet')}  {dim('run context_search via MCP')}")
 
     # Embedding cache stats — surfaces how much the cache is actually saving.
-    cache_db = Path(config.storage_path) / Path.cwd().name / "embedding_cache.db"
+    cache_db = Path(config.storage_path) / _safe_cwd().name / "embedding_cache.db"
     if cache_db.exists():
         try:
             from context_engine.indexer.embedding_cache import EmbeddingCache
@@ -953,11 +987,11 @@ def commands_add(hook: str, command: str) -> None:
     """Add a command to a hook. Example: cce commands add before_push 'composer test'"""
     from context_engine.project_commands import load_project_only, add_command
     from context_engine.cli_style import success, warn, CHECK, DOT
-    existing = load_project_only(str(Path.cwd())).get(hook, [])
+    existing = load_project_only(str(_safe_cwd())).get(hook, [])
     if command in existing:
         click.echo(f"  {DOT} {warn('Already exists')} in {hook}: {command}")
         return
-    add_command(str(Path.cwd()), hook, command)
+    add_command(str(_safe_cwd()), hook, command)
     click.echo(f"  {CHECK} {success('Added')} to {hook}: {command}")
 
 
@@ -968,7 +1002,7 @@ def commands_add_custom(name: str, command: str) -> None:
     """Add a named custom command. Example: cce commands add-custom deploy 'kubectl apply -f k8s/'"""
     from context_engine.project_commands import add_custom_command
     from context_engine.cli_style import success, CHECK
-    add_custom_command(str(Path.cwd()), name, command)
+    add_custom_command(str(_safe_cwd()), name, command)
     click.echo(f"  {CHECK} {success('Added')} custom command '{name}': {command}")
 
 
@@ -979,7 +1013,7 @@ def commands_remove(hook: str, command: str) -> None:
     """Remove a command from a hook."""
     from context_engine.project_commands import remove_command
     from context_engine.cli_style import success, warn, CHECK, DOT
-    if remove_command(str(Path.cwd()), hook, command):
+    if remove_command(str(_safe_cwd()), hook, command):
         click.echo(f"  {CHECK} {success('Removed')} from {hook}: {command}")
     else:
         click.echo(f"  {DOT} {warn('Not found')} in {hook}: {command}")
@@ -990,12 +1024,12 @@ def commands_remove(hook: str, command: str) -> None:
 def commands_add_rule(rule: str) -> None:
     """Add a project rule. Example: cce commands add-rule 'Never use down() in migrations'"""
     from context_engine.project_commands import load_project_only, add_rule
-    existing = load_project_only(str(Path.cwd())).get("rules", [])
+    existing = load_project_only(str(_safe_cwd())).get("rules", [])
     from context_engine.cli_style import success, warn, CHECK, DOT
     if rule in existing:
         click.echo(f"  {DOT} {warn('Already exists')}: {rule}")
         return
-    add_rule(str(Path.cwd()), rule)
+    add_rule(str(_safe_cwd()), rule)
     click.echo(f"  {CHECK} {success('Rule added')}: {rule}")
 
 
@@ -1005,7 +1039,7 @@ def commands_remove_rule(rule: str) -> None:
     """Remove a project rule."""
     from context_engine.project_commands import remove_rule
     from context_engine.cli_style import success, warn, CHECK, DOT
-    if remove_rule(str(Path.cwd()), rule):
+    if remove_rule(str(_safe_cwd()), rule):
         click.echo(f"  {CHECK} {success('Rule removed')}: {rule}")
     else:
         click.echo(f"  {DOT} {warn('Not found')}: {rule}")
@@ -1018,7 +1052,7 @@ def commands_set_pref(key: str, value: str) -> None:
     """Set a preference. Example: cce commands set-pref database PostgreSQL"""
     from context_engine.project_commands import set_preference
     from context_engine.cli_style import success, CHECK
-    set_preference(str(Path.cwd()), key, value)
+    set_preference(str(_safe_cwd()), key, value)
     click.echo(f"  {CHECK} {success('Preference set')}: {key} = {value}")
 
 
@@ -1028,7 +1062,7 @@ def commands_remove_pref(key: str) -> None:
     """Remove a preference."""
     from context_engine.project_commands import remove_preference
     from context_engine.cli_style import success, warn, CHECK, DOT
-    if remove_preference(str(Path.cwd()), key):
+    if remove_preference(str(_safe_cwd()), key):
         click.echo(f"  {CHECK} {success('Preference removed')}: {key}")
     else:
         click.echo(f"  {DOT} {warn('Not found')}: {key}")
@@ -1040,7 +1074,7 @@ def commands_list() -> None:
     from context_engine.project_commands import load_commands
     from context_engine.cli_style import header, label, dim, value, section, animate, DOT, ARROW, BULLET
 
-    cmds = load_commands(str(Path.cwd()))
+    cmds = load_commands(str(_safe_cwd()))
     lines: list[str] = [""]
 
     if not cmds:
@@ -1425,7 +1459,7 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             key=lambda d: d.name,
         )
     else:
-        project_name = Path.cwd().name
+        project_name = _safe_cwd().name
         project_dirs = [storage_root / project_name]
 
     # Each report carries its bucket totals and level histogram alongside
@@ -1451,7 +1485,7 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
                                  for b in __import__(
                                      "context_engine.memory.db", fromlist=["BUCKETS"],
                                  ).BUCKETS}
-                click.echo(_json.dumps(_json_entry(Path.cwd().name, {
+                click.echo(_json.dumps(_json_entry(_safe_cwd().name, {
                     "raw_tokens": 0, "served_tokens": 0, "queries": 0,
                 }, empty_buckets, {})))
         else:
@@ -1521,7 +1555,7 @@ def clear(ctx: click.Context, yes: bool) -> None:
     from context_engine.cli_style import warn, success, dim, value, section, animate, CHECK, DOT
 
     config = ctx.obj["config"]
-    project_name = Path.cwd().name
+    project_name = _safe_cwd().name
     storage_dir = Path(config.storage_path) / project_name
 
     if not storage_dir.exists():
@@ -1624,8 +1658,8 @@ def search(ctx: click.Context, query: str, top_k: int) -> None:
     from context_engine.cli_style import section, animate, value, dim, label, success, CHECK, DOT
 
     config = ctx.obj["config"]
-    project_dir = str(Path.cwd())
-    project_name = Path.cwd().name
+    project_dir = str(_safe_cwd())
+    project_name = _safe_cwd().name
 
     async def _search():
         from context_engine.storage.local_backend import LocalBackend
@@ -1705,7 +1739,7 @@ def uninstall() -> None:
     """Remove CCE from the current project (hooks, .mcp.json entry, CLAUDE.md block)."""
     from context_engine.cli_style import section, animate, value, dim, success, warn, CHECK, CROSS, DOT
 
-    project_dir = Path.cwd()
+    project_dir = _safe_cwd()
     project_name = project_dir.name
     lines: list[str] = []
     lines.append("")
@@ -1922,7 +1956,7 @@ def upgrade(ctx: click.Context, check: bool) -> None:
         _ok(f"Already on latest version ({click.style(current, fg='cyan')})")
 
     # Refresh project config if in an initialized project
-    project_dir = Path.cwd()
+    project_dir = _safe_cwd()
     mcp_path = project_dir / ".mcp.json"
     if mcp_path.exists():
         click.echo("")
@@ -1954,7 +1988,7 @@ def savings_shortcut() -> None:
     @click.option("--all", "all_projects", is_flag=True, help="Show all projects")
     def _cmd(as_json: bool, all_projects: bool) -> None:
         """Show CCE token savings — how much context compression is saving you."""
-        project_path = Path.cwd() / PROJECT_CONFIG_NAME
+        project_path = _safe_cwd() / PROJECT_CONFIG_NAME
         config = load_config(project_path=project_path if project_path.exists() else None)
         _run_savings_report(config, as_json=as_json, all_projects=all_projects)
 
@@ -2017,7 +2051,7 @@ def dashboard(ctx: click.Context, port: int, no_browser: bool) -> None:
     from context_engine.dashboard.server import create_app
 
     config = ctx.obj["config"]
-    project_dir = Path.cwd()
+    project_dir = _safe_cwd()
 
     if port == 0:
         port = _find_free_port()
@@ -2138,7 +2172,7 @@ def sessions_status(ctx: click.Context) -> None:
     from context_engine.memory import db as memory_db
 
     config = ctx.obj["config"]
-    project_name = Path.cwd().name
+    project_name = _safe_cwd().name
     storage_base = Path(config.storage_path) / project_name
     db_path = memory_db.memory_db_path(storage_base)
 
@@ -2274,7 +2308,7 @@ def sessions_prune(
     from context_engine.memory import db as memory_db
 
     config = ctx.obj["config"]
-    project_name = Path.cwd().name
+    project_name = _safe_cwd().name
     storage_base = Path(config.storage_path) / project_name
     sessions_dir = storage_base / "sessions"
 
@@ -2357,7 +2391,7 @@ def sessions_export(
     from context_engine.memory import db as memory_db
 
     config = ctx.obj["config"]
-    project_name = Path.cwd().name
+    project_name = _safe_cwd().name
     storage_base = Path(config.storage_path) / project_name
     db_path = memory_db.memory_db_path(storage_base)
     if not db_path.exists():
@@ -2470,7 +2504,7 @@ def sessions_migrate(ctx: click.Context, no_archive: bool) -> None:
     from context_engine.memory import db as memory_db, migrate as memory_migrate
 
     config = ctx.obj["config"]
-    project_name = Path.cwd().name
+    project_name = _safe_cwd().name
     storage_base = Path(config.storage_path) / project_name
     db_path = memory_db.memory_db_path(storage_base)
 
@@ -2629,8 +2663,8 @@ async def _run_serve(config) -> None:
 
     _log = logging.getLogger("context_engine.watcher")
 
-    project_dir = str(Path.cwd())
-    project_name = Path.cwd().name
+    project_dir = str(_safe_cwd())
+    project_name = _safe_cwd().name
     storage_base = Path(config.storage_path) / project_name
     backend = LocalBackend(base_path=str(storage_base))
     embedder = Embedder(model_name=config.embedding_model)
