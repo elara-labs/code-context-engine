@@ -168,6 +168,97 @@ def test_buckets_only_no_stats_file_still_renders(runner, tmp_path):
     assert "retrieval" in result.output.lower()
 
 
+def test_renderer_polish_per_query_average(runner, tmp_path):
+    """Headline shows per-query average tokens and cost when there are queries."""
+    _seed_project_with_buckets(tmp_path, "demo")
+    result = _invoke_savings(runner, tmp_path, "demo")
+    assert result.exit_code == 0
+    # Stats fixture seeds 7 queries; some savings exist, so the line renders.
+    assert "/ query" in result.output
+    assert "tokens / query" in result.output
+
+
+def test_renderer_polish_sub_percent_shown_as_lt1(runner, tmp_path):
+    """Buckets with savings > 0 but pct < 1 render as '<1%', never '0%'."""
+    project_dir = tmp_path / "demo"
+    project_dir.mkdir()
+    (project_dir / "stats.json").write_text(json.dumps({
+        "queries": 1, "raw_tokens": 0, "served_tokens": 0, "full_file_tokens": 0,
+    }))
+    conn = memory_db.connect(project_dir / "memory.db")
+    try:
+        # Big bucket dominates so smaller ones round to 0%.
+        memory_db.record_savings(conn, bucket="retrieval", baseline=200_000, served=10_000)
+        memory_db.record_savings(conn, bucket="grammar", baseline=200, served=100)
+    finally:
+        conn.close()
+    result = _invoke_savings(runner, tmp_path, "demo")
+    assert "<1%" in result.output, f"missing <1% marker:\n{result.output}"
+
+
+def test_renderer_polish_singular_call(runner, tmp_path):
+    """Bucket with calls=1 displays '1 call', not '1 calls'."""
+    project_dir = tmp_path / "demo"
+    project_dir.mkdir()
+    (project_dir / "stats.json").write_text(json.dumps({
+        "queries": 1, "raw_tokens": 0, "served_tokens": 0, "full_file_tokens": 0,
+    }))
+    conn = memory_db.connect(project_dir / "memory.db")
+    try:
+        memory_db.record_savings(conn, bucket="retrieval", baseline=1000, served=200)
+    finally:
+        conn.close()
+    result = _invoke_savings(runner, tmp_path, "demo")
+    assert "1 call" in result.output
+    assert "1 calls" not in result.output
+
+
+def test_renderer_polish_buckets_sorted_by_savings_desc(runner, tmp_path):
+    """Breakdown rows render in descending order of saved tokens."""
+    project_dir = tmp_path / "demo"
+    project_dir.mkdir()
+    (project_dir / "stats.json").write_text(json.dumps({
+        "queries": 5, "raw_tokens": 0, "served_tokens": 0, "full_file_tokens": 0,
+    }))
+    conn = memory_db.connect(project_dir / "memory.db")
+    try:
+        # grammar gets the biggest savings even though it sits last in
+        # _BUCKET_DISPLAY definition order.
+        memory_db.record_savings(conn, bucket="retrieval", baseline=1000, served=900)
+        memory_db.record_savings(conn, bucket="grammar", baseline=10000, served=1000)
+        memory_db.record_savings(conn, bucket="memory_recall", baseline=2000, served=500)
+    finally:
+        conn.close()
+    result = _invoke_savings(runner, tmp_path, "demo")
+    out = result.output.lower()
+    # Grammar (9000 saved) should appear before memory recall (1500) and
+    # retrieval (100). Use index positions.
+    g = out.index("grammar")
+    m = out.index("memory recall")
+    r = out.index("retrieval")
+    assert g < m < r, f"sort wrong:\ngrammar={g} memory_recall={m} retrieval={r}\n{result.output}"
+
+
+def test_renderer_polish_asterisk_glued_to_label(runner, tmp_path):
+    """Estimate buckets show 'label*' inline, not 'label   *'."""
+    project_dir = tmp_path / "demo"
+    project_dir.mkdir()
+    (project_dir / "stats.json").write_text(json.dumps({
+        "queries": 1, "raw_tokens": 0, "served_tokens": 0, "full_file_tokens": 0,
+    }))
+    conn = memory_db.connect(project_dir / "memory.db")
+    try:
+        memory_db.record_savings(
+            conn, bucket="output_compression",
+            baseline=500, served=125, meta={"level": "max"},
+        )
+    finally:
+        conn.close()
+    result = _invoke_savings(runner, tmp_path, "demo")
+    # The label and asterisk are adjacent with no internal whitespace.
+    assert "output compression*" in result.output, result.output
+
+
 def test_legacy_json_back_compat_fields_preserved(runner, tmp_path):
     """JSON output keeps legacy fields so old scrapers don't break."""
     _seed_project_with_buckets(tmp_path, "demo")

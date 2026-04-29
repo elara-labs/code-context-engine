@@ -37,6 +37,12 @@ from context_engine.memory.grammar import (
 log = logging.getLogger(__name__)
 
 _CHARS_PER_TOKEN = 4
+# JSON-heavy text (tool_event_payloads.raw_input/raw_output) tokenises at
+# ~6 chars/token because the structural noise (braces, commas, quoted keys)
+# packs more chars into a single token than prose does. Used for
+# progressive_disclosure baseline so the counterfactual ("what dumping all
+# raw payloads would have cost") doesn't over-claim by ~50%.
+_JSON_CHARS_PER_TOKEN = 6
 _MAX_QUERY_CHARS = 10_000
 _MAX_TOP_K = 100
 # Search up to this many recent session files when recalling decisions.
@@ -99,6 +105,25 @@ def _clamp_int(value, *, default: int, lo: int, hi: int) -> int:
 
 _FTS_RECALL_LIMIT = 100
 _VEC_RECALL_K = 30
+# Display cap for session_recall body. Empirically the RRF score drops
+# sharply after rank ~5 across decisions/turns/code-areas, so showing 20
+# matches dilutes the response with low-signal entries that aren't worth
+# the tokens.
+#
+# Tunable via CCE_RECALL_DISPLAY_CAP (positive integer). Power users with
+# a mature decisions corpus may want to raise this if the rank 7-20 tail
+# carries useful matches in their workflow — the previous default was 20.
+# Invalid values fall back to the default so a typo can't break recall.
+def _recall_display_cap() -> int:
+    import os
+    raw = os.environ.get("CCE_RECALL_DISPLAY_CAP")
+    if raw is None:
+        return 7
+    try:
+        n = int(raw)
+        return n if n > 0 else 7
+    except ValueError:
+        return 7
 # Read-time cap on session_event payloads. Inputs already have a 4 KB write
 # cap (compressor._TOOL_INPUT_CHAR_CAP) but outputs are stored uncapped, so a
 # 50 KB Bash stdout would re-feed ~12 k tokens on every fetch without this.
@@ -579,6 +604,32 @@ class ContextEngineMCP:
         # Persist the in-memory rollup. Cheap (~few hundred bytes JSON write).
         self._save_stats()
 
+    def _apply_output_compression(self, body: str) -> str:
+        """Append the active output-compression directive (if any) and record
+        one estimate event for the output_compression bucket. Returns the
+        possibly-augmented body. No-op when level == off.
+
+        Centralised so every tool handler that returns prose to the model
+        participates in output compression — not just context_search. Skipping
+        a handler means the model's reply to that tool bypasses compression
+        entirely, so the bucket undercounts and (worse) real tokens get spent
+        that the directive would have shaved.
+        """
+        if not get_output_rules(self._output_level):
+            return body
+        out = body + (
+            f"\n\n---\n[Respond using {self._output_level} output compression]"
+        )
+        pct = ADVERTISED_PCT.get(self._output_level, 0.0)
+        if pct > 0.0:
+            self._record_bucket(
+                "output_compression",
+                baseline=ESTIMATED_AVG_REPLY_TOKENS,
+                served=int(ESTIMATED_AVG_REPLY_TOKENS * (1 - pct)),
+                meta={"level": self._output_level},
+            )
+        return out
+
     def get_tool_names(self) -> list[str]:
         return list(self.TOOL_NAMES)
 
@@ -840,23 +891,7 @@ class ContextEngineMCP:
         self._persist_current_session()
 
         body = _format_results_with_overflow(inline_chunks, overflow_chunks)
-        if get_output_rules(self._output_level):
-            body += (
-                f"\n\n---\n[Respond using {self._output_level} output compression]"
-            )
-            # output_compression bucket — estimate-only. We can't see Claude's
-            # actual reply, so per affected response we attribute one
-            # ESTIMATED_AVG_REPLY_TOKENS baseline reduced by the advertised
-            # rate for the active level. Renderer marks the bucket with an
-            # asterisk so users know it's an estimate.
-            pct = ADVERTISED_PCT.get(self._output_level, 0.0)
-            if pct > 0.0:
-                self._record_bucket(
-                    "output_compression",
-                    baseline=ESTIMATED_AVG_REPLY_TOKENS,
-                    served=int(ESTIMATED_AVG_REPLY_TOKENS * (1 - pct)),
-                    meta={"level": self._output_level},
-                )
+        body = self._apply_output_compression(body)
         self._record(raw_tokens, served_tokens, full_file_tokens)
         return [TextContent(type="text", text=body)]
 
@@ -937,7 +972,7 @@ class ContextEngineMCP:
             ]
         body = self._format_recall(topic, matches)
         # memory_recall savings: baseline = all matched entries dumped raw,
-        # served = TL;DR + top-20 bullets actually returned. Filtering and
+        # served = TL;DR + top-N bullets actually returned. Filtering and
         # summarisation are the two compression mechanics in this path.
         baseline = sum(_count_tokens(m) for m in matches)
         served = _count_tokens(body)
@@ -946,6 +981,7 @@ class ContextEngineMCP:
                 "memory_recall", baseline=baseline, served=served,
                 meta={"matches": len(matches), "topic_len": len(topic)},
             )
+        body = self._apply_output_compression(body)
         return [TextContent(type="text", text=body)]
 
     def _format_recall(self, topic: str, matches: list[str]) -> str:
@@ -957,7 +993,7 @@ class ContextEngineMCP:
         thread for a 10-match input. Header is suppressed when there are too
         few matches to summarise meaningfully.
         """
-        head_matches = matches[:20]
+        head_matches = matches[:_recall_display_cap()]
         tldr_lines: list[str] = []
         if len(head_matches) >= 3:
             # Embed each match's clean content (no [tag] prefix, no affordance
@@ -1131,10 +1167,11 @@ class ContextEngineMCP:
         if payload_bytes > 0:
             self._record_bucket(
                 "progressive_disclosure",
-                baseline=payload_bytes // _CHARS_PER_TOKEN,
+                baseline=payload_bytes // _JSON_CHARS_PER_TOKEN,
                 served=_count_tokens(text),
                 meta={"layer": "timeline", "session_id": session_id},
             )
+        text = self._apply_output_compression(text)
         return [TextContent(type="text", text=text)]
 
     def _handle_session_event(self, args):
@@ -1205,10 +1242,11 @@ class ContextEngineMCP:
         if session_bytes > 0:
             self._record_bucket(
                 "progressive_disclosure",
-                baseline=session_bytes // _CHARS_PER_TOKEN,
+                baseline=session_bytes // _JSON_CHARS_PER_TOKEN,
                 served=_count_tokens(body),
                 meta={"layer": "event", "event_id": event_id},
             )
+        body = self._apply_output_compression(body)
         return [TextContent(type="text", text=body)]
 
     async def _handle_index_status(self):

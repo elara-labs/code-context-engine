@@ -1240,11 +1240,22 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             f"{click.style(_fmt_tokens(tokens_saved), fg='green', bold=True):>10}  {dim('tokens')}   "
             f"{click.style(_fmt_cost(tokens_saved), fg='green', bold=True)}"
         )
+        # Per-query average — the number a user actually grounds "is this
+        # worth my time?" on. Skipped when there are no queries or no
+        # savings (avoids dividing by zero and showing $0.00/query noise).
+        if queries > 0 and tokens_saved > 0:
+            avg_tokens = tokens_saved // max(1, queries)
+            avg_cost = _fmt_cost(avg_tokens)
+            click.echo(
+                f"  {dim(f'~{_fmt_tokens(avg_tokens)} tokens / query')}  "
+                f"{dim(f'~{avg_cost} / query')}"
+            )
         click.echo()
 
         # Per-bucket breakdown — only rows with non-zero savings render.
+        # Definition order is preserved for ties (Python's sort is stable).
         rows = []
-        for key, display, is_est in _BUCKET_DISPLAY:
+        for idx, (key, display, is_est) in enumerate(_BUCKET_DISPLAY):
             b = buckets.get(key, {"baseline": 0, "served": 0, "calls": 0})
             base = int(b.get("baseline", 0))
             srv = int(b.get("served", 0))
@@ -1252,31 +1263,52 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             if saved <= 0:
                 continue
             pct = int(saved / baseline * 100) if baseline > 0 else 0
-            rows.append((display, pct, saved, int(b.get("calls", 0)), is_est))
+            rows.append((display, pct, saved, int(b.get("calls", 0)), is_est, idx))
+        # Polish 2: sort by saved tokens descending. Biggest wins first.
+        rows.sort(key=lambda r: (-r[2], r[5]))
 
         if rows:
             click.echo(f"  {dim('Breakdown:')}")
-            label_width = max(len(r[0]) for r in rows) + 1
+            # Polish 5: glue the asterisk to the label so the percentage column
+            # stays straight. Compute label_width over the asterisk-suffixed
+            # form so estimate buckets don't blow out the alignment.
+            displayed_labels = [
+                f"{display}*" if is_est else display
+                for display, _, _, _, is_est, _ in rows
+            ]
+            label_width = max(len(s) for s in displayed_labels) + 1
+            # Polish 3: normalize bar fill against the largest bucket's saved
+            # tokens, not the total. Otherwise a dominant bucket squashes all
+            # others to 0–1 cells and the visualisation goes blind.
+            max_saved = max(r[2] for r in rows)
             any_estimate = False
-            for display, pct, saved, calls, is_est in rows:
-                marker = "*" if is_est else " "
+            for display, pct, saved, calls, is_est in [
+                (d, p, s, c, e) for d, p, s, c, e, _ in rows
+            ]:
                 if is_est:
                     any_estimate = True
-                # Compact bar — proportional to this bucket's share of total.
-                fill = max(1, min(_GRID_COLS, round(pct / 100 * _GRID_COLS))) if pct > 0 else 0
+                # Polish 1: never round non-zero savings down to "0%".
+                if saved > 0 and pct < 1:
+                    pct_text = "<1%".rjust(4)
+                else:
+                    pct_text = f"{pct}%".rjust(4)
+                # Polish 3: bar fill ∝ saved / max_saved, not pct / 100.
+                ratio = saved / max_saved if max_saved > 0 else 0
+                fill = max(1, min(_GRID_COLS, round(ratio * _GRID_COLS))) if saved > 0 else 0
                 mini_bar = (
                     click.style("▰" * fill, fg="cyan")
                     + click.style("▱" * (_GRID_COLS - fill), dim=True)
                 )
-                # Pad the raw text first, then style — otherwise :>N counts
-                # ANSI escape bytes and visible columns drift out of line.
-                pct_text = f"{pct}%".rjust(4)
+                # Polish 4: singular "1 call" / plural "N calls".
+                call_text = "1 call" if calls == 1 else f"{calls} calls"
+                # Polish 5: asterisk glued to label, no separate marker column.
+                label_text = f"{display}*" if is_est else display
                 click.echo(
-                    f"    {label(display.ljust(label_width))}{marker}  "
+                    f"    {label(label_text.ljust(label_width))}  "
                     f"{value(pct_text)}  {mini_bar}  "
                     f"{dim(_fmt_tokens(saved).rjust(6))} "
                     f"{dim(_fmt_cost(saved).rjust(8))} "
-                    f"{dim(f'· {calls} calls')}"
+                    f"{dim(f'· {call_text}')}"
                 )
             click.echo()
             if any_estimate:
