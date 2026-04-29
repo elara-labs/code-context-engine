@@ -64,6 +64,24 @@ class Config:
     indexer_watch: bool = True
     indexer_debounce_ms: int = 500
     indexer_ignore: list[str] = field(default_factory=lambda: list(DEFAULT_IGNORE))
+    # When True, the indexer skips well-known credential filenames
+    # (.env*, *.pem, secrets.yml, credentials.json, …) and redacts
+    # AWS/GitHub/JWT/etc. patterns from the content of files it does
+    # index. See indexer/secrets.py for the full pattern list. Default
+    # True; users on non-sensitive corpora can opt out.
+    indexer_redact_secrets: bool = True
+    # When True, memory.db writes (decisions, code_areas, turn_summaries,
+    # session rollups) get PII scrubbed before storage: emails, IPs,
+    # credit cards (Luhn-validated), SSNs, phone numbers. Free-form
+    # session text often captures user data — for regulated industries
+    # this is the difference between "tool" and "compliance blocker".
+    memory_redact_pii: bool = True
+    # When True, every context_search call appends one JSON line to
+    # {storage_base}/audit.log: timestamp, query length, top_k, served
+    # chunks (file:start-end), score range, output compression level.
+    # The query text is hashed (sha256, 12-char prefix) — the log is
+    # for "what did Claude see when?" not "what did the user ask?".
+    audit_log_enabled: bool = False
 
     # Pricing (for savings estimates)
     pricing_model: str = "opus"
@@ -105,6 +123,9 @@ _EXPECTED_TYPES: dict[str, type | tuple[type, ...]] = {
     "indexer_watch": bool,
     "indexer_debounce_ms": int,
     "indexer_ignore": list,
+    "indexer_redact_secrets": bool,
+    "memory_redact_pii": bool,
+    "audit_log_enabled": bool,
     "storage_path": str,
     "pricing_model": str,
 }
@@ -122,6 +143,9 @@ def _apply_dict_to_config(config: Config, data: dict) -> None:
         ("indexer", "watch"): "indexer_watch",
         ("indexer", "debounce_ms"): "indexer_debounce_ms",
         ("indexer", "ignore"): "indexer_ignore",
+        ("indexer", "redact_secrets"): "indexer_redact_secrets",
+        ("memory", "redact_pii"): "memory_redact_pii",
+        ("audit", "enabled"): "audit_log_enabled",
         ("storage", "path"): "storage_path",
         ("pricing", "model"): "pricing_model",
     }

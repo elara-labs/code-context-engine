@@ -2297,6 +2297,141 @@ def sessions_prune(
         )
 
 
+@sessions.command(name="export")
+@click.option(
+    "--since", "since_iso", type=str, default=None,
+    help="Only include rows created on/after this date (YYYY-MM-DD or ISO-8601).",
+)
+@click.option(
+    "--until", "until_iso", type=str, default=None,
+    help="Only include rows created before this date.",
+)
+@click.option(
+    "--format", "fmt", type=click.Choice(["markdown", "json"]),
+    default="markdown", help="Output format.",
+)
+@click.option(
+    "--output", "-o", type=click.Path(dir_okay=False), default=None,
+    help="Write to this file instead of stdout.",
+)
+@click.pass_context
+def sessions_export(
+    ctx: click.Context,
+    since_iso: str | None,
+    until_iso: str | None,
+    fmt: str,
+    output: str | None,
+) -> None:
+    """Export decisions + turn summaries from this project's memory.db.
+
+    Useful for: quarterly reviews, hand-off docs, post-mortem digests,
+    grepping a long-running project's history outside the index. Default
+    is markdown to stdout; pass `--format json` for machine-readable.
+
+    Examples:
+        cce sessions export --since 2026-01-01 -o q1-decisions.md
+        cce sessions export --since 2026-04-01 --until 2026-04-30 --format json
+    """
+    import datetime
+    import json as _json
+    from context_engine.memory import db as memory_db
+
+    config = ctx.obj["config"]
+    project_name = Path.cwd().name
+    storage_base = Path(config.storage_path) / project_name
+    db_path = memory_db.memory_db_path(storage_base)
+    if not db_path.exists():
+        click.echo("  No memory.db for this project — nothing to export.")
+        return
+
+    def _parse(s: str | None) -> int | None:
+        if not s:
+            return None
+        try:
+            # Accept date-only or ISO-8601.
+            if "T" in s:
+                dt = datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
+            else:
+                dt = datetime.datetime.fromisoformat(s)
+            return int(dt.timestamp())
+        except ValueError:
+            raise click.BadParameter(
+                f"could not parse {s!r} as a date — use YYYY-MM-DD or ISO-8601"
+            )
+
+    since_epoch = _parse(since_iso)
+    until_epoch = _parse(until_iso)
+
+    conn = memory_db.connect(db_path)
+    try:
+        where, params = [], []
+        if since_epoch is not None:
+            where.append("created_at_epoch >= ?")
+            params.append(since_epoch)
+        if until_epoch is not None:
+            where.append("created_at_epoch < ?")
+            params.append(until_epoch)
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+
+        decisions = list(conn.execute(
+            f"SELECT decision, reason, created_at, source FROM decisions"
+            f"{clause} ORDER BY created_at_epoch ASC",
+            params,
+        ))
+        turns = list(conn.execute(
+            f"SELECT session_id, prompt_number, summary, tier, created_at_epoch "
+            f"FROM turn_summaries{clause} ORDER BY created_at_epoch ASC",
+            params,
+        ))
+    finally:
+        conn.close()
+
+    if fmt == "json":
+        payload = {
+            "project": project_name,
+            "since": since_iso,
+            "until": until_iso,
+            "decisions": [dict(r) for r in decisions],
+            "turn_summaries": [dict(r) for r in turns],
+        }
+        text = _json.dumps(payload, indent=2, default=str)
+    else:
+        # Markdown — readable digest. Storage form is grammar-compressed;
+        # `_grammar_expand` reverses abbreviations on the way out so the
+        # exported text reads naturally without needing CCE installed.
+        from context_engine.memory.grammar import expand as _expand
+        lines = [f"# {project_name} — session export\n"]
+        if since_iso or until_iso:
+            lines.append(
+                f"_Window: {since_iso or '(beginning)'} → "
+                f"{until_iso or '(now)'}_\n"
+            )
+        lines.append(f"## Decisions ({len(decisions)})\n")
+        for d in decisions:
+            lines.append(f"### {_expand(d['decision'])}")
+            lines.append(f"_{d['created_at']} · source={d['source']}_\n")
+            if d["reason"]:
+                lines.append(f"{_expand(d['reason'])}\n")
+        lines.append(f"\n## Turn Summaries ({len(turns)})\n")
+        for t in turns:
+            iso = datetime.datetime.fromtimestamp(
+                t["created_at_epoch"], tz=datetime.UTC,
+            ).isoformat(timespec="seconds")
+            lines.append(
+                f"- **{iso}** · session `{t['session_id'][:8]}` · "
+                f"turn {t['prompt_number']} · {t['tier']}: "
+                f"{_expand(t['summary'])}"
+            )
+        text = "\n".join(lines) + "\n"
+
+    if output:
+        Path(output).write_text(text, encoding="utf-8")
+        click.echo(f"  ✓ Wrote {len(decisions)} decision(s) + "
+                   f"{len(turns)} turn(s) to {output}")
+    else:
+        click.echo(text)
+
+
 @sessions.command(name="migrate")
 @click.option(
     "--no-archive",

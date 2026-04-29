@@ -554,6 +554,36 @@ def search_turn_summaries_vec(
     return [r["rowid"] for r in rows if r["distance"] <= max_distance]
 
 
+# ── PII redaction toggle ────────────────────────────────────────────────────
+# Set at process start by the MCP server / CLI from `Config.memory_redact_pii`.
+# Defaults to True so a misconfigured caller errs on the side of redaction.
+# Stored as module-level state because the write helpers are called from
+# many entry points (mcp_server, compressor, migrate) without easy access
+# to the live Config — and the value never changes within a process.
+_PII_REDACTION_ENABLED = True
+
+
+def set_pii_redaction(enabled: bool) -> None:
+    """Toggle PII scrubbing globally for memory.db writes."""
+    global _PII_REDACTION_ENABLED
+    _PII_REDACTION_ENABLED = bool(enabled)
+
+
+def scrub_pii(text: str) -> str:
+    """Apply PII redaction (emails / IPs / SSNs / cards / phones) when
+    enabled. Returns the original text unchanged when off, or the input
+    is empty. Centralised so every memory.db write goes through one
+    place — wrapping each INSERT site directly was error-prone.
+    """
+    if not text or not _PII_REDACTION_ENABLED:
+        return text
+    from context_engine.indexer.secrets import redact_pii as _redact_pii
+    out, fired = _redact_pii(text)
+    if fired:
+        log.debug("memory: scrubbed %s from incoming text", ",".join(sorted(set(fired))))
+    return out
+
+
 # ── Savings ledger ──────────────────────────────────────────────────────────
 
 # Canonical bucket names — keep in sync with the renderer in cli.py.
@@ -704,6 +734,108 @@ def prune_old_payloads(conn, *, days: int = 30) -> dict[str, int]:
     return {"payloads_pruned": len(ids), "bytes_freed_estimate": bytes_freed}
 
 
+# ── Row-level retention for memory tables ──────────────────────────────────
+# Defaults err on the generous side — a 6-month-old decision can still be
+# valuable, but unbounded growth eventually drops recall quality. Override
+# via config (memory_decision_retention_days, etc.) or by passing different
+# values to prune_old_rows() in tests.
+DEFAULT_TURN_RETENTION_DAYS = 180        # 6 months
+DEFAULT_DECISION_RETENTION_DAYS = 365    # 1 year — decisions tend to be load-bearing
+DEFAULT_CODE_AREA_RETENTION_DAYS = 180   # 6 months
+DEFAULT_AUTO_ARCHIVE = True              # write rows to a json file before delete
+
+
+def prune_old_rows(
+    conn: sqlite3.Connection,
+    *,
+    storage_base,
+    turn_days: int = DEFAULT_TURN_RETENTION_DAYS,
+    decision_days: int = DEFAULT_DECISION_RETENTION_DAYS,
+    code_area_days: int = DEFAULT_CODE_AREA_RETENTION_DAYS,
+    archive: bool = DEFAULT_AUTO_ARCHIVE,
+) -> dict[str, int]:
+    """Delete decisions / turn_summaries / code_areas older than the
+    configured TTLs. Optionally archives deleted rows to a JSON file
+    under `storage_base/archives/` before deletion, so power users can
+    grep history that's no longer indexed.
+
+    Returns counts: {"decisions_pruned", "turns_pruned", "code_areas_pruned"}.
+
+    Recall guard: rows referenced by a `decisions_vec` / `turn_summaries_vec`
+    entry are NOT skipped — vec triggers (see `_vec_trigger_stmts`) cascade
+    the delete cleanly. The bigger risk is deleting a row that just
+    surfaced in a recall hit, but we don't track per-row recall timestamps;
+    the long retention defaults make that vanishingly unlikely.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+    counts = {"decisions_pruned": 0, "turns_pruned": 0, "code_areas_pruned": 0}
+    cutoffs = {
+        "turn_summaries": int(time.time()) - turn_days * 86400,
+        "decisions":      int(time.time()) - decision_days * 86400,
+        "code_areas":     int(time.time()) - code_area_days * 86400,
+    }
+
+    archive_dir = _Path(storage_base) / "archives"
+    if archive:
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        ts = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
+        archive_path = archive_dir / f"pruned-{ts}.json"
+    else:
+        archive_path = None
+
+    archived: dict[str, list[dict]] = {}
+
+    def _harvest_and_delete(table: str, columns: list[str], cutoff: int) -> int:
+        col_list = ", ".join(columns)
+        rows = conn.execute(
+            f"SELECT {col_list} FROM {table} WHERE created_at_epoch < ?",
+            (cutoff,),
+        ).fetchall()
+        if not rows:
+            return 0
+        if archive:
+            archived[table] = [dict(r) for r in rows]
+        conn.execute(
+            f"DELETE FROM {table} WHERE created_at_epoch < ?",
+            (cutoff,),
+        )
+        return len(rows)
+
+    counts["turns_pruned"] = _harvest_and_delete(
+        "turn_summaries",
+        ["id", "session_id", "prompt_number", "summary", "tier", "created_at_epoch"],
+        cutoffs["turn_summaries"],
+    )
+    counts["decisions_pruned"] = _harvest_and_delete(
+        "decisions",
+        ["id", "session_id", "decision", "reason", "source",
+         "created_at_epoch", "created_at"],
+        cutoffs["decisions"],
+    )
+    counts["code_areas_pruned"] = _harvest_and_delete(
+        "code_areas",
+        ["id", "session_id", "file_path", "description", "source", "created_at_epoch"],
+        cutoffs["code_areas"],
+    )
+    conn.commit()
+
+    if archive and archived and archive_path is not None:
+        try:
+            archive_path.write_text(_json.dumps(archived, indent=2, default=str))
+            log.info("memory: archived pruned rows to %s", archive_path)
+        except OSError as exc:
+            log.warning("memory: archive write failed (%s); rows still deleted", exc)
+
+    total = sum(counts.values())
+    if total:
+        log.info(
+            "memory: pruned %d row(s) across decisions/turns/code_areas",
+            total,
+        )
+    return counts
+
+
 # Defaults exposed so tests can inject smaller values without monkey-patching.
 AUTO_PRUNE_INITIAL_DELAY_SECONDS = 120  # stagger past vec backfill / compress
 AUTO_PRUNE_INTERVAL_SECONDS = 86_400  # one pass per day
@@ -749,7 +881,9 @@ async def auto_prune_loop(
             def _do_prune():
                 conn = connect(db_path)
                 try:
-                    return prune_old_payloads(conn, days=days)
+                    payload = prune_old_payloads(conn, days=days)
+                    rows = prune_old_rows(conn, storage_base=Path(storage_base))
+                    return {**payload, **rows}
                 finally:
                     conn.close()
             out = await asyncio.to_thread(_do_prune)
@@ -758,6 +892,20 @@ async def auto_prune_loop(
                     "auto-prune: aged out %d raw payloads (~%d KB)",
                     out["payloads_pruned"],
                     out["bytes_freed_estimate"] // 1024,
+                )
+            row_total = (
+                out.get("decisions_pruned", 0)
+                + out.get("turns_pruned", 0)
+                + out.get("code_areas_pruned", 0)
+            )
+            if row_total:
+                log.info(
+                    "auto-prune: removed %d expired memory rows "
+                    "(decisions=%d turns=%d code_areas=%d)",
+                    row_total,
+                    out.get("decisions_pruned", 0),
+                    out.get("turns_pruned", 0),
+                    out.get("code_areas_pruned", 0),
                 )
         except asyncio.CancelledError:
             raise
