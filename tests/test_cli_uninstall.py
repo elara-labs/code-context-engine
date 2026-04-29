@@ -81,3 +81,38 @@ def test_uninstall_deletes_claude_md_when_only_cce_block(runner, tmp_path):
     result = _run_uninstall_in(runner, project_dir)
     assert result.exit_code == 0, result.output
     assert not (project_dir / "CLAUDE.md").exists()
+
+
+def test_uninstall_deletes_mcp_json_when_only_cce(runner, tmp_path):
+    """If .mcp.json only has context-engine, the file is deleted entirely."""
+    import json
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    mcp_data = {"mcpServers": {"context-engine": {"command": "cce", "args": ["serve"]}}}
+    (project_dir / ".mcp.json").write_text(json.dumps(mcp_data))
+
+    result = _run_uninstall_in(runner, project_dir)
+    assert result.exit_code == 0, result.output
+    assert not (project_dir / ".mcp.json").exists()
+    assert "Removed .mcp.json" in result.output
+
+
+def test_uninstall_keeps_mcp_json_with_other_servers(runner, tmp_path):
+    """If .mcp.json has other servers, only CCE entry is removed."""
+    import json
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    mcp_data = {
+        "mcpServers": {
+            "context-engine": {"command": "cce", "args": ["serve"]},
+            "other-tool": {"command": "other", "args": []},
+        }
+    }
+    (project_dir / ".mcp.json").write_text(json.dumps(mcp_data))
+
+    result = _run_uninstall_in(runner, project_dir)
+    assert result.exit_code == 0, result.output
+    assert (project_dir / ".mcp.json").exists()
+    remaining = json.loads((project_dir / ".mcp.json").read_text())
+    assert "context-engine" not in remaining["mcpServers"]
+    assert "other-tool" in remaining["mcpServers"]

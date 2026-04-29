@@ -1736,8 +1736,14 @@ def uninstall() -> None:
             servers = mcp_data.get("mcpServers", {})
             if "context-engine" in servers:
                 del servers["context-engine"]
-                mcp_path.write_text(json.dumps(mcp_data, indent=2) + "\n")
-                lines.append(f"    {CROSS} {warn('Removed')} context-engine from .mcp.json")
+                if servers:
+                    # Other MCP servers remain, keep the file
+                    mcp_path.write_text(json.dumps(mcp_data, indent=2) + "\n")
+                    lines.append(f"    {CROSS} {warn('Removed')} context-engine from .mcp.json")
+                else:
+                    # CCE was the only server, delete the file
+                    mcp_path.unlink()
+                    lines.append(f"    {CROSS} {warn('Removed')} .mcp.json")
             else:
                 lines.append(f"    {DOT} {dim('No CCE entry in .mcp.json')}")
         except (json.JSONDecodeError, OSError):
