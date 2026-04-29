@@ -35,6 +35,11 @@ retrieval:
 
 embedding:
   model: BAAI/bge-small-en-v1.5  # Embedding model (fastembed-compatible)
+
+pricing:
+  model: opus              # Which Claude model to use for cost estimates in `cce savings`
+                           # Options: opus | sonnet | haiku
+                           # Prices are fetched from Anthropic's docs and cached for 7 days
 ```
 
 ---

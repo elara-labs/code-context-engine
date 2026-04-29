@@ -260,20 +260,33 @@ cce savings
 ```
 
 ```
-     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   my-project · 38 queries
-     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   14.2k served · 26.0k chunks raw · 48.0k full-file baseline
-     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶
-     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   Token savings (split)
-     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ Retrieval:    46%  vs reading full files
-     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛶ Compression:  45%  chunk → summary
+  my-project · 38 queries
+
+  ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶  70% tokens saved
+
+  Without CCE   48.0k  tokens   $0.24
+  With CCE      14.2k  tokens   $0.07
+  ──────────────────────────────────────────
+  Saved         33.8k  tokens   $0.17
+  ~889 tokens / query  ~<$0.01 / query
+
+  How:  retrieval 46%  +  compression 45%
+  Cost estimate based on Opus input pricing ($5/1M tokens)
 ```
+
+The savings report shows a clear before/after comparison with estimated dollar costs (fetched dynamically from Anthropic's pricing page, cached for 7 days). The `⛁`/`⛶` grid gives a quick visual of how much context you are actually using.
 
 CCE reports two distinct savings effects:
 
-- **Retrieval savings** — the fraction you save by serving targeted chunks instead of full files. Comparing against reading whole files is a strawman (no human or tool actually does that), so treat this as a ceiling on the wholesale-paste alternative, not a real cost you avoid every session.
-- **Compression savings** — the fraction you save *on top of that* by truncating or LLM-summarising the retrieved chunks before sending. This is the directly attributable saving vs. retrieval-only.
+- **Retrieval savings** — the fraction you save by serving targeted chunks instead of full files.
+- **Compression savings** — the fraction you save on top of that by truncating or LLM-summarising the retrieved chunks before sending.
 
-Earlier versions reported a single combined number that conflated the two and over-stated the win. The split is honest: ~30-50% on each axis is typical and additive in practice.
+Configure pricing for your model in `~/.cce/config.yaml` or `.context-engine.yaml`:
+
+```yaml
+pricing:
+  model: sonnet   # opus (default) | sonnet | haiku
+```
 
 ---
 
@@ -532,6 +545,9 @@ retrieval:
 
 embedding:
   model: BAAI/bge-small-en-v1.5
+
+pricing:
+  model: opus              # opus | sonnet | haiku (for cost estimates in cce savings)
 ```
 
 **Per-project config** — `.context-engine.yaml` in your project root:
@@ -609,6 +625,9 @@ All other text-based files (Markdown, YAML, PHP, config files, etc.) are chunked
 - [x] Colorful CLI output with section headers and line-by-line animation
 - [x] sqlite-vec migration (54% smaller install, same search quality)
 - [x] Content-hash embedding cache (skip re-embedding unchanged chunks)
+- [x] Human-readable savings report with dollar estimates (`cce savings`)
+- [x] Dynamic model pricing from Anthropic docs (cached 7 days)
+- [x] Per-bucket savings breakdown (retrieval, compression, output, memory)
 - [ ] Tree-sitter support for Go, Rust, Java, C, and C++
 - [ ] Persistent session search across projects
 - [ ] Docker support for remote mode

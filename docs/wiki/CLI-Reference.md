@@ -269,7 +269,7 @@ USE context_search MCP tool for all code questions. Do NOT use Read/Grep to expl
 
 ## cce savings
 
-Visual token savings report.
+Human-readable token savings report with cost estimates.
 
 ```bash
 cce savings
@@ -278,15 +278,29 @@ cce savings
 **Expected output:**
 
 ```
-     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   my-project · 42 queries
-     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   14.2k served · 26.0k chunks raw · 48.0k full-file baseline
-     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶
-     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   Token savings (split)
-     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ Retrieval:    46%  vs reading full files
-     ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛶ Compression:  45%  chunk → summary
+  my-project · 42 queries
+
+  ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶  70% tokens saved
+
+  Without CCE   48.0k  tokens   $0.24
+  With CCE      14.2k  tokens   $0.07
+  ──────────────────────────────────────────
+  Saved         33.8k  tokens   $0.17
+  ~804 tokens / query  ~<$0.01 / query
+
+  How:  retrieval 46%  +  compression 45%
+  Cost estimate based on Opus input pricing ($5/1M tokens)
 ```
 
-The filled grid cells (`⛁`) represent tokens used. Empty cells (`⛶`) represent tokens saved. CCE reports retrieval savings (targeted chunks vs full files) and compression savings (summarized chunks vs raw chunks) separately.
+The filled grid cells (`⛁`) represent tokens used. Empty cells (`⛶`) represent tokens saved. Dollar estimates are based on the configured model's input pricing, fetched dynamically from Anthropic's docs and cached for 7 days.
+
+**Configure pricing model:**
+
+```yaml
+# ~/.cce/config.yaml or .context-engine.yaml
+pricing:
+  model: sonnet   # opus (default) | sonnet | haiku
+```
 
 **Variants:**
 
@@ -307,6 +321,8 @@ cce savings --json
   "served_tokens": 14200,
   "raw_tokens": 26000,
   "full_file_tokens": 48000,
+  "tokens_saved": 33800,
+  "savings_pct": 70,
   "retrieval_savings_pct": 46,
   "compression_savings_pct": 45
 }
