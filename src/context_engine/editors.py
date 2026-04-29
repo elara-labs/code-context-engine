@@ -1,7 +1,8 @@
 """Multi-editor MCP configuration.
 
 Detects installed editors and writes MCP server config in each editor's
-format. Supports Claude Code, VS Code/Copilot, Cursor, and Gemini CLI.
+format. Supports Claude Code, VS Code/Copilot, Cursor, Gemini CLI, and
+OpenAI Codex CLI.
 """
 from __future__ import annotations
 
@@ -12,31 +13,42 @@ from context_engine.utils import atomic_write_text, resolve_cce_binary
 
 
 # ── Editor definitions ────────────────────────────────────────────────
+# format: "json" (default) or "toml" for Codex
 
 EDITORS: dict[str, dict] = {
     "claude": {
         "name": "Claude Code",
-        "config_path": ".mcp.json",           # relative to project
+        "config_path": ".mcp.json",
         "servers_key": "mcpServers",
-        "detect": [".mcp.json"],               # files that indicate this editor
+        "format": "json",
+        "detect": [".mcp.json"],
     },
     "vscode": {
         "name": "VS Code / Copilot",
         "config_path": ".vscode/mcp.json",
         "servers_key": "servers",
+        "format": "json",
         "detect": [".vscode"],
     },
     "cursor": {
         "name": "Cursor",
         "config_path": ".cursor/mcp.json",
         "servers_key": "mcpServers",
+        "format": "json",
         "detect": [".cursor", ".cursorrules"],
     },
     "gemini": {
         "name": "Gemini CLI",
         "config_path": ".gemini/settings.json",
         "servers_key": "mcpServers",
+        "format": "json",
         "detect": [".gemini", "GEMINI.md"],
+    },
+    "codex": {
+        "name": "OpenAI Codex",
+        "config_path": ".codex/config.toml",
+        "format": "toml",
+        "detect": [".codex"],
     },
 }
 
@@ -100,15 +112,25 @@ def detect_editors(project_dir: Path) -> list[str]:
     return found
 
 
+def _codex_toml_block(command: str, project_dir: str) -> str:
+    """Generate the TOML block for Codex CLI's config.toml."""
+    args_toml = ", ".join(f'"{a}"' for a in ["serve", "--project-dir", project_dir])
+    return f'[mcp_servers.context-engine]\ncommand = "{command}"\nargs = [{args_toml}]\n'
+
+
 def configure_mcp(project_dir: Path, editor_key: str) -> bool:
     """Write MCP config for a specific editor. Returns True if changed."""
     editor = EDITORS[editor_key]
     config_path = project_dir / editor["config_path"]
-    servers_key = editor["servers_key"]
     command = resolve_cce_binary()
-    entry = {"command": command, "args": ["serve", "--project-dir", str(project_dir)]}
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if editor.get("format") == "toml":
+        return _configure_toml(config_path, command, str(project_dir))
+
+    servers_key = editor["servers_key"]
+    entry = {"command": command, "args": ["serve", "--project-dir", str(project_dir)]}
 
     if config_path.exists():
         try:
@@ -132,15 +154,33 @@ def configure_mcp(project_dir: Path, editor_key: str) -> bool:
     return True
 
 
+def _configure_toml(config_path: Path, command: str, project_dir: str) -> bool:
+    """Add CCE to a TOML config file (Codex). Returns True if changed."""
+    block = _codex_toml_block(command, project_dir)
+    marker = "[mcp_servers.context-engine]"
+
+    if config_path.exists():
+        content = config_path.read_text()
+        if marker in content:
+            return False  # already configured
+        config_path.write_text(content.rstrip() + "\n\n" + block)
+    else:
+        config_path.write_text(block)
+    return True
+
+
 def remove_mcp(project_dir: Path, editor_key: str) -> str | None:
     """Remove CCE from an editor's MCP config. Returns status message or None."""
     editor = EDITORS[editor_key]
     config_path = project_dir / editor["config_path"]
-    servers_key = editor["servers_key"]
 
     if not config_path.exists():
         return None
 
+    if editor.get("format") == "toml":
+        return _remove_toml(config_path, editor["config_path"])
+
+    servers_key = editor["servers_key"]
     try:
         data = json.loads(config_path.read_text())
         servers = data.get(servers_key, {})
@@ -155,6 +195,25 @@ def remove_mcp(project_dir: Path, editor_key: str) -> str | None:
             return f"Removed {editor['config_path']}"
     except (json.JSONDecodeError, OSError):
         return None
+
+
+def _remove_toml(config_path: Path, display_path: str) -> str | None:
+    """Remove CCE block from a TOML config file."""
+    import re
+    content = config_path.read_text()
+    marker = "[mcp_servers.context-engine]"
+    if marker not in content:
+        return None
+
+    # Remove the [mcp_servers.context-engine] block (until next section header or EOF)
+    pattern = r"\[mcp_servers\.context-engine\].*?(?=\n\[|$)"
+    new_content = re.sub(pattern, "", content, flags=re.DOTALL).strip()
+    if new_content:
+        config_path.write_text(new_content + "\n")
+        return f"Removed context-engine from {display_path}"
+    else:
+        config_path.unlink()
+        return f"Removed {display_path}"
 
 
 def write_instruction_file(project_dir: Path, file_key: str) -> bool:

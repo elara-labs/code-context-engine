@@ -5,7 +5,7 @@
 <h1 align="center">Code Context Engine</h1>
 
 <p align="center">
-  <strong>Claude re-reads your code every session. Make it stop. Save 70%+ on tokens.</strong>
+  <strong>Index your codebase. AI searches instead of re-reading files. Save 70%+ on tokens.</strong>
 </p>
 
 <p align="center">
@@ -17,8 +17,16 @@
 </p>
 
 <p align="center">
-  One command. Index your codebase. Claude searches instead of reading entire files.<br>
-  Local, zero-cloud, zero-config. Runs on any laptop.
+  <img src="https://img.shields.io/badge/Claude_Code-black?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code">
+  <img src="https://img.shields.io/badge/VS_Code-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="VS Code">
+  <img src="https://img.shields.io/badge/Cursor-000000?style=for-the-badge&logo=cursor&logoColor=white" alt="Cursor">
+  <img src="https://img.shields.io/badge/Gemini_CLI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Gemini CLI">
+  <img src="https://img.shields.io/badge/Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white" alt="Codex CLI">
+</p>
+
+<p align="center">
+  One command. Index your codebase. Your AI coding agent searches instead of reading entire files.<br>
+  Works with Claude Code, Cursor, VS Code, Gemini CLI, and OpenAI Codex. Local, zero-cloud.
 </p>
 
 <p align="center">
@@ -45,6 +53,7 @@ Restart your editor. Done. Every question now hits the index instead of re-readi
 | VS Code / Copilot | `.vscode/mcp.json` | |
 | Cursor | `.cursor/mcp.json` | `.cursorrules` |
 | Gemini CLI | `.gemini/settings.json` | `GEMINI.md` |
+| OpenAI Codex | `.codex/config.toml` | |
 
 Multiple editors in the same project? All get configured in one command.
 
