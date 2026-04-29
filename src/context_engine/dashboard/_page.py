@@ -1075,7 +1075,7 @@ async function loadMemorySessions() {
     box.innerHTML = rows.map(function(s) {
       var rollup = (s.rollup_summary || '').slice(0, 80);
       return ''
-        + '<div class="table-row" onclick="loadMemoryTimeline(\''+_esc(s.id)+'\')" style="cursor:pointer">'
+        + '<div class="table-row" onclick="loadMemoryTimeline(\\\''+_esc(s.id)+'\\\')" style="cursor:pointer">'
         +   '<div><code>'+_esc(s.id)+'</code></div>'
         +   '<div>'+_esc(s.started_at||'')+'</div>'
         +   '<div>'+_esc(s.status||'')+'</div>'
