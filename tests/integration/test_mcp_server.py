@@ -81,6 +81,48 @@ def test_recall_display_cap_invalid_falls_back(monkeypatch):
     assert _recall_display_cap() == 7
 
 
+def test_audit_log_no_op_when_disabled(tmp_path):
+    """Audit log writes only when config.audit_log_enabled is True."""
+    server = _make_server(tmp_path)
+    server._session_id = "test-session"
+    server._config.audit_log_enabled = False
+    server._append_audit_log(
+        query="hello world", top_k=10,
+        served_chunks=[], score_range=None,
+    )
+    assert not (tmp_path / "audit.log").exists()
+
+
+def test_audit_log_writes_one_jsonline_per_call(tmp_path):
+    """When enabled, each call appends one well-formed JSON line."""
+    import json as _json
+    server = _make_server(tmp_path)
+    server._session_id = "test-session"
+    server._config.audit_log_enabled = True
+    server._append_audit_log(
+        query="how does auth work?", top_k=7,
+        served_chunks=[
+            {"file": "src/auth.py", "lines": "10-40", "score": 0.812, "kind": "inline"},
+        ],
+        score_range=(0.812, 0.812),
+    )
+    server._append_audit_log(
+        query="another query", top_k=5,
+        served_chunks=[], score_range=None,
+    )
+    audit = (tmp_path / "audit.log").read_text().strip().splitlines()
+    assert len(audit) == 2
+    entry = _json.loads(audit[0])
+    assert entry["session_id"] == "test-session"
+    assert entry["top_k"] == 7
+    assert entry["query_len"] == len("how does auth work?")
+    # Query text is hashed (12-char prefix), never stored raw.
+    assert "auth" not in entry["query_hash"]
+    assert len(entry["query_hash"]) == 12
+    assert entry["served"][0]["file"] == "src/auth.py"
+    assert entry["score_range"] == [0.812, 0.812]
+
+
 @pytest.mark.asyncio
 async def test_index_status_no_queries(tmp_path):
     server = _make_server(tmp_path)

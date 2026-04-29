@@ -64,6 +64,10 @@ def compress_turn(
     summary, tier = _summarise(text, embedder=embedder, top_k=_DEFAULT_TURN_TOP_K)
     extractive_tokens = _approx_tokens(summary)
     if summary:
+        # Scrub PII before grammar compression — emails / IPs / SSNs that
+        # leaked into a turn (the user pasted a real value into a prompt
+        # or tool input) shouldn't end up indexed in turn_summaries.
+        summary = memory_db.scrub_pii(summary)
         summary, gram_raw, gram_comp = _grammar_compress_counted(
             summary, level=_GRAMMAR_LEVEL,
         )
@@ -117,6 +121,11 @@ def compress_session_rollup(
     else:
         rollup, tier = _summarise(text, embedder=embedder, top_k=_DEFAULT_ROLLUP_TOP_K)
         extractive_tokens = _approx_tokens(rollup)
+        # Belt-and-braces PII scrub on the rollup. Each turn summary
+        # already went through scrub_pii in compress_turn(), but the
+        # rollup is the long-lived "canonical history" view of a
+        # session — worth re-scrubbing in case a turn slipped through.
+        rollup = memory_db.scrub_pii(rollup)
         # Re-pass through grammar — turn summaries are already compressed,
         # so this is mostly idempotent, but extractive may concatenate
         # sentences with newlines that re-introduce articles via the join

@@ -180,14 +180,37 @@ class IndexResult:
 
 
 def _iter_project_files(
-    root: Path, ignore_set: set[str], skip_extensions: set[str]
+    root: Path,
+    ignore_set: set[str],
+    skip_extensions: set[str],
+    *,
+    redact_secrets: bool = True,
+    cceignore_patterns: list[str] | None = None,
 ) -> Iterable[Path]:
     """Yield files under `root` respecting ignore list, skipping symlinks.
 
     Symlinks are skipped outright to avoid loops; callers who need symlink
     following can resolve them before calling the pipeline.
+
+    When `redact_secrets` is True (default), filenames matching well-known
+    credential patterns (.env*, *.pem, secrets.yml, etc.) are skipped at
+    the filesystem walk so they're never read or embedded. See
+    `indexer/secrets.py` for the full pattern list.
+
+    `cceignore_patterns` (typically loaded from `.cceignore`) supplements
+    the name-only `ignore_set` with gitignore-style globs evaluated
+    against the path relative to `root`.
     """
+    from context_engine.indexer.secrets import is_secret_file as _is_secret_file
+    from context_engine.indexer.ignorefile import matches_any as _ignore_matches
+    patterns = cceignore_patterns or []
     seen: set[Path] = set()
+
+    def _rel(entry: Path) -> str:
+        try:
+            return str(entry.relative_to(root)).replace("\\", "/")
+        except ValueError:
+            return entry.name
 
     def walk(directory: Path) -> Iterable[Path]:
         try:
@@ -206,9 +229,17 @@ def _iter_project_files(
             if resolved in seen:
                 continue
             seen.add(resolved)
+            # Evaluate .cceignore against the path relative to project root.
+            # Done after symlink/seen checks so we don't pay the cost on
+            # files we'd skip anyway.
+            if patterns and _ignore_matches(_rel(entry), entry.is_dir(), patterns):
+                continue
             if entry.is_dir():
                 yield from walk(entry)
             elif entry.is_file() and entry.suffix not in skip_extensions:
+                if redact_secrets and _is_secret_file(entry):
+                    log.info("indexer: skipping secret file %s", entry)
+                    continue
                 yield entry
 
     yield from walk(root)
@@ -293,6 +324,12 @@ async def _run_indexing_locked(
     chunker = Chunker()
     manifest = Manifest(manifest_path=storage_base / "manifest.json")
     ignore_set = set(config.indexer_ignore)
+    # Load .cceignore once per indexing run. Patterns are evaluated against
+    # paths relative to project_dir; see indexer/ignorefile.py.
+    from context_engine.indexer.ignorefile import load_ignore_patterns
+    cceignore_patterns = load_ignore_patterns(project_dir)
+    if cceignore_patterns and log_fn:
+        log_fn(f"  [.cceignore] {len(cceignore_patterns)} pattern(s) loaded")
     result = IndexResult()
 
     # Determine the set of files to scan.
@@ -301,12 +338,20 @@ async def _run_indexing_locked(
         if target.is_file():
             file_iter = [target] if target.suffix not in _SKIP_EXTENSIONS else []
         elif target.is_dir():
-            file_iter = list(_iter_project_files(target, ignore_set, _SKIP_EXTENSIONS))
+            file_iter = list(_iter_project_files(
+                target, ignore_set, _SKIP_EXTENSIONS,
+                redact_secrets=getattr(config, "indexer_redact_secrets", True),
+                cceignore_patterns=cceignore_patterns,
+            ))
         else:
             result.errors.append(f"Target path not found: {target_path}")
             return result
     else:
-        file_iter = list(_iter_project_files(project_dir, ignore_set, _SKIP_EXTENSIONS))
+        file_iter = list(_iter_project_files(
+            project_dir, ignore_set, _SKIP_EXTENSIONS,
+            redact_secrets=getattr(config, "indexer_redact_secrets", True),
+            cceignore_patterns=cceignore_patterns,
+        ))
 
     current_rel_paths: set[str] = set()
     all_chunks: list = []
@@ -349,6 +394,23 @@ async def _run_indexing_locked(
                 if log_fn:
                     log_fn(f"  [skip] {rel_path} (binary or unreadable)")
                 continue
+
+            # Content-level secret redaction. Filename-level skipping
+            # already happened in `_iter_project_files`, so a file
+            # reaching this point is "indexable" — but the file might
+            # still contain inline credentials (an AWS key in a config
+            # comment, a JWT in a fixture). Redact those before they
+            # reach the chunker, embedder, or vector store.
+            if getattr(config, "indexer_redact_secrets", True):
+                from context_engine.indexer.secrets import redact_secrets
+                content, fired = redact_secrets(content)
+                if fired:
+                    log.info(
+                        "indexer: redacted %d secret(s) in %s (kinds: %s)",
+                        len(fired), rel_path, ",".join(sorted(set(fired))),
+                    )
+                    if log_fn:
+                        log_fn(f"  [redact] {rel_path} ({len(fired)} secret(s))")
 
             content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
             if not full and not manifest.has_changed(rel_path, content_hash):

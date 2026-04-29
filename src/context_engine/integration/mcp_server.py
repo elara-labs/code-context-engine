@@ -361,6 +361,10 @@ class ContextEngineMCP:
         self._compressor = compressor
         self._embedder = embedder
         self._config = config
+        # Propagate the PII-redaction toggle to the memory module's
+        # process-global state. Done at MCPServer boot — the compressor
+        # and migrate paths read from the same module-level flag.
+        memory_db.set_pii_redaction(getattr(config, "memory_redact_pii", True))
         self._server = Server("code-context-engine")
 
         project_name = Path.cwd().name
@@ -496,6 +500,44 @@ class ContextEngineMCP:
                 f.write(entry)
         except OSError:
             pass
+
+    def _append_audit_log(
+        self,
+        *,
+        query: str,
+        top_k: int,
+        served_chunks: list[dict],
+        score_range: tuple[float, float] | None,
+    ) -> None:
+        """Structured audit trail — one JSON line per context_search.
+
+        Off by default; turned on via config.audit_log_enabled. The query
+        text itself is hashed (12-char sha256 prefix), not stored — the
+        log answers "what did Claude see and when?" for compliance, not
+        "what did the user ask?". Also logs the active output-compression
+        level so audits can correlate retrieval with response shape.
+        """
+        if not getattr(self._config, "audit_log_enabled", False):
+            return
+        import datetime
+        import hashlib
+        try:
+            query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()[:12]
+            entry = {
+                "ts": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+                "session_id": self._session_id,
+                "query_hash": query_hash,
+                "query_len": len(query),
+                "top_k": int(top_k),
+                "served": served_chunks,
+                "score_range": list(score_range) if score_range else None,
+                "output_level": self._output_level,
+            }
+            audit_path = self._storage_base / "audit.log"
+            with audit_path.open("a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except OSError as exc:
+            self._append_error_log(f"_append_audit_log failed: {exc}")
 
     def _append_error_log(self, msg: str) -> None:
         import datetime
@@ -893,6 +935,31 @@ class ContextEngineMCP:
         body = _format_results_with_overflow(inline_chunks, overflow_chunks)
         body = self._apply_output_compression(body)
         self._record(raw_tokens, served_tokens, full_file_tokens)
+        # Compliance audit log — file:line refs of every served chunk + the
+        # score range. Off by default; enable via config.audit_log_enabled.
+        served_refs = [
+            {
+                "file": c.file_path,
+                "lines": f"{c.start_line}-{c.end_line}",
+                "score": round(float(getattr(c, "final_score", 0.0)), 3),
+                "kind": "inline",
+            }
+            for c in inline_chunks
+        ] + [
+            {
+                "file": c.file_path,
+                "lines": f"{c.start_line}-{c.end_line}",
+                "score": round(float(getattr(c, "final_score", 0.0)), 3),
+                "kind": "overflow",
+            }
+            for c in overflow_chunks
+        ]
+        scores = [r["score"] for r in served_refs if r["score"] > 0]
+        score_range = (min(scores), max(scores)) if scores else None
+        self._append_audit_log(
+            query=query, top_k=top_k,
+            served_chunks=served_refs, score_range=score_range,
+        )
         return [TextContent(type="text", text=body)]
 
     def _estimate_full_file_tokens(self, file_paths: set[str]) -> int:
@@ -1033,6 +1100,12 @@ class ContextEngineMCP:
         reason = (args.get("reason") or "").strip()
         if not decision:
             return [TextContent(type="text", text="decision is required.")]
+        # Scrub PII (emails / IPs / SSNs / cards / phones) before any
+        # downstream write — JSON session capture AND memory.db both
+        # consume these strings, so this needs to happen at the entry
+        # point, not deep in the dual-write block.
+        decision = memory_db.scrub_pii(decision)
+        reason = memory_db.scrub_pii(reason)
         self._session_capture.record_decision(self._session_id, decision, reason)
         self._persist_current_session()
         # Dual-write into memory.db. `decision` and `reason` are compressed
@@ -1085,6 +1158,10 @@ class ContextEngineMCP:
         description = (args.get("description") or "").strip()
         if not file_path:
             return [TextContent(type="text", text="file_path is required.")]
+        # Scrub PII from the free-form description; file_path is a
+        # structured token (path) that the redactor would mangle and
+        # almost never carries PII.
+        description = memory_db.scrub_pii(description)
         self._session_capture.record_code_area(
             self._session_id, file_path, description
         )
