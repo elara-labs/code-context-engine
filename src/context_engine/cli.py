@@ -655,12 +655,35 @@ def init(ctx: click.Context) -> None:
         _warn("Not a git repository — git hook skipped")
         click.echo(_dim("    Run `cce index` manually after making changes."))
 
-    # 4. MCP config
+    # 4. MCP config — Claude Code + any detected editors
+    from context_engine.editors import (
+        EDITORS, INSTRUCTION_FILES,
+        detect_editors, configure_mcp, write_instruction_file,
+    )
     configured = _configure_mcp(project_dir)
     if configured:
         _ok("MCP server registered in " + click.style(".mcp.json", fg="cyan"))
     else:
         _ok("MCP server already configured in " + click.style(".mcp.json", fg="cyan"))
+
+    # Configure MCP for other detected editors (Cursor, VS Code, Gemini)
+    detected = detect_editors(project_dir)
+    for editor_key in detected:
+        if editor_key == "claude":
+            continue  # already handled above
+        editor = EDITORS[editor_key]
+        if configure_mcp(project_dir, editor_key):
+            _ok(f"MCP server registered for {editor['name']}")
+        else:
+            _ok(f"MCP server already configured for {editor['name']}")
+
+    # Write instruction files for detected editors
+    for file_key, info in INSTRUCTION_FILES.items():
+        for marker in info["detect"]:
+            if (project_dir / marker).exists():
+                if write_instruction_file(project_dir, file_key):
+                    _ok(f"CCE instructions added to {info['name']}")
+                break
 
     # 5. CLAUDE.md + session hook + memory lifecycle hooks
     _ensure_claude_md(project_dir)
@@ -1728,28 +1751,19 @@ def uninstall() -> None:
     else:
         lines.append(f"    {DOT} {dim('No CCE git hooks found')}")
 
-    # Remove from .mcp.json
-    mcp_path = project_dir / ".mcp.json"
-    if mcp_path.exists():
-        try:
-            mcp_data = json.loads(mcp_path.read_text())
-            servers = mcp_data.get("mcpServers", {})
-            if "context-engine" in servers:
-                del servers["context-engine"]
-                if servers:
-                    # Other MCP servers remain, keep the file
-                    mcp_path.write_text(json.dumps(mcp_data, indent=2) + "\n")
-                    lines.append(f"    {CROSS} {warn('Removed')} context-engine from .mcp.json")
-                else:
-                    # CCE was the only server, delete the file
-                    mcp_path.unlink()
-                    lines.append(f"    {CROSS} {warn('Removed')} .mcp.json")
-            else:
-                lines.append(f"    {DOT} {dim('No CCE entry in .mcp.json')}")
-        except (json.JSONDecodeError, OSError):
-            lines.append(f"    {DOT} {dim('Could not parse .mcp.json')}")
-    else:
-        lines.append(f"    {DOT} {dim('No .mcp.json found')}")
+    # Remove MCP config from all editors
+    from context_engine.editors import EDITORS, INSTRUCTION_FILES, remove_mcp, remove_instruction_file
+
+    for editor_key, editor in EDITORS.items():
+        msg = remove_mcp(project_dir, editor_key)
+        if msg:
+            lines.append(f"    {CROSS} {warn(msg)}")
+
+    # Remove instruction files from non-Claude editors
+    for file_key in INSTRUCTION_FILES:
+        msg = remove_instruction_file(project_dir, file_key)
+        if msg:
+            lines.append(f"    {CROSS} {warn(msg)}")
 
     # Remove CCE block from CLAUDE.md. _extract_existing_cce_block() recognises
     # the current versioned form (<!-- cce-block-version: N --> ... <!-- /cce-block -->),

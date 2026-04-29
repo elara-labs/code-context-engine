@@ -35,7 +35,18 @@ cd /path/to/your/project
 cce init                              # index, install hooks, register MCP server
 ```
 
-Restart Claude Code. Done. Every question now hits the index instead of re-reading files.
+Restart your editor. Done. Every question now hits the index instead of re-reading files.
+
+`cce init` auto-detects your editor and writes the right config:
+
+| Editor | Config written | Instructions |
+|--------|---------------|--------------|
+| Claude Code | `.mcp.json` | `CLAUDE.md` |
+| VS Code / Copilot | `.vscode/mcp.json` | |
+| Cursor | `.cursor/mcp.json` | `.cursorrules` |
+| Gemini CLI | `.gemini/settings.json` | `GEMINI.md` |
+
+Multiple editors in the same project? All get configured in one command.
 
 ```
   my-project · 38 queries
@@ -289,7 +300,7 @@ No GPU required. Embedding model runs on CPU via ONNX Runtime.
 - [x] 7-layer security (secrets, PII, path traversal, audit log)
 - [x] Clean uninstall (removes all CCE artifacts)
 - [x] AST-aware chunking for PHP, Go, Rust, Java (tree-sitter)
-- [ ] Multi-agent support (Cursor, Copilot, Gemini CLI)
+- [x] Multi-editor support (Cursor, VS Code/Copilot, Gemini CLI)
 - [ ] Tree-sitter support for C, C++, Ruby, Swift, Kotlin
 - [ ] Docker support for remote mode
 
