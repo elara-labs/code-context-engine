@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo.svg" alt="Code Context Engine" width="160">
+  <img src="https://raw.githubusercontent.com/elara-labs/code-context-engine/main/docs/logo.svg" alt="Code Context Engine" width="160">
 </p>
 
 <h1 align="center">Code Context Engine</h1>
@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/demo.gif" alt="CCE Demo" width="800">
+  <img src="https://raw.githubusercontent.com/elara-labs/code-context-engine/main/docs/demo.gif" alt="CCE Demo" width="800">
 </p>
 
 ---
@@ -112,7 +112,7 @@ With CCE:       context_search "payment flow"            =    800 tokens
 cce dashboard
 ```
 
-![CCE Dashboard](docs/dashboard.png)
+![CCE Dashboard](https://raw.githubusercontent.com/elara-labs/code-context-engine/main/docs/dashboard.png)
 
 **Dollar estimates** fetched from live Anthropic pricing:
 
@@ -287,12 +287,12 @@ No GPU required. Embedding model runs on CPU via ONNX Runtime.
 
 | Page | Content |
 |------|---------|
-| [Examples](docs/wiki/Examples.md) | Real conversations with Claude |
-| [How It Works](docs/wiki/How-It-Works.md) | Full 9-stage pipeline |
-| [CLI Reference](docs/wiki/CLI-Reference.md) | Every command with output |
-| [Configuration](docs/wiki/Configuration.md) | All config options |
-| [Project Commands](docs/wiki/Project-Commands.md) | Rules and preferences for Claude |
-| [Tech Stack](docs/wiki/Tech-Stack.md) | Every library and why |
+| [Examples](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/Examples.md) | Real conversations with Claude |
+| [How It Works](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/How-It-Works.md) | Full 9-stage pipeline |
+| [CLI Reference](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/CLI-Reference.md) | Every command with output |
+| [Configuration](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/Configuration.md) | All config options |
+| [Project Commands](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/Project-Commands.md) | Rules and preferences for Claude |
+| [Tech Stack](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/Tech-Stack.md) | Every library and why |
 
 ---
 
@@ -317,7 +317,7 @@ No GPU required. Embedding model runs on CPU via ONNX Runtime.
 
 ## Contributing
 
-Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup.
+Contributions welcome. See [https://github.com/elara-labs/code-context-engine/blob/main/CONTRIBUTING.md](https://github.com/elara-labs/code-context-engine/blob/main/CONTRIBUTING.md) for setup.
 
 ---
 
