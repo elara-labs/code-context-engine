@@ -1115,25 +1115,45 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
 
     def _load_buckets(project_dir: Path) -> tuple[dict, dict]:
         """Open memory.db and pull per-bucket savings + the
-        output_compression level histogram. Falls back to whatever lives
-        in stats.json if the db is missing (older projects). Returns
-        ({bucket: {baseline, served, calls}}, {level: count}).
+        output_compression level histogram. Falls back to bucket data
+        embedded in stats.json if memory.db is missing or empty.
+        Returns ({bucket: {baseline, served, calls}}, {level: count}).
         """
         from context_engine.memory import db as _memory_db
         db_path = project_dir / "memory.db"
         empty = {b: {"baseline": 0, "served": 0, "calls": 0} for b in _memory_db.BUCKETS}
-        if not db_path.exists():
-            return empty, {}
-        try:
-            conn = _memory_db.connect(db_path)
-        except Exception:
-            return empty, {}
-        try:
-            buckets = _memory_db.aggregate_savings(conn)
-            levels = _memory_db.aggregate_output_compression_levels(conn)
-            return buckets, levels
-        finally:
-            conn.close()
+
+        # Try memory.db first
+        if db_path.exists():
+            try:
+                conn = _memory_db.connect(db_path)
+                try:
+                    buckets = _memory_db.aggregate_savings(conn)
+                    levels = _memory_db.aggregate_output_compression_levels(conn)
+                    # Only use if there's actual data
+                    total = sum(int(v.get("baseline", 0)) for v in buckets.values())
+                    if total > 0:
+                        return buckets, levels
+                finally:
+                    conn.close()
+            except Exception:
+                pass
+
+        # Fall back to bucket data embedded in stats.json
+        stats = _load_stats(project_dir)
+        if stats and "buckets" in stats:
+            buckets = {}
+            for key, val in stats["buckets"].items():
+                buckets[key] = {
+                    "baseline": int(val.get("baseline", 0)),
+                    "served": int(val.get("served", 0)),
+                    "calls": int(val.get("calls", 0)),
+                }
+            total = sum(v["baseline"] for v in buckets.values())
+            if total > 0:
+                return buckets, {}
+
+        return empty, {}
 
     from context_engine.cli_style import header, label, value, dim, success, bold
     from context_engine.pricing import get_model_pricing
