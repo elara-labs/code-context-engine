@@ -18,7 +18,7 @@ All commands use colorful, structured output with line-by-line animation on TTY:
 Running `cce` with no subcommand shows a welcome banner with project status at a glance:
 
 ```
-╭─────────────────────────── Code Context Engine v0.3.1 ────────────────────────────╮
+╭─────────────────────────── Code Context Engine v0.4.0 ────────────────────────────╮
 │                                                                                     │
 │                                     ⬡  C C E  ⬡                                     │
 │                                                                                     │
@@ -261,7 +261,7 @@ cce status -v
 **Oneline output example** (shown at the top of each Claude Code session):
 
 ```
-CCE v0.3.1 · my-project · 1247 chunks indexed · 68% saved over 42 queries
+CCE v0.4.0 · my-project · 1247 chunks indexed · 68% saved over 42 queries
 USE context_search MCP tool for all code questions. Do NOT use Read/Grep to explore code.
 ```
 
@@ -641,11 +641,11 @@ cce upgrade
 
 ```
   ── Upgrade ───────────────────────────────────────
-    Current version: 0.3.1
+    Current version: 0.4.0
     Install method:  uv
     Running:         uv tool upgrade code-context-engine
 
-  ✓ Upgraded 0.3.1 → 0.3.2
+  ✓ Upgraded 0.4.0 → 0.3.2
 
   Refreshing project config...
   ✓ MCP server config is current
@@ -658,7 +658,7 @@ cce upgrade
 **When already on the latest version:**
 
 ```
-  ✓ Already on latest version (0.3.1)
+  ✓ Already on latest version (0.4.0)
 ```
 
 **Check without upgrading:**
@@ -669,7 +669,7 @@ cce upgrade --check
 
 ```
   ── Upgrade ───────────────────────────────────────
-    Current version: 0.3.1
+    Current version: 0.4.0
     Install method:  uv
 
     To upgrade: uv tool upgrade code-context-engine

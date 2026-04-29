@@ -1,7 +1,7 @@
 [project]
 name = "code-context-engine"
-version = "0.3.1"
-description = "Local context engine for AI coding assistants — indexes projects, compresses context, reduces token cost"
+version = "0.4.0"
+description = "Index your codebase. AI searches instead of re-reading files. Save 70%+ on tokens. Works with Claude Code, Cursor, VS Code, Gemini CLI, and Codex."
 readme = {file = "README.md", content-type = "text/markdown"}
 license = "MIT"
 authors = [
