@@ -116,3 +116,143 @@ def test_uninstall_keeps_mcp_json_with_other_servers(runner, tmp_path):
     remaining = json.loads((project_dir / ".mcp.json").read_text())
     assert "context-engine" not in remaining["mcpServers"]
     assert "other-tool" in remaining["mcpServers"]
+
+
+def test_uninstall_removes_context_engine_yaml(runner, tmp_path):
+    """Per-project .context-engine.yaml is deleted."""
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    (project_dir / ".context-engine.yaml").write_text("compression:\n  level: full\n")
+
+    result = _run_uninstall_in(runner, project_dir)
+    assert result.exit_code == 0, result.output
+    assert not (project_dir / ".context-engine.yaml").exists()
+
+
+def test_uninstall_removes_cce_hooks_from_settings(runner, tmp_path):
+    """CCE hooks are removed from .claude/settings.local.json."""
+    import json
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    settings_dir = project_dir / ".claude"
+    settings_dir.mkdir()
+    settings = {
+        "permissions": {"allow": ["Bash(cce *)"]},
+        "hooks": {
+            "SessionStart": [
+                {"matcher": "", "hooks": [{"type": "command", "command": "cce status --oneline"}]},
+                {"matcher": "", "hooks": [{"type": "command", "command": "echo hello"}]},
+            ],
+        },
+    }
+    (settings_dir / "settings.local.json").write_text(json.dumps(settings))
+
+    result = _run_uninstall_in(runner, project_dir)
+    assert result.exit_code == 0, result.output
+
+    remaining = json.loads((settings_dir / "settings.local.json").read_text())
+    # CCE hook removed, non-CCE hook preserved
+    session_hooks = remaining.get("hooks", {}).get("SessionStart", [])
+    for h in session_hooks:
+        for cmd in h.get("hooks", []):
+            assert "cce" not in cmd.get("command", "")
+    # permissions preserved
+    assert "permissions" in remaining
+
+
+def test_uninstall_removes_gitignore_cce_entries(runner, tmp_path):
+    """CCE entries are removed from .gitignore, other entries kept."""
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    (project_dir / ".gitignore").write_text(
+        "node_modules/\n.cce/\n*.pyc\n.context-engine.yaml\ndist/\n"
+    )
+
+    result = _run_uninstall_in(runner, project_dir)
+    assert result.exit_code == 0, result.output
+
+    remaining = (project_dir / ".gitignore").read_text()
+    assert ".cce" not in remaining
+    assert "context-engine" not in remaining.lower()
+    assert "node_modules/" in remaining
+    assert "*.pyc" in remaining
+    assert "dist/" in remaining
+
+
+def test_uninstall_removes_index_data(runner, tmp_path):
+    """Index data in ~/.cce/projects/<name> is deleted."""
+    import json
+    from unittest.mock import patch as mock_patch
+    from context_engine.config import Config
+
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    storage_root = tmp_path / "storage"
+    index_dir = storage_root / "proj"
+    index_dir.mkdir(parents=True)
+    (index_dir / "stats.json").write_text('{"queries": 5}')
+    (index_dir / "manifest.json").write_text("{}")
+    (index_dir / "memory.db").write_text("fake")
+
+    config = Config(storage_path=str(storage_root))
+    with mock_patch("context_engine.cli.load_config", return_value=config):
+        result = _run_uninstall_in(runner, project_dir)
+
+    assert result.exit_code == 0, result.output
+    assert not index_dir.exists()
+    assert "Removed index data" in result.output
+
+
+def test_uninstall_full_cleanup(runner, tmp_path):
+    """Full uninstall removes all CCE artifacts."""
+    import json
+    from unittest.mock import patch as mock_patch
+    from context_engine.config import Config
+
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+
+    # Set up all CCE artifacts
+    (project_dir / ".mcp.json").write_text(json.dumps({
+        "mcpServers": {"context-engine": {"command": "cce", "args": ["serve"]}}
+    }))
+    (project_dir / "CLAUDE.md").write_text(_CCE_CLAUDE_MD_BLOCK)
+    (project_dir / ".context-engine.yaml").write_text("compression:\n  level: full\n")
+    (project_dir / ".gitignore").write_text(".cce/\n.context-engine.yaml\n")
+
+    cce_dir = project_dir / ".cce"
+    cce_dir.mkdir()
+    (cce_dir / "commands.yaml").write_text("rules: []\n")
+
+    settings_dir = project_dir / ".claude"
+    settings_dir.mkdir()
+    (settings_dir / "settings.local.json").write_text(json.dumps({
+        "hooks": {
+            "SessionStart": [
+                {"matcher": "", "hooks": [{"type": "command", "command": "cce status --oneline"}]},
+            ],
+        },
+    }))
+
+    storage_root = tmp_path / "storage"
+    index_dir = storage_root / "proj"
+    index_dir.mkdir(parents=True)
+    (index_dir / "stats.json").write_text('{"queries": 5}')
+    (index_dir / "memory.db").write_text("fake")
+
+    config = Config(storage_path=str(storage_root))
+    with mock_patch("context_engine.cli.load_config", return_value=config):
+        result = _run_uninstall_in(runner, project_dir)
+
+    assert result.exit_code == 0, result.output
+
+    # Everything gone
+    assert not (project_dir / ".mcp.json").exists()
+    assert not (project_dir / "CLAUDE.md").exists()
+    assert not (project_dir / ".context-engine.yaml").exists()
+    assert not (project_dir / ".cce").exists()
+    assert not index_dir.exists()
+    # .gitignore deleted (was only CCE entries)
+    assert not (project_dir / ".gitignore").exists()
+    # settings.local.json deleted (was only CCE hooks)
+    assert not (settings_dir / "settings.local.json").exists()

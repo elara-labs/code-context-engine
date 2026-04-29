@@ -1798,9 +1798,75 @@ def uninstall() -> None:
     else:
         lines.append(f"    {DOT} {dim('No .cce/ directory')}")
 
-    lines.append("")
-    lines.append(f"    {dim('Index data in ~/.cce is preserved.')}")
-    lines.append(f"    {dim('Run')} {click.style('cce clear', fg='cyan')} {dim('to remove index data too.')}")
+    # Remove .context-engine.yaml (per-project config)
+    project_config = project_dir / ".context-engine.yaml"
+    if project_config.exists():
+        project_config.unlink()
+        lines.append(f"    {CROSS} {warn('Removed')} .context-engine.yaml")
+
+    # Remove CCE hooks from .claude/settings.local.json
+    settings_path = project_dir / ".claude" / "settings.local.json"
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text())
+            hooks = data.get("hooks", {})
+            changed = False
+            for event in list(hooks.keys()):
+                original = hooks[event]
+                filtered = [
+                    h for h in original
+                    if not any(
+                        "cce" in cmd.get("command", "")
+                        for cmd in (h.get("hooks", []) if isinstance(h, dict) else [])
+                    )
+                ]
+                if len(filtered) != len(original):
+                    hooks[event] = filtered
+                    changed = True
+                # Remove empty hook lists
+                if not hooks[event]:
+                    del hooks[event]
+                    changed = True
+            if changed:
+                if not hooks:
+                    del data["hooks"]
+                if data:
+                    settings_path.write_text(json.dumps(data, indent=2) + "\n")
+                else:
+                    settings_path.unlink()
+                lines.append(f"    {CROSS} {warn('Removed')} CCE hooks from .claude/settings.local.json")
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Remove CCE entries from .gitignore
+    gitignore = project_dir / ".gitignore"
+    if gitignore.exists():
+        content = gitignore.read_text()
+        if ".cce/" in content or "context-engine" in content.lower():
+            # Remove lines containing CCE entries
+            new_lines = [
+                line for line in content.splitlines()
+                if ".cce/" not in line
+                and ".cce" not in line
+                and "context-engine" not in line.lower()
+            ]
+            new_content = "\n".join(new_lines).strip()
+            if new_content:
+                gitignore.write_text(new_content + "\n")
+            else:
+                gitignore.unlink()
+            lines.append(f"    {CROSS} {warn('Removed')} CCE entries from .gitignore")
+
+    # Remove index data from ~/.cce/projects/<project>
+    config = load_config()
+    index_dir = Path(config.storage_path) / project_name
+    if index_dir.exists():
+        import shutil
+        shutil.rmtree(index_dir)
+        lines.append(f"    {CROSS} {warn('Removed')} index data from {dim(str(index_dir))}")
+    else:
+        lines.append(f"    {DOT} {dim('No index data found')}")
+
     lines.append("")
     animate(lines)
 
