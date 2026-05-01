@@ -2,6 +2,24 @@
 
 All notable changes to Code Context Engine are documented here.
 
+## [0.4.5] - 2026-05-01
+
+### Added
+- CHANGELOG.md and SECURITY.md for public release
+- System requirements section in README (cmake, platform-specific build tools)
+- `psutil` as declared dependency (was imported but undeclared)
+
+### Fixed
+- CONTRIBUTING.md: outdated "Kuzu graph" reference updated to "SQLite graph"
+- CLI-Reference.md: all version examples updated from v0.4.0 to v0.4.4
+- CLI-Reference.md: upgrade example showed a downgrade (0.4.0 to 0.3.2)
+- pyproject.toml description aligned with README ("93% token savings, benchmarked on FastAPI")
+- docs/benchmarks.md: replaced TBD placeholders with verified FastAPI benchmark data
+
+### Changed
+- Classifier bumped from "Alpha" to "Beta"
+- `psutil` import in config.py no longer wrapped in try/except (now a real dependency)
+
 ## [0.4.4] - 2025-04-30
 
 ### Added
