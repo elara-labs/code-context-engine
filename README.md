@@ -12,6 +12,9 @@
   <a href="https://github.com/elara-labs/code-context-engine/actions/workflows/ci.yml"><img src="https://github.com/elara-labs/code-context-engine/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://pypi.org/project/code-context-engine/"><img src="https://img.shields.io/pypi/v/code-context-engine?color=blue&label=PyPI" alt="PyPI"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+"></a>
+  <img src="https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white" alt="macOS">
+  <img src="https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black" alt="Linux">
+  <img src="https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white" alt="Windows">
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-compatible-green.svg" alt="MCP Compatible"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License"></a>
   <a href="https://github.com/elara-labs/code-context-engine"><img src="https://img.shields.io/github/stars/elara-labs/code-context-engine?style=social" alt="Stars"></a>
@@ -42,11 +45,17 @@
 
 ## System requirements
 
-- Python 3.11+
+- Python 3.11+ (tested on 3.11, 3.12, 3.13)
 - A C compiler and `cmake` (needed to build tree-sitter grammars)
-  - **macOS:** `xcode-select --install`
-  - **Ubuntu/Debian:** `sudo apt install build-essential cmake`
-  - **Windows:** Visual Studio Build Tools (C++ workload)
+
+| Platform | Setup |
+|----------|-------|
+| **macOS** | `xcode-select --install` (provides compiler and cmake) |
+| **Ubuntu/Debian** | `sudo apt install build-essential cmake` |
+| **Fedora/RHEL** | `sudo dnf install gcc gcc-c++ cmake` |
+| **Windows** | Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (C++ workload) and [CMake](https://cmake.org/download/) |
+
+Tested on all three platforms in CI (macOS, Linux, Windows × Python 3.11/3.12/3.13).
 
 ## Install and see savings in 60 seconds
 
