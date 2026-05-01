@@ -32,13 +32,9 @@ def setup(tmp_path):
 
 
 def _capture(callable_):
-    runner = CliRunner()
-    with runner.isolation():
-        callable_()
-    # `runner.isolation()` swallows output by default; use `runner.invoke`
-    # via a tiny click command instead.
     import click
-    out = []
+
+    runner = CliRunner()
 
     @click.command()
     def _wrap():
