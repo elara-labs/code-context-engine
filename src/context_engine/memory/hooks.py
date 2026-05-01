@@ -48,6 +48,42 @@ _RESUME_RECENT_DECISIONS = 5
 _RESUME_DECISION_REASON_CHARS = 200
 
 
+def _build_savings_line(conn: sqlite3.Connection) -> str:
+    """One-line savings summary from the savings_log table.
+
+    Returns something like:
+      "CCE saved 95% of input tokens across 14 queries (48.0k baseline, 2.4k served)"
+    or "" if no savings data exists.
+    """
+    from context_engine.memory.db import aggregate_savings
+
+    try:
+        buckets = aggregate_savings(conn)
+    except Exception:
+        return ""
+
+    total_baseline = sum(b["baseline"] for b in buckets.values())
+    total_served = sum(b["served"] for b in buckets.values())
+    total_calls = sum(b["calls"] for b in buckets.values())
+
+    if total_baseline <= 0 or total_calls <= 0:
+        return ""
+
+    saved_pct = (1 - total_served / total_baseline) * 100
+
+    def _fmt_k(n: int) -> str:
+        if n >= 1_000_000:
+            return f"{n / 1_000_000:.1f}M"
+        if n >= 1_000:
+            return f"{n / 1_000:.1f}k"
+        return str(n)
+
+    return (
+        f"CCE saved {saved_pct:.0f}% of input tokens across {total_calls} queries "
+        f"({_fmt_k(total_baseline)} baseline, {_fmt_k(total_served)} served)"
+    )
+
+
 def build_session_resume(conn: sqlite3.Connection, project: str) -> str:
     """Compose a short text block summarising recent state for the model.
 
@@ -73,13 +109,19 @@ def build_session_resume(conn: sqlite3.Connection, project: str) -> str:
         (_RESUME_RECENT_DECISIONS,),
     ))
 
-    if not last_rollup and not decisions:
+    savings_line = _build_savings_line(conn)
+
+    if not last_rollup and not decisions and not savings_line:
         return ""
 
     parts.append(f"## CCE memory · resuming {project}")
     # Stored values went through grammar.compress on the write side; expand
     # before display so the resume reads as natural prose.
     from context_engine.memory.grammar import expand as _grammar_expand
+
+    if savings_line:
+        parts.append("")
+        parts.append(f"**{savings_line}**")
 
     if last_rollup:
         when = last_rollup["ended_at"] or "in progress"

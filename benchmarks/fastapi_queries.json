@@ -1,0 +1,102 @@
+[
+    {
+        "query": "How does FastAPI handle dependency injection?",
+        "expected_files": ["dependencies/utils.py", "dependencies/models.py"],
+        "category": "architecture"
+    },
+    {
+        "query": "How are route decorators like @app.get implemented?",
+        "expected_files": ["routing.py", "applications.py"],
+        "category": "routing"
+    },
+    {
+        "query": "How does OAuth2 password bearer authentication work?",
+        "expected_files": ["security/oauth2.py"],
+        "category": "security"
+    },
+    {
+        "query": "How does FastAPI generate OpenAPI schema?",
+        "expected_files": ["openapi/utils.py", "openapi/models.py"],
+        "category": "openapi"
+    },
+    {
+        "query": "How are request body parameters validated?",
+        "expected_files": ["params.py", "param_functions.py"],
+        "category": "validation"
+    },
+    {
+        "query": "How does the Swagger UI docs page get served?",
+        "expected_files": ["openapi/docs.py"],
+        "category": "openapi"
+    },
+    {
+        "query": "How does FastAPI handle CORS middleware?",
+        "expected_files": ["middleware/cors.py"],
+        "category": "middleware"
+    },
+    {
+        "query": "How are HTTP exceptions and error handlers implemented?",
+        "expected_files": ["exceptions.py", "exception_handlers.py"],
+        "category": "errors"
+    },
+    {
+        "query": "How does the APIRouter class work?",
+        "expected_files": ["routing.py"],
+        "category": "routing"
+    },
+    {
+        "query": "How does FastAPI encode response models with jsonable_encoder?",
+        "expected_files": ["encoders.py"],
+        "category": "serialization"
+    },
+    {
+        "query": "How are WebSocket endpoints defined and handled?",
+        "expected_files": ["routing.py", "websockets.py"],
+        "category": "websocket"
+    },
+    {
+        "query": "How does the HTTPBearer security scheme work?",
+        "expected_files": ["security/http.py"],
+        "category": "security"
+    },
+    {
+        "query": "How does FastAPI handle background tasks?",
+        "expected_files": ["background.py", "routing.py"],
+        "category": "background"
+    },
+    {
+        "query": "How are API key security dependencies implemented?",
+        "expected_files": ["security/api_key.py"],
+        "category": "security"
+    },
+    {
+        "query": "How does FastAPI integrate with Jinja2 templates?",
+        "expected_files": ["templating.py"],
+        "category": "templating"
+    },
+    {
+        "query": "How does the FastAPI application class initialize?",
+        "expected_files": ["applications.py"],
+        "category": "core"
+    },
+    {
+        "query": "How are path parameters and query parameters resolved from the request?",
+        "expected_files": ["dependencies/utils.py", "params.py"],
+        "category": "parameters"
+    },
+    {
+        "query": "How does FastAPI serve static files?",
+        "expected_files": ["staticfiles.py"],
+        "category": "static"
+    },
+    {
+        "query": "How does FastAPI implement Server-Sent Events streaming?",
+        "expected_files": ["sse.py"],
+        "category": "streaming"
+    },
+    {
+        "query": "What Pydantic compatibility layer does FastAPI use for v1 and v2?",
+        "expected_files": ["_compat/v2.py", "_compat/shared.py"],
+        "category": "compatibility"
+    }
+]

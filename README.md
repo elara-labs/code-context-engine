@@ -74,7 +74,7 @@ Multiple editors in the same project? All get configured in one command.
 
 ## Why this matters
 
-Input tokens are 85-95% of your Claude Code bill. CCE cuts them by 70-98%.
+Input tokens are 85-95% of your Claude Code bill. CCE cuts them significantly.
 
 ```
 Without CCE:    Claude reads payments.py + shipping.py   = 45,000 tokens
@@ -87,6 +87,57 @@ With CCE:       context_search "payment flow"            =    800 tokens
 | Finding a function | Read entire 800-line file | Get the 40-line function |
 | Cross-session memory | None | Decisions + code areas persisted |
 | Token cost (Opus, medium project) | ~$0.48/session | ~$0.14/session |
+
+---
+
+## Benchmark: FastAPI (independently verified)
+
+We benchmarked CCE against [FastAPI](https://github.com/fastapi/fastapi) (48 source files, 19K lines of Python) with 20 real coding questions. No cherry-picking, no synthetic queries.
+
+**Methodology:** For each query, "without CCE" means reading the full content of every file the query touches. "With CCE" means only the relevant code chunks. This is conservative (agents often read more files than needed).
+
+| Metric | Result |
+|--------|--------|
+| **Token savings** | **92.9%** (75,355 → 5,381 tokens/query avg) |
+| Recall@10 (found the right files) | 0.80 |
+| Precision@10 | 0.30 |
+| Latency p50 | 0.4ms |
+| Queries tested | 20 |
+
+<details>
+<summary><strong>Per-query breakdown</strong></summary>
+
+| Query | Full file | Served | Saved |
+|-------|-----------|--------|-------|
+| How does FastAPI handle dependency injection? | 75,628 | 6,493 | 91% |
+| How are route decorators like @app.get implemented? | 94,773 | 1,133 | 99% |
+| How does OAuth2 password bearer authentication work? | 9,396 | 8,792 | 6% |
+| How does FastAPI generate OpenAPI schema? | 58,499 | 8,233 | 86% |
+| How are request body parameters validated? | 95,380 | 4,340 | 95% |
+| How does the Swagger UI docs page get served? | 52,119 | 6,962 | 87% |
+| How does FastAPI handle CORS middleware? | 95,073 | 4,435 | 95% |
+| How are HTTP exceptions and error handlers implemented? | 47,547 | 1,627 | 97% |
+| How does the APIRouter class work? | 98,420 | 7,890 | 92% |
+| How are WebSocket endpoints defined and handled? | 96,636 | 2,499 | 97% |
+| How does the HTTPBearer security scheme work? | 6,999 | 4,447 | 36% |
+| How does FastAPI handle background tasks? | 97,997 | 5,824 | 94% |
+| How are API key security dependencies implemented? | 38,439 | 3,568 | 91% |
+| How does FastAPI integrate with Jinja2 templates? | 103,725 | 5,604 | 95% |
+| How does the FastAPI application class initialize? | 56,845 | 5,158 | 91% |
+| How are path parameters and query parameters resolved? | 85,321 | 3,943 | 95% |
+| How does FastAPI implement Server-Sent Events streaming? | 97,299 | 4,985 | 95% |
+| What Pydantic compatibility layer does FastAPI use? | 101,536 | 5,701 | 94% |
+
+</details>
+
+**Reproduce it yourself:**
+
+```bash
+pip install code-context-engine
+python benchmarks/run_benchmark.py --repo https://github.com/fastapi/fastapi.git --source-dir fastapi
+```
+
+Full results in [`benchmarks/results/fastapi.md`](benchmarks/results/fastapi.md). Queries and methodology in [`benchmarks/`](benchmarks/).
 
 ---
 
@@ -140,7 +191,7 @@ Re-indexing after edits takes under 1 second (96% embedding cache hit rate). Git
 
 Output compression tools (like Caveman) save 20-75% on output tokens. Output is 5-15% of your bill. Net savings: ~11%.
 
-CCE saves 70-98% on **input** tokens. Input is 85-95% of your bill. Net savings: ~77%.
+CCE saves on **input** tokens (92.9% on FastAPI, [independently benchmarked](#benchmark-fastapi-independently-verified)). Input is 85-95% of your bill.
 
 ### It actually understands your code
 
