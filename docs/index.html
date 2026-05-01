@@ -301,7 +301,7 @@
       transition: border-color .2s, color .2s;
     }
     .editor-badge:hover { border-color: var(--border2); color: var(--text); }
-    .editor-badge svg { width: 13px; height: 13px; }
+    .editor-badge svg, .editor-badge img { width: 14px; height: 14px; flex-shrink: 0; }
 
     /* ── TERMINAL ─────────────────────────────────── */
     .terminal-window {
@@ -951,11 +951,11 @@
       <div class="editors-strip">
         <span class="editors-label">Works with</span>
         <div class="editor-badges">
-          <span class="editor-badge">Claude Code</span>
-          <span class="editor-badge">Cursor</span>
-          <span class="editor-badge">VS Code</span>
-          <span class="editor-badge">Gemini CLI</span>
-          <span class="editor-badge">Codex CLI</span>
+          <span class="editor-badge"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#D97757" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Claude Code</span>
+          <span class="editor-badge"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="#00b4d8" stroke-width="2"/><path d="M8 12h8M12 8v8" stroke="#00b4d8" stroke-width="2" stroke-linecap="round"/></svg>Cursor</span>
+          <span class="editor-badge"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7v10l10 5 10-5V7L12 2z" stroke="#007ACC" stroke-width="1.5"/><path d="M2 7l10 5M12 12l10-5M12 12v10" stroke="#007ACC" stroke-width="1.5" stroke-linecap="round"/></svg>VS Code</span>
+          <span class="editor-badge"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l-2 6.5L4 11l6 2.5L12 20l2-6.5L20 11l-6-2.5L12 2z" stroke="#4285F4" stroke-width="1.5" stroke-linejoin="round"/></svg>Gemini CLI</span>
+          <span class="editor-badge"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#10a37f" stroke-width="1.8"/><path d="M12 7v5l3 3" stroke="#10a37f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Codex CLI</span>
         </div>
       </div>
     </div>
