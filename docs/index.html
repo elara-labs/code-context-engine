@@ -338,8 +338,7 @@
       line-height: 1.72;
     }
 
-    .tl { display: block; opacity: 0; transition: opacity .08s; }
-    .tl.on { opacity: 1; }
+    .tl { display: block; }
 
     .t-dim    { color: var(--text3); }
     .t-cmd    { color: var(--text); }
@@ -347,16 +346,6 @@
     .t-info   { color: var(--text2); }
     .t-cyan   { color: var(--cyan); }
     .t-save   { color: var(--green); font-weight: 600; }
-    .s-used, .s-free {
-      display: inline-block;
-      width: 14px; height: 14px;
-      border-radius: 3px;
-      font-size: 0;
-      vertical-align: middle;
-    }
-    .s-used   { background: var(--cyan); box-shadow: 0 0 4px rgba(0,200,240,.3); }
-    .s-free   { background: var(--bg3); border: 1px solid var(--border); }
-
     .cursor {
       display: inline-block;
       width: 7px; height: 13px;
@@ -366,30 +355,6 @@
       animation: blink 1s step-end infinite;
     }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-
-    .tw-cursor {
-      display: inline-block;
-      color: var(--cyan);
-      font-weight: 300;
-      animation: blink 0.7s step-end infinite;
-    }
-
-    .replay-btn {
-      display: block;
-      margin: 10px auto 0;
-      background: transparent;
-      border: 1px solid var(--border2);
-      border-radius: 7px;
-      color: var(--text3);
-      font-size: 11px;
-      font-family: var(--mono);
-      padding: 5px 16px;
-      cursor: pointer;
-      transition: color .18s, border-color .18s, opacity .4s;
-      opacity: 0;
-      letter-spacing: .04em;
-    }
-    .replay-btn:hover { color: var(--cyan); border-color: rgba(0,200,240,.4); }
 
     /* ── SHARED SECTION STYLES ────────────────────── */
     section { position: relative; z-index: 1; }
@@ -853,9 +818,6 @@
     @media (prefers-reduced-motion: reduce) {
       .badge-dot { animation: none; }
       .cursor { animation: none; opacity: 1; }
-      .tw-cursor { animation: none; opacity: 0; }
-      .tl { opacity: 1 !important; transition: none !important; }
-      .replay-btn { opacity: 1; }
     }
 
     /* ── RESPONSIVE ───────────────────────────────── */
@@ -931,7 +893,7 @@
         MCP Server &nbsp;·&nbsp; Local &nbsp;·&nbsp; Zero Cloud
       </div>
 
-      <h1 class="hero-title" id="hero-title" aria-label="Index once. Save 93%."></h1>
+      <h1 class="hero-title">Index once.<br><span class="accent">Save 93%.</span></h1>
 
       <p class="hero-desc">
         A local MCP server for Claude Code. AST-aware indexing, semantic search, and automatic compression. Claude stops re-reading your entire codebase every session.
@@ -951,11 +913,11 @@
       <div class="editors-strip">
         <span class="editors-label">Works with</span>
         <div class="editor-badges">
-          <span class="editor-badge"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#D97757" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Claude Code</span>
-          <span class="editor-badge"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="#00b4d8" stroke-width="2"/><path d="M8 12h8M12 8v8" stroke="#00b4d8" stroke-width="2" stroke-linecap="round"/></svg>Cursor</span>
-          <span class="editor-badge"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7v10l10 5 10-5V7L12 2z" stroke="#007ACC" stroke-width="1.5"/><path d="M2 7l10 5M12 12l10-5M12 12v10" stroke="#007ACC" stroke-width="1.5" stroke-linecap="round"/></svg>VS Code</span>
-          <span class="editor-badge"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l-2 6.5L4 11l6 2.5L12 20l2-6.5L20 11l-6-2.5L12 2z" stroke="#4285F4" stroke-width="1.5" stroke-linejoin="round"/></svg>Gemini CLI</span>
-          <span class="editor-badge"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#10a37f" stroke-width="1.8"/><path d="M12 7v5l3 3" stroke="#10a37f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Codex CLI</span>
+          <span class="editor-badge"><svg viewBox="0 0 256 256" fill="#D97757"><path d="M128 2C59.3 2 2 59.3 2 128s57.3 126 126 126 126-57.3 126-126S196.7 2 128 2zm53.6 182.4c-3.2 4.8-9.6 6.4-14.4 3.2L94.4 140l-36.8 28.8c-1.6 1.6-4.8 0-4.8-2.4V89.6c0-2.4 3.2-4 4.8-2.4l36.8 28.8 72.8-47.6c4.8-3.2 11.2-1.6 14.4 3.2 1.6 3.2 1.6 6.4 0 9.6L144 128l37.6 46.8c1.6 3.2 1.6 6.4 0 9.6z"/></svg>Claude Code</span>
+          <span class="editor-badge"><svg viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="5" fill="#000"/><path d="M7.5 8C7.5 8 9 6.5 12 6.5s4.5 1.5 4.5 1.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><path d="M12 10v7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="17" r="0" fill="#fff"/></svg>Cursor</span>
+          <span class="editor-badge"><svg viewBox="0 0 256 256"><path d="M0 0h256v256H0z" fill="none"/><path d="M180.6 2.7L0 121.6l54.9 46.2L256 39z" fill="#0065A9"/><path d="M256 39L180.6 2.7v79l75.4-41.7z" fill="#007ACC"/><path d="M54.9 167.8L0 121.6v12.5l54.9 79.7v-45.9z" fill="#1F9CF0"/><path d="M134.7 128L54.9 213.8v-45.9l55.7-55.8L54.9 56.2V10.3z" fill="#007ACC"/></svg>VS Code</span>
+          <span class="editor-badge"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2C8.4 2 5.2 4 3.5 7l4.3 2.5c.8-1.8 2.4-3 4.2-3 2.5 0 4.5 2 4.5 4.5S14.5 15.5 12 15.5c-1.8 0-3.4-1.2-4.2-3L3.5 15c1.7 3 4.9 5 8.5 5 5.5 0 10-4.5 10-10S17.5 2 12 2z" fill="#4285F4"/><circle cx="6" cy="12" r="2.5" fill="#EA4335"/></svg>Gemini CLI</span>
+          <span class="editor-badge"><svg viewBox="0 0 24 24" fill="none"><path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.998 5.998 0 0 0-3.998 2.9 6.05 6.05 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073z" fill="#10a37f"/></svg>Codex CLI</span>
         </div>
       </div>
     </div>
@@ -968,9 +930,26 @@
           <div class="win-dot" style="background:#27c93f"></div>
           <span class="terminal-label">~/my-project</span>
         </div>
-        <div class="terminal-body" id="hero-term"></div>
+        <div class="terminal-body">
+          <span class="tl on"><span class="t-dim">$</span> <span class="t-cmd">cce init</span></span>
+          <span class="tl on">&nbsp;</span>
+          <span class="tl on">  <span class="t-cyan" style="font-weight:700">Code Context Engine</span>  <span class="t-dim">·  my-project</span></span>
+          <span class="tl on">  <span class="t-dim">────────────────────────────────</span></span>
+          <span class="tl on">&nbsp;</span>
+          <span class="tl on">  <span class="t-ok">✓</span> <span class="t-info">Git hooks installed  </span><span class="t-dim">(3 hooks, auto-updates)</span></span>
+          <span class="tl on">  <span class="t-ok">✓</span> <span class="t-info">MCP server registered in </span><span class="t-cyan">.mcp.json</span></span>
+          <span class="tl on">  <span class="t-ok">✓</span> <span class="t-info">CLAUDE.md created</span></span>
+          <span class="tl on">  <span class="t-ok">✓</span> <span class="t-info">.gitignore updated</span></span>
+          <span class="tl on">&nbsp;</span>
+          <span class="tl on">  <span class="t-cyan" style="font-weight:600">Indexing project</span>...</span>
+          <span class="tl on">    <span class="t-cyan">██████████████████████████████</span>  <span style="font-weight:600;color:#dde8ff">89/89</span> <span class="t-dim">files  100%</span></span>
+          <span class="tl on">&nbsp;</span>
+          <span class="tl on">  <span class="t-ok">✓</span> <span style="font-weight:700;color:#dde8ff">Indexed 1,247 chunks</span> <span class="t-info">from 89 files</span></span>
+          <span class="tl on">&nbsp;</span>
+          <span class="tl on">  <span class="t-ok" style="font-weight:700">Done!</span>  <span class="t-dim">Restart Claude Code to activate CCE.</span></span>
+          <span class="cursor"></span>
+        </div>
       </div>
-      <button class="replay-btn" id="replay-btn" onclick="replayTerminal()">↺ replay</button>
     </div>
 
   </div>
@@ -1251,110 +1230,6 @@ function copyText(btn, text) {
   });
 }
 
-// ── Typewriter headline ────────────────────────────────
-function runTypewriter() {
-  const el = document.getElementById('hero-title');
-  if (!el) return;
-
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    el.innerHTML = 'Index once.<br><span class="accent">Save 93%.</span>';
-    return;
-  }
-
-  el.innerHTML = '<span id="tw-l1"></span><br><span class="accent" id="tw-l2"></span><span class="tw-cursor">|</span>';
-  const l1 = document.getElementById('tw-l1');
-  const l2 = document.getElementById('tw-l2');
-  const cur = el.querySelector('.tw-cursor');
-  const t1 = 'Index once.', t2 = 'Save 93%.';
-  const speed = 52;
-  let i = 0, j = 0;
-
-  function tick1() {
-    if (i < t1.length) { l1.textContent += t1[i++]; setTimeout(tick1, speed); }
-    else setTimeout(tick2, 360);
-  }
-  function tick2() {
-    if (j < t2.length) { l2.textContent += t2[j++]; setTimeout(tick2, speed); }
-    else setTimeout(() => { if (cur) cur.remove(); }, 1400);
-  }
-  setTimeout(tick1, 320);
-}
-
-// ── Hero terminal animation ────────────────────────────
-const HERO_LINES = [
-  { html: '<span class="t-dim">$</span> <span class="t-cmd">cce init</span>', delay: 600 },
-  { html: '', delay: 280 },
-  { html: '  <span class="t-cyan" style="font-weight:700">Code Context Engine</span>  <span class="t-dim">·  my-project</span>', delay: 520 },
-  { html: '  <span class="t-dim">────────────────────────────────</span>', delay: 100 },
-  { html: '', delay: 220 },
-  { html: '  <span class="t-dim">Checking embedding model...</span> <span class="t-ok">ready.</span>', delay: 1100 },
-  { html: '  Ollama <span style="color:#f59e0b">not running</span> <span class="t-dim">— truncation compression.</span>', delay: 460 },
-  { html: '', delay: 280 },
-  { html: '  <span class="t-ok">✓</span> <span class="t-info">Git hooks installed  </span><span class="t-dim">(3 hooks, auto-updates)</span>', delay: 480 },
-  { html: '  <span class="t-ok">✓</span> <span class="t-info">MCP server registered in </span><span class="t-cyan">.mcp.json</span>', delay: 420 },
-  { html: '  <span class="t-ok">✓</span> <span class="t-info">CLAUDE.md created</span>', delay: 380 },
-  { html: '  <span class="t-ok">✓</span> <span class="t-info">.gitignore updated</span>', delay: 380 },
-  { html: '', delay: 240 },
-  { html: '  <span class="t-cyan" style="font-weight:600">Indexing project</span>...', delay: 520 },
-  { html: '    <span class="t-cyan">████████████████</span><span class="t-dim">██████████████</span>  <span style="font-weight:600;color:#dde8ff">52/89</span> <span class="t-dim">files  58%</span>', delay: 900 },
-  { html: '    <span class="t-cyan">██████████████████████████████</span>  <span style="font-weight:600;color:#dde8ff">89/89</span> <span class="t-dim">files  100%</span>', delay: 820 },
-  { html: '', delay: 140 },
-  { html: '  <span class="t-ok">✓</span> <span style="font-weight:700;color:#dde8ff">Indexed 1,247 chunks</span> <span class="t-info">from 89 files</span>', delay: 520 },
-  { html: '', delay: 200 },
-  { html: '  <span class="t-ok" style="font-weight:700">Done!</span>  <span class="t-dim">Restart Claude Code to activate CCE.</span>', delay: 420 },
-];
-
-let _termTimers = [];
-
-function runTerminal(instant) {
-  const el = document.getElementById('hero-term');
-  el.innerHTML = '';
-
-  if (instant || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    HERO_LINES.forEach(line => {
-      const span = document.createElement('span');
-      span.className = 'tl on';
-      span.innerHTML = line.html || '&nbsp;';
-      el.appendChild(span);
-    });
-    const cur = document.createElement('span');
-    cur.className = 'cursor';
-    el.appendChild(cur);
-    const btn = document.getElementById('replay-btn');
-    if (btn) btn.style.opacity = '1';
-    return;
-  }
-
-  let t = 0;
-  HERO_LINES.forEach(line => {
-    t += line.delay;
-    const id = setTimeout(() => {
-      const span = document.createElement('span');
-      span.className = 'tl';
-      span.innerHTML = line.html || '&nbsp;';
-      el.appendChild(span);
-      requestAnimationFrame(() => requestAnimationFrame(() => span.classList.add('on')));
-    }, t);
-    _termTimers.push(id);
-  });
-  const id = setTimeout(() => {
-    const cur = document.createElement('span');
-    cur.className = 'cursor';
-    el.appendChild(cur);
-    const btn = document.getElementById('replay-btn');
-    if (btn) btn.style.opacity = '1';
-  }, t + 220);
-  _termTimers.push(id);
-}
-
-function replayTerminal() {
-  _termTimers.forEach(clearTimeout);
-  _termTimers = [];
-  const btn = document.getElementById('replay-btn');
-  if (btn) btn.style.opacity = '0';
-  runTerminal(false);
-}
-
 // ── Scroll spy for nav ────────────────────────────────
 function initScrollSpy() {
   const links = document.querySelectorAll('.nav-center .nav-link[data-section]');
@@ -1381,8 +1256,6 @@ function initScrollSpy() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  runTypewriter();
-  runTerminal(false);
   initScrollSpy();
 });
 </script>
