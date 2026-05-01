@@ -62,11 +62,19 @@ def _build_savings_line(conn: sqlite3.Connection) -> str:
     except Exception:
         return ""
 
-    total_baseline = sum(b["baseline"] for b in buckets.values())
-    total_served = sum(b["served"] for b in buckets.values())
-    total_calls = sum(b["calls"] for b in buckets.values())
+    # Use retrieval bucket for the true baseline (full-file tokens) and query
+    # count.  For served tokens, prefer chunk_compression (the final pipeline
+    # stage) when available, otherwise fall back to retrieval served.  This
+    # avoids double-counting that would occur if we summed baselines across
+    # all buckets (retrieval baseline feeds into chunk_compression baseline).
+    retrieval = buckets.get("retrieval", {"baseline": 0, "served": 0, "calls": 0})
+    compression = buckets.get("chunk_compression", {"baseline": 0, "served": 0, "calls": 0})
 
-    if total_baseline <= 0 or total_calls <= 0:
+    total_baseline = retrieval["baseline"]
+    total_served = compression["served"] if compression["calls"] > 0 else retrieval["served"]
+    total_queries = retrieval["calls"]
+
+    if total_baseline <= 0 or total_queries <= 0:
         return ""
 
     saved_pct = (1 - total_served / total_baseline) * 100
@@ -79,7 +87,7 @@ def _build_savings_line(conn: sqlite3.Connection) -> str:
         return str(n)
 
     return (
-        f"CCE saved {saved_pct:.0f}% of input tokens across {total_calls} queries "
+        f"CCE saved {saved_pct:.0f}% of input tokens across {total_queries} queries "
         f"({_fmt_k(total_baseline)} baseline, {_fmt_k(total_served)} served)"
     )
 

@@ -356,7 +356,12 @@ async def test_build_savings_line_empty_db(hook_app):
 
 
 async def test_build_savings_line_with_data(hook_app):
-    """With savings_log rows, returns a formatted one-liner."""
+    """With savings_log rows, returns a formatted one-liner.
+
+    Uses retrieval baseline (full-file tokens) and chunk_compression served
+    (final compressed tokens) to avoid double-counting across pipeline stages.
+    Query count comes from retrieval calls only.
+    """
     _, conn = hook_app
     from context_engine.memory.hooks import _build_savings_line
     memory_db.record_savings(conn, bucket="retrieval", baseline=10000, served=1000)
@@ -365,11 +370,11 @@ async def test_build_savings_line_with_data(hook_app):
 
     line = _build_savings_line(conn)
     assert "CCE saved" in line
-    assert "3 queries" in line
-    # 33000 baseline, 3300 served → 90% savings
-    assert "90%" in line
-    assert "33.0k" in line
-    assert "3.3k" in line
+    assert "2 queries" in line
+    # retrieval baseline=30000, chunk_compression served=300 → 99% savings
+    assert "99%" in line
+    assert "30.0k" in line
+    assert "300" in line
 
 
 async def test_session_start_includes_savings(hook_app, aiohttp_client):

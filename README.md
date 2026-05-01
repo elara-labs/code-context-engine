@@ -17,16 +17,20 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Claude_Code-black?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code">
-  <img src="https://img.shields.io/badge/VS_Code-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="VS Code">
-  <img src="https://img.shields.io/badge/Cursor-000000?style=for-the-badge&logo=cursor&logoColor=white" alt="Cursor">
-  <img src="https://img.shields.io/badge/Gemini_CLI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Gemini CLI">
-  <img src="https://img.shields.io/badge/Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white" alt="Codex CLI">
+  <strong>Works with your editor</strong>
+</p>
+
+<p align="center">
+  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Claude_Code-D4A27F?style=for-the-badge&logo=anthropic&logoColor=black" alt="Claude Code" height="36"></a>&nbsp;&nbsp;
+  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/VS_Code-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="VS Code" height="36"></a>&nbsp;&nbsp;
+  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Cursor-000000?style=for-the-badge&logo=cursor&logoColor=white" alt="Cursor" height="36"></a>&nbsp;&nbsp;
+  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Gemini_CLI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Gemini CLI" height="36"></a>&nbsp;&nbsp;
+  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white" alt="Codex CLI" height="36"></a>
 </p>
 
 <p align="center">
   One command. Index your codebase. Your AI coding agent searches instead of reading entire files.<br>
-  Works with Claude Code, Cursor, VS Code, Gemini CLI, and OpenAI Codex. Local, zero-cloud.
+  Zero-cloud, zero-config. <code>cce init</code> auto-detects your editor.
 </p>
 
 <p align="center">
