@@ -1674,12 +1674,10 @@ def search(ctx: click.Context, query: str, top_k: int) -> None:
             lines.append(f"    {DOT} {dim('No results found')}")
         else:
             # Compute tokens
-            raw_tokens = 0
             served_tokens = 0
             seen_files: set[str] = set()
             for r in results:
                 chunk_tokens = max(1, len(r.content) // 4)
-                raw_tokens += chunk_tokens
                 served_tokens += chunk_tokens
                 seen_files.add(r.file_path)
 
@@ -1702,7 +1700,8 @@ def search(ctx: click.Context, query: str, top_k: int) -> None:
                 lines.append(f"       {dim(first_line)}")
 
             lines.append("")
-            lines.append(f"    {CHECK} {success(f'{len(results)} results')}  {dim(f'{served_tokens} tokens served vs {full_file_tokens} full file tokens')}")
+            savings_pct = int((1 - served_tokens / full_file_tokens) * 100) if full_file_tokens > 0 else 0
+            lines.append(f"    {CHECK} {success(f'{len(results)} results')}  {dim(f'{served_tokens} tokens served vs {full_file_tokens} full file tokens ({savings_pct}% saved)')}")
 
             # Update stats
             stats_path = storage_dir / "stats.json"
@@ -1711,10 +1710,8 @@ def search(ctx: click.Context, query: str, top_k: int) -> None:
             except (json.JSONDecodeError, OSError):
                 stats = {}
             stats["queries"] = stats.get("queries", 0) + 1
-            stats["raw_tokens"] = stats.get("raw_tokens", 0) + raw_tokens
+            stats["full_file_tokens"] = stats.get("full_file_tokens", 0) + full_file_tokens
             stats["served_tokens"] = stats.get("served_tokens", 0) + served_tokens
-            stats.setdefault("full_file_tokens", 0)
-            stats["full_file_tokens"] = max(stats["full_file_tokens"], full_file_tokens)
             stats_path.write_text(json.dumps(stats))
 
         lines.append("")
@@ -1724,12 +1721,19 @@ def search(ctx: click.Context, query: str, top_k: int) -> None:
 
 
 @main.command()
-def uninstall() -> None:
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+def uninstall(yes: bool) -> None:
     """Remove CCE from the current project (hooks, .mcp.json entry, CLAUDE.md block)."""
     from context_engine.cli_style import section, animate, value, dim, success, warn, CHECK, CROSS, DOT
 
     project_dir = Path.cwd()
     project_name = project_dir.name
+
+    if not yes:
+        if not click.confirm(f"Remove CCE from {project_name}?", default=False):
+            click.echo("Cancelled.")
+            return
+
     lines: list[str] = []
     lines.append("")
     lines.append(section(f"Uninstall · {project_name}"))

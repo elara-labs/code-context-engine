@@ -2,20 +2,20 @@
 
 **Date:** 2026-05-01
 **Project:** fastapi (53 files, 179,794 tokens)
-**Index:** 425 chunks from 53 files in 11.8s
+**Index:** 425 chunks from 53 files in 12.1s
 
 ## Results Summary
 
 | Metric | Value |
 |--------|-------|
-| Retrieval savings | **92.9%** (full files → relevant chunks) |
-| Compression savings | **89.9%** (chunks → signatures) |
-| Combined | **99.3%** (full files → compressed chunks) |
-| Avg full-file baseline | 75,355 tokens/query |
-| Avg after retrieval | 5,381 tokens/query |
-| Avg after compression | 541 tokens/query |
-| Precision@10 | 0.30 |
-| Recall@10 | 0.80 |
+| Retrieval savings | **94.1%** (full files → relevant chunks) |
+| Compression savings | **89.4%** (chunks → signatures) |
+| Combined | **99.4%** (full files → compressed chunks) |
+| Avg full-file baseline | 83,681 tokens/query |
+| Avg after retrieval | 4,927 tokens/query |
+| Avg after compression | 523 tokens/query |
+| Precision@10 | 0.24 |
+| Recall@10 | 0.90 |
 | Latency p50 | 0.4ms |
 | Queries tested | 20 |
 
@@ -25,18 +25,18 @@ Each layer has its own baseline. These are NOT stacked.
 
 | Layer | What it does | Savings | Method |
 |-------|-------------|---------|--------|
-| **Retrieval** | Full files → relevant code chunks | 93% | measured |
-| **Chunk Compression** | Raw chunks → signatures + docstrings | 90% | measured |
+| **Retrieval** | Full files → relevant code chunks | 94% | measured |
+| **Chunk Compression** | Raw chunks → signatures + docstrings | 89% | measured |
 | **Output Compression** | Reduces Claude's reply length | 65% | estimated |
 | **Grammar** | Drops articles/fillers from memory text | 13% | measured |
 
 ## Token Flow
 
 ```
-Full files (avg):      75,355 tokens
-  → After retrieval:   5,381 tokens  (92.9% saved)
-  → After compression: 541 tokens  (89.9% more saved)
-Combined savings:      99.3%
+Full files (avg):      83,681 tokens
+  → After retrieval:   4,927 tokens  (94.1% saved)
+  → After compression: 523 tokens  (89.4% more saved)
+Combined savings:      99.4%
 ```
 
 ## Per-Query Results
@@ -44,22 +44,22 @@ Combined savings:      99.3%
 | Query | Full file | Chunks | Compressed | Retrieval | Compression | P@10 | R@10 |
 |-------|-----------|--------|------------|-----------|-------------|------|------|
 | How does FastAPI handle dependency injec | 75,628 | 6,493 | 539 | 91% | 92% | 0.12 | 0.50 |
-| How are route decorators like @app.get i | 94,773 | 1,133 | 519 | 99% | 54% | 1.00 | 1.00 |
-| How does OAuth2 password bearer authenti | 9,396 | 8,792 | 589 | 6% | 93% | 0.50 | 1.00 |
-| How does FastAPI generate OpenAPI schema | 58,499 | 8,233 | 640 | 86% | 92% | 0.33 | 0.50 |
+| How are route decorators like @app.get i | 111,234 | 1,243 | 417 | 99% | 66% | 0.50 | 1.00 |
+| How does OAuth2 password bearer authenti | 32,890 | 5,732 | 583 | 83% | 90% | 0.20 | 1.00 |
+| How does FastAPI generate OpenAPI schema | 62,146 | 6,494 | 634 | 90% | 90% | 0.50 | 1.00 |
 | How are request body parameters validate | 95,380 | 4,340 | 533 | 95% | 88% | 0.25 | 1.00 |
-| How does the Swagger UI docs page get se | 52,119 | 6,962 | 569 | 87% | 92% | 0.33 | 1.00 |
+| How does the Swagger UI docs page get se | 104,878 | 5,061 | 566 | 95% | 89% | 0.20 | 1.00 |
 | How does FastAPI handle CORS middleware? | 95,073 | 4,435 | 449 | 95% | 90% | 0.17 | 1.00 |
-| How are HTTP exceptions and error handle | 47,547 | 1,627 | 487 | 97% | 70% | 0.67 | 1.00 |
-| How does the APIRouter class work? | 98,420 | 7,890 | 605 | 92% | 92% | 0.33 | 1.00 |
-| How does FastAPI encode response models  | 95,821 | 10,490 | 671 | 89% | 94% | 0.00 | 0.00 |
-| How are WebSocket endpoints defined and  | 96,636 | 2,499 | 548 | 97% | 78% | 0.33 | 0.50 |
-| How does the HTTPBearer security scheme  | 6,999 | 4,447 | 574 | 36% | 87% | 0.50 | 1.00 |
+| How are HTTP exceptions and error handle | 96,954 | 2,631 | 469 | 97% | 82% | 0.50 | 1.00 |
+| How does the APIRouter class work? | 100,868 | 5,536 | 533 | 94% | 90% | 0.25 | 1.00 |
+| How does FastAPI encode response models  | 100,604 | 9,557 | 627 | 90% | 93% | 0.20 | 1.00 |
+| How are WebSocket endpoints defined and  | 97,009 | 2,340 | 495 | 98% | 79% | 0.40 | 1.00 |
+| How does the HTTPBearer security scheme  | 10,231 | 3,329 | 515 | 68% | 84% | 0.25 | 1.00 |
 | How does FastAPI handle background tasks | 97,997 | 5,824 | 537 | 94% | 91% | 0.33 | 1.00 |
-| How are API key security dependencies im | 38,439 | 3,568 | 476 | 91% | 87% | 0.17 | 1.00 |
+| How are API key security dependencies im | 41,791 | 4,044 | 487 | 90% | 88% | 0.14 | 1.00 |
 | How does FastAPI integrate with Jinja2 t | 103,725 | 5,604 | 482 | 95% | 91% | 0.12 | 1.00 |
 | How does the FastAPI application class i | 56,845 | 5,158 | 458 | 91% | 91% | 0.12 | 1.00 |
-| How are path parameters and query parame | 85,321 | 3,943 | 518 | 95% | 87% | 0.33 | 1.00 |
+| How are path parameters and query parame | 91,886 | 4,545 | 520 | 95% | 89% | 0.29 | 1.00 |
 | How does FastAPI serve static files? | 99,638 | 5,495 | 502 | 94% | 91% | 0.00 | 0.00 |
 | How does FastAPI implement Server-Sent E | 97,299 | 4,985 | 549 | 95% | 89% | 0.17 | 1.00 |
 | What Pydantic compatibility layer does F | 101,536 | 5,701 | 574 | 94% | 90% | 0.12 | 0.50 |

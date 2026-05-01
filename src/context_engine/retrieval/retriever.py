@@ -15,6 +15,9 @@ _RRF_K = 60
 # [0,1] by the best score in the candidate set so an exact-match FTS rank-1 hit
 # scores the same as a vector rank-1 hit instead of being clamped to ~1.0.
 _CONFIDENCE_WEIGHT = 0.5
+# Max chunks from the same file in the final result set. Prevents one large
+# file from dominating results and improves file-level precision.
+_MAX_CHUNKS_PER_FILE = 3
 # When the parsed query looks like a code lookup, give FTS more pull because
 # exact-identifier hits are usually what the user wants.
 _FTS_BOOST_CODE_LOOKUP = 1.5
@@ -129,7 +132,20 @@ class HybridRetriever:
                 scored.append((chunk, final_score))
 
         scored.sort(key=lambda x: x[1], reverse=True)
-        ranked = [chunk for chunk, _ in scored[:top_k]]
+
+        # File diversity: cap chunks per file so one large file doesn't
+        # dominate the result set. This improves precision by letting
+        # chunks from more files surface into the top-k.
+        file_counts: dict[str, int] = {}
+        diverse: list[Chunk] = []
+        for chunk, _ in scored:
+            count = file_counts.get(chunk.file_path, 0)
+            if count < _MAX_CHUNKS_PER_FILE:
+                diverse.append(chunk)
+                file_counts[chunk.file_path] = count + 1
+                if len(diverse) >= top_k:
+                    break
+        ranked = diverse
 
         # Graph expansion: fetch 1-2 bonus chunks from files reachable via
         # CALLS/IMPORTS edges from the top results.

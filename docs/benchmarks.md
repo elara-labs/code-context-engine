@@ -7,10 +7,9 @@ Benchmarked against [FastAPI](https://github.com/fastapi/fastapi) (53 files, 179
 
 | Metric | Value |
 |--------|-------|
-| Token savings vs full-file reads | 92.9% |
-| Combined (retrieval + compression) | 99.3% |
-| Precision@10 | 0.30 |
-| Recall@10 | 0.80 |
+| Token savings vs full-file reads | 94.1% |
+| Combined (retrieval + compression) | 99.4% |
+| Recall@10 | 0.90 |
 | Query latency p50 | 0.4ms |
 | Queries tested | 20 |
 
@@ -20,8 +19,8 @@ Each layer has its own baseline. These are NOT stacked.
 
 | Layer | What it does | Savings | Method |
 |-------|-------------|---------|--------|
-| **Retrieval** | Full files → relevant code chunks | 93% | measured |
-| **Chunk Compression** | Raw chunks → signatures + docstrings | 90% | measured |
+| **Retrieval** | Full files → relevant code chunks | 94% | measured |
+| **Chunk Compression** | Raw chunks → signatures + docstrings | 89% | measured |
 | **Output Compression** | Reduces Claude's reply length | 65% | estimated |
 | **Grammar** | Drops articles/fillers from memory text | 13% | measured |
 

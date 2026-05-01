@@ -1,33 +1,33 @@
 {
   "project": "fastapi",
-  "timestamp": "2026-05-01T11:38:18.835212+00:00",
+  "timestamp": "2026-05-01T20:13:48.514984+00:00",
   "project_stats": {
     "files": 53,
     "total_tokens": 179794,
     "indexed_files": 53,
     "chunks": 425,
-    "index_time_s": 11.8
+    "index_time_s": 12.1
   },
   "token_savings": {
     "full_project_tokens": 179794,
-    "avg_full_file_per_query": 75355,
-    "avg_raw_chunks_per_query": 5381,
-    "avg_compressed_per_query": 541,
-    "retrieval_savings_pct": 92.9,
-    "compression_savings_pct": 89.9,
-    "combined_savings_pct": 99.3
+    "avg_full_file_per_query": 83681,
+    "avg_raw_chunks_per_query": 4927,
+    "avg_compressed_per_query": 523,
+    "retrieval_savings_pct": 94.1,
+    "compression_savings_pct": 89.4,
+    "combined_savings_pct": 99.4
   },
   "layers": {
     "retrieval": {
-      "baseline": 1507091,
-      "served": 107619,
-      "savings_pct": 92.9,
+      "baseline": 1673612,
+      "served": 98547,
+      "savings_pct": 94.1,
       "method": "measured"
     },
     "chunk_compression": {
-      "baseline": 107619,
-      "served": 10819,
-      "savings_pct": 89.9,
+      "baseline": 98547,
+      "served": 10469,
+      "savings_pct": 89.4,
       "method": "measured"
     },
     "output_compression": {
@@ -43,12 +43,12 @@
   },
   "retrieval_quality": {
     "num_queries": 20,
-    "avg_precision_at_10": 0.296,
-    "avg_recall_at_10": 0.8
+    "avg_precision_at_10": 0.242,
+    "avg_recall_at_10": 0.9
   },
   "latency": {
     "p50_ms": 0.4,
-    "p95_ms": 0.4,
+    "p95_ms": 0.5,
     "p99_ms": 0.5,
     "runs_per_query": 5
   },
@@ -85,14 +85,16 @@
     {
       "query": "How are route decorators like @app.get implemented?",
       "category": "routing",
-      "full_file_tokens": 94773,
-      "raw_chunk_tokens": 1133,
-      "compressed_tokens": 519,
-      "retrieval_savings_pct": 98.8,
-      "compression_savings_pct": 54.2,
-      "combined_savings_pct": 99.5,
+      "full_file_tokens": 111234,
+      "raw_chunk_tokens": 1243,
+      "compressed_tokens": 417,
+      "retrieval_savings_pct": 98.9,
+      "compression_savings_pct": 66.5,
+      "combined_savings_pct": 99.6,
       "result_files": [
         "applications.py",
+        "dependencies/utils.py",
+        "params.py",
         "routing.py"
       ],
       "expected_files": [
@@ -103,19 +105,22 @@
         "applications.py",
         "routing.py"
       ],
-      "precision": 1.0,
+      "precision": 0.5,
       "recall": 1.0
     },
     {
       "query": "How does OAuth2 password bearer authentication work?",
       "category": "security",
-      "full_file_tokens": 9396,
-      "raw_chunk_tokens": 8792,
-      "compressed_tokens": 589,
-      "retrieval_savings_pct": 6.4,
-      "compression_savings_pct": 93.3,
-      "combined_savings_pct": 93.7,
+      "full_file_tokens": 32890,
+      "raw_chunk_tokens": 5732,
+      "compressed_tokens": 583,
+      "retrieval_savings_pct": 82.6,
+      "compression_savings_pct": 89.8,
+      "combined_savings_pct": 98.2,
       "result_files": [
+        "openapi/models.py",
+        "param_functions.py",
+        "security/api_key.py",
         "security/http.py",
         "security/oauth2.py"
       ],
@@ -125,20 +130,21 @@
       "hit_files": [
         "security/oauth2.py"
       ],
-      "precision": 0.5,
+      "precision": 0.2,
       "recall": 1.0
     },
     {
       "query": "How does FastAPI generate OpenAPI schema?",
       "category": "openapi",
-      "full_file_tokens": 58499,
-      "raw_chunk_tokens": 8233,
-      "compressed_tokens": 640,
-      "retrieval_savings_pct": 85.9,
-      "compression_savings_pct": 92.2,
-      "combined_savings_pct": 98.9,
+      "full_file_tokens": 62146,
+      "raw_chunk_tokens": 6494,
+      "compressed_tokens": 634,
+      "retrieval_savings_pct": 89.6,
+      "compression_savings_pct": 90.2,
+      "combined_savings_pct": 99.0,
       "result_files": [
         "applications.py",
+        "openapi/models.py",
         "openapi/utils.py",
         "params.py"
       ],
@@ -147,10 +153,11 @@
         "openapi/utils.py"
       ],
       "hit_files": [
+        "openapi/models.py",
         "openapi/utils.py"
       ],
-      "precision": 0.333,
-      "recall": 0.5
+      "precision": 0.5,
+      "recall": 1.0
     },
     {
       "query": "How are request body parameters validated?",
@@ -185,16 +192,18 @@
     {
       "query": "How does the Swagger UI docs page get served?",
       "category": "openapi",
-      "full_file_tokens": 52119,
-      "raw_chunk_tokens": 6962,
-      "compressed_tokens": 569,
-      "retrieval_savings_pct": 86.6,
-      "compression_savings_pct": 91.8,
-      "combined_savings_pct": 98.9,
+      "full_file_tokens": 104878,
+      "raw_chunk_tokens": 5061,
+      "compressed_tokens": 566,
+      "retrieval_savings_pct": 95.2,
+      "compression_savings_pct": 88.8,
+      "combined_savings_pct": 99.5,
       "result_files": [
         "applications.py",
         "openapi/docs.py",
-        "openapi/models.py"
+        "openapi/models.py",
+        "routing.py",
+        "security/http.py"
       ],
       "expected_files": [
         "openapi/docs.py"
@@ -202,7 +211,7 @@
       "hit_files": [
         "openapi/docs.py"
       ],
-      "precision": 0.333,
+      "precision": 0.2,
       "recall": 1.0
     },
     {
@@ -234,16 +243,17 @@
     {
       "query": "How are HTTP exceptions and error handlers implemented?",
       "category": "errors",
-      "full_file_tokens": 47547,
-      "raw_chunk_tokens": 1627,
-      "compressed_tokens": 487,
-      "retrieval_savings_pct": 96.6,
-      "compression_savings_pct": 70.1,
-      "combined_savings_pct": 99.0,
+      "full_file_tokens": 96954,
+      "raw_chunk_tokens": 2631,
+      "compressed_tokens": 469,
+      "retrieval_savings_pct": 97.3,
+      "compression_savings_pct": 82.2,
+      "combined_savings_pct": 99.5,
       "result_files": [
         "applications.py",
         "exception_handlers.py",
-        "exceptions.py"
+        "exceptions.py",
+        "routing.py"
       ],
       "expected_files": [
         "exception_handlers.py",
@@ -253,22 +263,23 @@
         "exception_handlers.py",
         "exceptions.py"
       ],
-      "precision": 0.667,
+      "precision": 0.5,
       "recall": 1.0
     },
     {
       "query": "How does the APIRouter class work?",
       "category": "routing",
-      "full_file_tokens": 98420,
-      "raw_chunk_tokens": 7890,
-      "compressed_tokens": 605,
-      "retrieval_savings_pct": 92.0,
-      "compression_savings_pct": 92.3,
-      "combined_savings_pct": 99.4,
+      "full_file_tokens": 100868,
+      "raw_chunk_tokens": 5536,
+      "compressed_tokens": 533,
+      "retrieval_savings_pct": 94.5,
+      "compression_savings_pct": 90.4,
+      "combined_savings_pct": 99.5,
       "result_files": [
         "applications.py",
         "openapi/models.py",
-        "routing.py"
+        "routing.py",
+        "security/api_key.py"
       ],
       "expected_files": [
         "routing.py"
@@ -276,66 +287,75 @@
       "hit_files": [
         "routing.py"
       ],
-      "precision": 0.333,
+      "precision": 0.25,
       "recall": 1.0
     },
     {
       "query": "How does FastAPI encode response models with jsonable_encoder?",
       "category": "serialization",
-      "full_file_tokens": 95821,
-      "raw_chunk_tokens": 10490,
-      "compressed_tokens": 671,
-      "retrieval_savings_pct": 89.1,
-      "compression_savings_pct": 93.6,
-      "combined_savings_pct": 99.3,
+      "full_file_tokens": 100604,
+      "raw_chunk_tokens": 9557,
+      "compressed_tokens": 627,
+      "retrieval_savings_pct": 90.5,
+      "compression_savings_pct": 93.4,
+      "combined_savings_pct": 99.4,
       "result_files": [
         "applications.py",
+        "encoders.py",
+        "exceptions.py",
         "responses.py",
         "routing.py"
       ],
       "expected_files": [
         "encoders.py"
       ],
-      "hit_files": [],
-      "precision": 0.0,
-      "recall": 0.0
+      "hit_files": [
+        "encoders.py"
+      ],
+      "precision": 0.2,
+      "recall": 1.0
     },
     {
       "query": "How are WebSocket endpoints defined and handled?",
       "category": "websocket",
-      "full_file_tokens": 96636,
-      "raw_chunk_tokens": 2499,
-      "compressed_tokens": 548,
-      "retrieval_savings_pct": 97.4,
-      "compression_savings_pct": 78.1,
-      "combined_savings_pct": 99.4,
+      "full_file_tokens": 97009,
+      "raw_chunk_tokens": 2340,
+      "compressed_tokens": 495,
+      "retrieval_savings_pct": 97.6,
+      "compression_savings_pct": 78.8,
+      "combined_savings_pct": 99.5,
       "result_files": [
         "applications.py",
+        "exception_handlers.py",
         "exceptions.py",
-        "routing.py"
+        "routing.py",
+        "websockets.py"
       ],
       "expected_files": [
         "routing.py",
         "websockets.py"
       ],
       "hit_files": [
-        "routing.py"
+        "routing.py",
+        "websockets.py"
       ],
-      "precision": 0.333,
-      "recall": 0.5
+      "precision": 0.4,
+      "recall": 1.0
     },
     {
       "query": "How does the HTTPBearer security scheme work?",
       "category": "security",
-      "full_file_tokens": 6999,
-      "raw_chunk_tokens": 4447,
-      "compressed_tokens": 574,
-      "retrieval_savings_pct": 36.5,
-      "compression_savings_pct": 87.1,
-      "combined_savings_pct": 91.8,
+      "full_file_tokens": 10231,
+      "raw_chunk_tokens": 3329,
+      "compressed_tokens": 515,
+      "retrieval_savings_pct": 67.5,
+      "compression_savings_pct": 84.5,
+      "combined_savings_pct": 95.0,
       "result_files": [
         "openapi/models.py",
-        "security/http.py"
+        "security/api_key.py",
+        "security/http.py",
+        "security/open_id_connect_url.py"
       ],
       "expected_files": [
         "security/http.py"
@@ -343,7 +363,7 @@
       "hit_files": [
         "security/http.py"
       ],
-      "precision": 0.5,
+      "precision": 0.25,
       "recall": 1.0
     },
     {
@@ -377,11 +397,11 @@
     {
       "query": "How are API key security dependencies implemented?",
       "category": "security",
-      "full_file_tokens": 38439,
-      "raw_chunk_tokens": 3568,
-      "compressed_tokens": 476,
-      "retrieval_savings_pct": 90.7,
-      "compression_savings_pct": 86.7,
+      "full_file_tokens": 41791,
+      "raw_chunk_tokens": 4044,
+      "compressed_tokens": 487,
+      "retrieval_savings_pct": 90.3,
+      "compression_savings_pct": 88.0,
       "combined_savings_pct": 98.8,
       "result_files": [
         "dependencies/models.py",
@@ -389,7 +409,8 @@
         "openapi/utils.py",
         "param_functions.py",
         "params.py",
-        "security/api_key.py"
+        "security/api_key.py",
+        "security/http.py"
       ],
       "expected_files": [
         "security/api_key.py"
@@ -397,7 +418,7 @@
       "hit_files": [
         "security/api_key.py"
       ],
-      "precision": 0.167,
+      "precision": 0.143,
       "recall": 1.0
     },
     {
@@ -459,16 +480,17 @@
     {
       "query": "How are path parameters and query parameters resolved from the request?",
       "category": "parameters",
-      "full_file_tokens": 85321,
-      "raw_chunk_tokens": 3943,
-      "compressed_tokens": 518,
-      "retrieval_savings_pct": 95.4,
-      "compression_savings_pct": 86.9,
+      "full_file_tokens": 91886,
+      "raw_chunk_tokens": 4545,
+      "compressed_tokens": 520,
+      "retrieval_savings_pct": 95.1,
+      "compression_savings_pct": 88.6,
       "combined_savings_pct": 99.4,
       "result_files": [
         "applications.py",
         "dependencies/utils.py",
         "openapi/models.py",
+        "openapi/utils.py",
         "param_functions.py",
         "params.py",
         "security/api_key.py"
@@ -481,7 +503,7 @@
         "dependencies/utils.py",
         "params.py"
       ],
-      "precision": 0.333,
+      "precision": 0.286,
       "recall": 1.0
     },
     {
@@ -566,5 +588,6 @@
       "recall": 0.5
     }
   ],
+  "repo_url": "https://github.com/fastapi/fastapi.git",
   "source_dir": "fastapi"
 }

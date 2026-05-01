@@ -14,8 +14,8 @@ import time
 from context_engine.models import Chunk
 
 _VECTOR_WEIGHT = 0.5
-_KEYWORD_WEIGHT = 0.3
-_RECENCY_WEIGHT = 0.2
+_KEYWORD_WEIGHT = 0.4
+_RECENCY_WEIGHT = 0.1
 _MAX_KEYWORD_DISTANCE = 5
 _RECENCY_HALF_LIFE = 7 * 24 * 3600  # 1 week
 

@@ -2,6 +2,22 @@
 
 All notable changes to Code Context Engine are documented here.
 
+## [0.4.6] - 2026-05-01
+
+### Added
+- CI testing on macOS and Windows (previously Linux only)
+- `--yes` / `-y` flag and confirmation prompt on `cce uninstall`
+- `cce search` now shows savings percentage and tracks full-file baseline correctly
+
+### Changed
+- Retrieval: keyword confidence weight increased from 30% to 40%, recency decreased from 20% to 10%
+- File diversity cap: max 3 chunks per file in results, improving Recall@10 from 0.80 to 0.90
+- Benchmark results updated: 94% retrieval savings (was 93%), 99.4% combined (was 99.3%)
+
+### Fixed
+- Publish workflow now creates GitHub Release inline (no longer depends on cross-workflow tag trigger)
+- `cce search` stats tracking: savings are now cumulative per query instead of max-based
+
 ## [0.4.5] - 2026-05-01
 
 ### Added

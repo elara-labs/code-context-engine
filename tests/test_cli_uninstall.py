@@ -31,7 +31,7 @@ def _run_uninstall_in(runner, project_dir: Path):
     original = Path.cwd()
     try:
         os.chdir(project_dir)
-        return runner.invoke(main, ["uninstall"])
+        return runner.invoke(main, ["uninstall", "--yes"])
     finally:
         os.chdir(original)
 

@@ -5,7 +5,7 @@
 <h1 align="center">Code Context Engine</h1>
 
 <p align="center">
-  <strong>Index your codebase. AI searches instead of re-reading files. 93% token savings, benchmarked.</strong>
+  <strong>Index your codebase. AI searches instead of re-reading files. 94% token savings, benchmarked.</strong>
 </p>
 
 <p align="center">
@@ -73,7 +73,7 @@ Multiple editors in the same project? All get configured in one command.
 ```
   my-project · 38 queries
 
-  ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶  93% tokens saved
+  ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶  94% tokens saved
 
   Without CCE   48.0k  tokens   $0.24
   With CCE       3.4k  tokens   $0.02
@@ -87,7 +87,7 @@ Multiple editors in the same project? All get configured in one command.
 
 ## Why this matters
 
-Input tokens are 85-95% of your Claude Code bill. CCE cuts them by 93% ([benchmarked on FastAPI](#benchmark-fastapi-independently-verified)).
+Input tokens are 85-95% of your Claude Code bill. CCE cuts them by 94% ([benchmarked on FastAPI](#benchmark-fastapi-independently-verified)).
 
 ```
 Without CCE:    Claude reads payments.py + shipping.py   = 45,000 tokens
@@ -105,17 +105,16 @@ With CCE:       context_search "payment flow"            =    800 tokens
 
 ## Benchmark: FastAPI (independently verified)
 
-We benchmarked CCE against [FastAPI](https://github.com/fastapi/fastapi) (48 source files, 19K lines of Python) with 20 real coding questions. No cherry-picking, no synthetic queries.
+We benchmarked CCE against [FastAPI](https://github.com/fastapi/fastapi) (53 source files, 180K tokens) with 20 real coding questions. No cherry-picking, no synthetic queries.
 
 **Methodology:** For each query, "without CCE" means reading the full content of every file the query touches. "With CCE" means the relevant chunks after compression. This is conservative (agents often read more files than needed).
 
 | Metric | Result |
 |--------|--------|
-| **Retrieval** | **93%** savings (75,355 → 5,381 tokens/query) |
-| **+ Compression** | **90%** additional (5,381 → 541 tokens/query) |
-| **Combined** | **99.3%** (75,355 → 541 tokens/query) |
-| Recall@10 (found the right files) | 0.80 |
-| Precision@10 | 0.30 |
+| **Retrieval** | **94%** savings (83,681 → 4,927 tokens/query) |
+| **+ Compression** | **89%** additional (4,927 → 523 tokens/query) |
+| **Combined** | **99.4%** (83,681 → 523 tokens/query) |
+| Recall@10 (found the right files) | 0.90 |
 | Latency p50 | 0.4ms |
 | Queries tested | 20 |
 
@@ -123,8 +122,8 @@ We benchmarked CCE against [FastAPI](https://github.com/fastapi/fastapi) (48 sou
 
 | Layer | What it does | Savings | Method |
 |-------|-------------|---------|--------|
-| **Retrieval** | Full files → relevant code chunks | 93% | measured |
-| **Chunk Compression** | Raw chunks → signatures + docstrings | 90% | measured |
+| **Retrieval** | Full files → relevant code chunks | 94% | measured |
+| **Chunk Compression** | Raw chunks → signatures + docstrings | 89% | measured |
 | **Output Compression** | Reduces Claude's reply length | 65% | estimated |
 | **Grammar** | Drops articles/fillers from memory text | 13% | measured |
 
@@ -197,7 +196,7 @@ Re-indexing after edits takes under 1 second (96% embedding cache hit rate). Git
 
 Output compression tools (like Caveman) save 20-75% on output tokens. Output is 5-15% of your bill. Net savings: ~11%.
 
-CCE saves on **input** tokens (93% retrieval + 90% compression on FastAPI, [independently benchmarked](#benchmark-fastapi-independently-verified)). Input is 85-95% of your bill.
+CCE saves on **input** tokens (94% retrieval + 89% compression on FastAPI, [independently benchmarked](#benchmark-fastapi-independently-verified)). Input is 85-95% of your bill.
 
 ### It actually understands your code
 
@@ -367,7 +366,7 @@ No GPU required. Embedding model runs on CPU via ONNX Runtime.
 - [x] Clean uninstall (removes all CCE artifacts)
 - [x] AST-aware chunking for PHP, Go, Rust, Java (tree-sitter)
 - [x] Multi-editor support (Cursor, VS Code/Copilot, Gemini CLI)
-- [x] Reproducible benchmark suite (93% savings on FastAPI, per-layer breakdown)
+- [x] Reproducible benchmark suite (94% savings on FastAPI, per-layer breakdown)
 - [x] Session savings visibility (shown at every session start)
 - [ ] Tree-sitter support for C, C++, Ruby, Swift, Kotlin
 - [ ] Docker support for remote mode
