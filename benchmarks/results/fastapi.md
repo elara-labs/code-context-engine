@@ -2,60 +2,74 @@
 
 **Date:** 2026-05-01
 **Project:** fastapi (53 files, 179,794 tokens)
-**Index:** 425 chunks from 53 files in 11.7s
+**Index:** 425 chunks from 53 files in 11.5s
 
 ## Results Summary
 
 | Metric | Value |
 |--------|-------|
-| Token savings per query | **92.9%** |
+| Token savings per query | **99.3%** |
 | Avg full-file baseline per query | 75,355 tokens |
-| Avg served per query | 5,381 tokens |
+| Avg served per query | 541 tokens |
 | Precision@10 | 0.30 |
 | Recall@10 | 0.80 |
 | Latency p50 | 0.4ms |
 | Latency p95 | 0.4ms |
 | Queries tested | 20 |
 
+## 7-Layer Savings Breakdown
+
+CCE saves tokens at every layer of the pipeline:
+
+| Layer | Baseline | Served | Saved | What it does |
+|-------|----------|--------|-------|--------------|
+| **Retrieval** | 1,507,091 | 107,619 | 93% | Full files vs relevant chunks |
+| **Chunk Compression** | 107,619 | 10,819 | 90% | Raw chunks vs compressed (signatures + docstrings) |
+| **Output Compression** | 10,000 | 3,500 | 65% | Claude's reply length (estimated) |
+| **Memory Recall** | 92 | 80 | 13% | Decision text with grammar compression |
+| **Grammar Compression** | 1,037 | 924 | 11% | Deterministic article/filler removal |
+| **Turn Summarization** | 40,000 | 16,000 | 60% | Previous turn context (estimated) |
+| **Progressive Disclosure** | 2,000 | 500 | 75% | Session bootstrap vs manual re-explanation |
+
 ## Token Savings Methodology
 
 For each query, we compare:
 
 - **Without CCE:** Read the full content of every file the query touches (the files CCE retrieved chunks from)
-- **With CCE:** Only the relevant code chunks are returned
+- **With CCE:** Only the relevant, compressed code chunks are returned
 
-This is a conservative estimate. Without CCE, AI agents often read more files than needed because they don't know which files are relevant upfront.
+Layers 1-2 (retrieval + compression) are measured directly per query. Layer 3 (output compression) uses advertised reduction rates. Layers 4-7 are measured with representative samples or estimated from typical session data.
 
 ```
 Without CCE (avg):  75,355 tokens per query
-With CCE (avg):     5,381 tokens per query
-Savings:            92.9%
+With CCE (avg):     541 tokens per query
+Savings:            99.3%
 ```
 
 ## Per-Query Results
 
-| Query | Full file | Served | Saved | P@10 | R@10 |
-|-------|-----------|--------|-------|------|------|
-| How does FastAPI handle dependency injection? | 75,628 | 6,493 | 91% | 0.12 | 0.50 |
-| How are route decorators like @app.get implemented | 94,773 | 1,133 | 99% | 1.00 | 1.00 |
-| How does OAuth2 password bearer authentication wor | 9,396 | 8,792 | 6% | 0.50 | 1.00 |
-| How does FastAPI generate OpenAPI schema? | 58,499 | 8,233 | 86% | 0.33 | 0.50 |
-| How are request body parameters validated? | 95,380 | 4,340 | 95% | 0.25 | 1.00 |
-| How does the Swagger UI docs page get served? | 52,119 | 6,962 | 87% | 0.33 | 1.00 |
-| How does FastAPI handle CORS middleware? | 95,073 | 4,435 | 95% | 0.17 | 1.00 |
-| How are HTTP exceptions and error handlers impleme | 47,547 | 1,627 | 97% | 0.67 | 1.00 |
-| How does the APIRouter class work? | 98,420 | 7,890 | 92% | 0.33 | 1.00 |
-| How does FastAPI encode response models with jsona | 95,821 | 10,490 | 89% | 0.00 | 0.00 |
-| How are WebSocket endpoints defined and handled? | 96,636 | 2,499 | 97% | 0.33 | 0.50 |
-| How does the HTTPBearer security scheme work? | 6,999 | 4,447 | 36% | 0.50 | 1.00 |
-| How does FastAPI handle background tasks? | 97,997 | 5,824 | 94% | 0.33 | 1.00 |
-| How are API key security dependencies implemented? | 38,439 | 3,568 | 91% | 0.17 | 1.00 |
-| How does FastAPI integrate with Jinja2 templates? | 103,725 | 5,604 | 95% | 0.12 | 1.00 |
-| How does the FastAPI application class initialize? | 56,845 | 5,158 | 91% | 0.12 | 1.00 |
-| How are path parameters and query parameters resol | 85,321 | 3,943 | 95% | 0.33 | 1.00 |
-| How does FastAPI serve static files? | 99,638 | 5,495 | 94% | 0.00 | 0.00 |
-| How does FastAPI implement Server-Sent Events stre | 97,299 | 4,985 | 95% | 0.17 | 1.00 |
-| What Pydantic compatibility layer does FastAPI use | 101,536 | 5,701 | 94% | 0.12 | 0.50 |
+| Query | Full file | Raw chunks | Compressed | Saved | P@10 | R@10 |
+|-------|-----------|------------|------------|-------|------|------|
+| How does FastAPI handle dependency injection? | 75,628 | 6,493 | 539 | 99% | 0.12 | 0.50 |
+| How are route decorators like @app.get implem | 94,773 | 1,133 | 519 | 100% | 1.00 | 1.00 |
+| How does OAuth2 password bearer authenticatio | 9,396 | 8,792 | 589 | 94% | 0.50 | 1.00 |
+| How does FastAPI generate OpenAPI schema? | 58,499 | 8,233 | 640 | 99% | 0.33 | 0.50 |
+| How are request body parameters validated? | 95,380 | 4,340 | 533 | 99% | 0.25 | 1.00 |
+| How does the Swagger UI docs page get served? | 52,119 | 6,962 | 569 | 99% | 0.33 | 1.00 |
+| How does FastAPI handle CORS middleware? | 95,073 | 4,435 | 449 | 100% | 0.17 | 1.00 |
+| How are HTTP exceptions and error handlers im | 47,547 | 1,627 | 487 | 99% | 0.67 | 1.00 |
+| How does the APIRouter class work? | 98,420 | 7,890 | 605 | 99% | 0.33 | 1.00 |
+| How does FastAPI encode response models with  | 95,821 | 10,490 | 671 | 99% | 0.00 | 0.00 |
+| How are WebSocket endpoints defined and handl | 96,636 | 2,499 | 548 | 99% | 0.33 | 0.50 |
+| How does the HTTPBearer security scheme work? | 6,999 | 4,447 | 574 | 92% | 0.50 | 1.00 |
+| How does FastAPI handle background tasks? | 97,997 | 5,824 | 537 | 100% | 0.33 | 1.00 |
+| How are API key security dependencies impleme | 38,439 | 3,568 | 476 | 99% | 0.17 | 1.00 |
+| How does FastAPI integrate with Jinja2 templa | 103,725 | 5,604 | 482 | 100% | 0.12 | 1.00 |
+| How does the FastAPI application class initia | 56,845 | 5,158 | 458 | 99% | 0.12 | 1.00 |
+| How are path parameters and query parameters  | 85,321 | 3,943 | 518 | 99% | 0.33 | 1.00 |
+| How does FastAPI serve static files? | 99,638 | 5,495 | 502 | 100% | 0.00 | 0.00 |
+| How does FastAPI implement Server-Sent Events | 97,299 | 4,985 | 549 | 99% | 0.17 | 1.00 |
+| What Pydantic compatibility layer does FastAP | 101,536 | 5,701 | 574 | 99% | 0.12 | 0.50 |
 
 ## How to Reproduce
 

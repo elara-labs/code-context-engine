@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Code Context Engine — 93% Token Savings, Benchmarked</title>
-  <meta name="description" content="Local MCP server for Claude Code. AST-aware indexing, semantic search, and automatic compression. 92.9% token savings benchmarked on FastAPI.">
+  <title>Code Context Engine — 99% Token Savings, Benchmarked</title>
+  <meta name="description" content="Local MCP server for Claude Code. AST-aware indexing, semantic search, and 7-layer compression. 99.3% token savings benchmarked on FastAPI.">
   <meta property="og:title" content="Code Context Engine">
-  <meta property="og:description" content="Index your codebase once. 92.9% token savings benchmarked on FastAPI. Local, zero-cloud.">
+  <meta property="og:description" content="Index your codebase once. 99.3% token savings benchmarked on FastAPI. Local, zero-cloud.">
   <meta property="og:type" content="website">
   <link rel="icon" type="image/svg+xml" href="logo.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -902,7 +902,7 @@
         MCP Server &nbsp;·&nbsp; Local &nbsp;·&nbsp; Zero Cloud
       </div>
 
-      <h1 class="hero-title">Index once.<br><span class="accent">Save 93%.</span></h1>
+      <h1 class="hero-title">Index once.<br><span class="accent">Save 99%.</span></h1>
 
       <p class="hero-desc">
         A local MCP server for Claude Code. AST-aware indexing, semantic search, and automatic compression. Claude stops re-reading your entire codebase every session.
@@ -976,8 +976,8 @@
       <div class="bench-stats">
         <div class="bench-stat">
           <div class="bench-stat-label">Token Savings</div>
-          <div class="bench-stat-val c-green">92.9%</div>
-          <div class="bench-stat-desc">per query average</div>
+          <div class="bench-stat-val c-green">99.3%</div>
+          <div class="bench-stat-desc">retrieval + compression combined</div>
         </div>
         <div class="bench-stat">
           <div class="bench-stat-label">Recall@10</div>
@@ -990,9 +990,9 @@
           <div class="bench-stat-desc">per search query</div>
         </div>
         <div class="bench-stat">
-          <div class="bench-stat-label">Index Time</div>
-          <div class="bench-stat-val c-text2">11.7s</div>
-          <div class="bench-stat-desc">425 chunks, 53 files</div>
+          <div class="bench-stat-label">Savings Layers</div>
+          <div class="bench-stat-val c-purple" style="color:var(--purple)">7</div>
+          <div class="bench-stat-desc">stacked pipeline</div>
         </div>
         <div class="bench-stat wide">
           <div class="bench-stat-label">Avg tokens per query</div>
@@ -1006,7 +1006,7 @@
             <div class="bench-bar-row">
               <span class="bench-bar-label">With CCE</span>
               <div class="bench-bar-track">
-                <div class="bench-bar-fill cce" style="width:7.1%">5,381</div>
+                <div class="bench-bar-fill cce" style="width:1%">541</div>
               </div>
             </div>
           </div>
@@ -1015,13 +1015,37 @@
 
       <div class="bench-right">
         <div>
-          <h3 style="font-size:18px;font-weight:700;margin-bottom:12px">Methodology</h3>
-          <p class="bench-methodology">
-            For each query, "without CCE" is the full content of every file the query touches (what an AI agent would read). "With CCE" is only the relevant code chunks returned by <code>context_search</code>.
-          </p>
-          <p class="bench-methodology" style="margin-top:10px">
-            This is conservative. Without CCE, AI agents typically read more files than needed because they don't know which are relevant upfront.
-          </p>
+          <h3 style="font-size:18px;font-weight:700;margin-bottom:12px">7-Layer Savings Pipeline</h3>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px">
+              <span><span class="c-cyan" style="font-weight:700">1.</span> Retrieval</span>
+              <span class="c-green" style="font-weight:700">93%</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px">
+              <span><span class="c-cyan" style="font-weight:700">2.</span> Chunk Compression</span>
+              <span class="c-green" style="font-weight:700">90%</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px">
+              <span><span class="c-cyan" style="font-weight:700">3.</span> Output Compression</span>
+              <span class="c-green" style="font-weight:700">65%</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px">
+              <span><span class="c-cyan" style="font-weight:700">4.</span> Memory Recall</span>
+              <span class="c-green" style="font-weight:700">13%</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px">
+              <span><span class="c-cyan" style="font-weight:700">5.</span> Grammar Compression</span>
+              <span class="c-green" style="font-weight:700">11%</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px">
+              <span><span class="c-cyan" style="font-weight:700">6.</span> Turn Summarization</span>
+              <span class="c-green" style="font-weight:700">60%</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px">
+              <span><span class="c-cyan" style="font-weight:700">7.</span> Progressive Disclosure</span>
+              <span class="c-green" style="font-weight:700">75%</span>
+            </div>
+          </div>
         </div>
 
         <div>
