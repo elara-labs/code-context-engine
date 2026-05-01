@@ -273,6 +273,41 @@
     .install-alt a { color: var(--text2); text-decoration: none; }
     .install-alt a:hover { color: var(--cyan); }
 
+    .editors-strip {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+    .editors-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--text3);
+    }
+    .editor-badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .editor-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text2);
+      transition: border-color .2s, color .2s;
+    }
+    .editor-badge:hover { border-color: var(--border2); color: var(--text); }
+    .editor-badge svg { width: 13px; height: 13px; }
+
     /* ── TERMINAL ─────────────────────────────────── */
     .terminal-window {
       background: #070f1c;
@@ -360,42 +395,6 @@
       letter-spacing: .04em;
     }
     .replay-btn:hover { color: var(--cyan); border-color: rgba(0,200,240,.4); }
-
-    /* ── TICKER ───────────────────────────────────── */
-    .ticker-wrap {
-      position: relative;
-      z-index: 1;
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-      background: var(--bg2);
-      overflow: hidden;
-      height: 38px;
-      display: flex;
-      align-items: center;
-    }
-
-    .ticker-track {
-      display: flex;
-      gap: 0;
-      white-space: nowrap;
-      animation: scroll-left 36s linear infinite;
-    }
-
-    .tick {
-      padding: 0 28px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      color: var(--text3);
-    }
-    .tick .v { color: var(--cyan); }
-    .tick .g { color: var(--green); }
-
-    @keyframes scroll-left {
-      0%   { transform: translateX(0); }
-      100% { transform: translateX(-50%); }
-    }
 
     /* ── SHARED SECTION STYLES ────────────────────── */
     section { position: relative; z-index: 1; }
@@ -505,79 +504,6 @@
       color: var(--cyan);
     }
 
-    /* ── SAVINGS DEMO ─────────────────────────────── */
-    .savings-section {
-      padding: 120px 0;
-      background: var(--bg2);
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .savings-layout {
-      display: grid;
-      grid-template-columns: 1.15fr 1fr;
-      gap: 64px;
-      align-items: center;
-    }
-
-    .savings-terminal {
-      background: #070f1c;
-      border: 1px solid var(--border2);
-      border-radius: 14px;
-      overflow: hidden;
-      box-shadow: 0 16px 52px rgba(0,0,0,.45);
-    }
-
-    .savings-body {
-      padding: 24px 22px;
-      font-family: var(--mono);
-      font-size: 13.5px;
-      line-height: 2;
-    }
-
-    .savings-line { display: block; white-space: pre; }
-
-    .grid-bar {
-      display: inline-flex;
-      gap: 3px;
-      vertical-align: middle;
-      margin-right: 6px;
-    }
-
-    .savings-right {
-      display: flex;
-      flex-direction: column;
-      gap: 36px;
-    }
-
-    .stat-duo {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
-    }
-
-    .stat-block { display: flex; flex-direction: column; gap: 5px; }
-
-    .stat-label {
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: .07em;
-      text-transform: uppercase;
-      color: var(--text3);
-    }
-
-    .stat-val {
-      font-size: 44px;
-      font-weight: 800;
-      line-height: 1;
-      letter-spacing: -.03em;
-    }
-
-    .stat-desc {
-      font-size: 13px;
-      color: var(--text3);
-    }
-
     .c-cyan   { color: var(--cyan); }
     .c-green  { color: var(--green); }
     .c-amber  { color: var(--amber); }
@@ -588,8 +514,8 @@
 
     .features-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 14px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
       margin-top: 52px;
     }
 
@@ -930,12 +856,12 @@
 
     /* ── REDUCED MOTION ───────────────────────────── */
     @media (prefers-reduced-motion: reduce) {
-      .ticker-track { animation-play-state: paused; }
       .badge-dot { animation: none; }
       .cursor { animation: none; opacity: 1; }
       .tw-cursor { animation: none; opacity: 0; }
       .tl { opacity: 1 !important; transition: none !important; }
       .replay-btn { opacity: 1; }
+      .hero-glow { animation: none; }
     }
 
     /* ── RESPONSIVE ───────────────────────────────── */
@@ -945,8 +871,7 @@
       .hero { grid-template-columns: 1fr; padding: 60px 24px 40px; gap: 40px; }
       .hero-title { font-size: 46px; }
       .how-grid { grid-template-columns: 1fr; gap: 0; }
-      .savings-layout { grid-template-columns: 1fr; }
-      .features-grid { grid-template-columns: repeat(2, 1fr); }
+      .features-grid { grid-template-columns: 1fr 1fr; }
       .wrap { padding: 0 24px; }
       footer { flex-direction: column; gap: 16px; padding: 24px; text-align: center; }
       .terminal-body { overflow-x: auto; }
@@ -964,11 +889,9 @@
       h2 { font-size: 30px; }
       .cta-title { font-size: 36px; }
       .features-grid { grid-template-columns: 1fr; }
-      .stat-duo { grid-template-columns: 1fr; }
       .wrap { padding: 0 16px; }
       .install-row { max-width: 100%; }
       .install-text { font-size: 12px; }
-      .savings-body { overflow-x: auto; font-size: 12px; }
     }
   </style>
 </head>
@@ -989,11 +912,9 @@
     <span class="nav-name">Code <em>Context Engine</em></span>
   </a>
   <div class="nav-center">
-    <a href="#how" class="nav-link" data-section="how">How it works</a>
-    <a href="#savings" class="nav-link" data-section="savings">Savings</a>
-    <a href="#features" class="nav-link" data-section="features">Features</a>
     <a href="#benchmark" class="nav-link" data-section="benchmark">Benchmark</a>
-    <a href="#engineering" class="nav-link" data-section="engineering">Engineering</a>
+    <a href="#how" class="nav-link" data-section="how">How it works</a>
+    <a href="#features" class="nav-link" data-section="features">Features</a>
     <a href="#compare" class="nav-link" data-section="compare">Compare</a>
   </div>
   <div class="nav-right">
@@ -1032,6 +953,17 @@
           or: <a href="https://pypi.org/project/code-context-engine/" target="_blank">pipx install code-context-engine</a>
         </div>
       </div>
+
+      <div class="editors-strip">
+        <span class="editors-label">Works with</span>
+        <div class="editor-badges">
+          <span class="editor-badge">Claude Code</span>
+          <span class="editor-badge">Cursor</span>
+          <span class="editor-badge">VS Code</span>
+          <span class="editor-badge">Gemini CLI</span>
+          <span class="editor-badge">Codex CLI</span>
+        </div>
+      </div>
     </div>
 
     <div>
@@ -1050,151 +982,6 @@
   </div>
 </div>
 
-<!-- ── TICKER ─────────────────────────────────────────── -->
-<div class="ticker-wrap">
-  <div class="ticker-track" id="ticker"></div>
-</div>
-
-<!-- ── HOW IT WORKS ───────────────────────────────────── -->
-<section class="how-section" id="how">
-  <div class="wrap">
-    <span class="section-tag">How it works</span>
-    <h2>Three commands.<br>Permanent savings.</h2>
-
-    <div class="how-grid">
-      <div class="how-card">
-        <div class="how-num">01</div>
-        <div class="how-icon" style="background:var(--cyan-dim)">🗂</div>
-        <div class="how-title">Index your codebase</div>
-        <p class="how-body">Tree-sitter parses your code into semantic chunks — functions, classes, modules. Stored locally with vector embeddings. A live progress bar shows indexing status. Git hooks keep it current automatically on every commit.</p>
-        <span class="how-cmd">cce init</span>
-      </div>
-      <div class="how-card">
-        <div class="how-num">02</div>
-        <div class="how-icon" style="background:var(--purple-dim)">🔍</div>
-        <div class="how-title">Claude searches, not reads</div>
-        <p class="how-body">Instead of reading whole files, Claude calls <code>context_search</code> via MCP. Hybrid vector + keyword search, then one hop on the code graph for related files. Gets the 800 tokens it needs, not an 8,000-token dump.</p>
-        <span class="how-cmd">context_search "payment"</span>
-      </div>
-      <div class="how-card">
-        <div class="how-num">03</div>
-        <div class="how-icon" style="background:var(--green-dim)">📊</div>
-        <div class="how-title">Track real savings</div>
-        <p class="how-body">Every query is recorded. <code>cce savings</code> shows exactly how many tokens CCE saved you — not an estimate, your actual usage data.</p>
-        <span class="how-cmd">cce savings</span>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ── SAVINGS DEMO ───────────────────────────────────── -->
-<section class="savings-section" id="savings">
-  <div class="wrap">
-    <div class="savings-layout">
-
-      <div class="savings-terminal">
-        <div class="terminal-bar">
-          <div class="win-dot" style="background:#ff5f56"></div>
-          <div class="win-dot" style="background:#ffbd2e"></div>
-          <div class="win-dot" style="background:#27c93f"></div>
-          <span class="terminal-label">cce savings</span>
-        </div>
-        <div class="savings-body">
-          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-used">⛁</span><span class="s-used">⛁</span><span class="s-used">⛁</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span class="t-cyan" style="font-weight:600">my-project</span> <span class="t-dim">·</span> <span class="t-cyan">38</span> <span class="t-dim">queries</span></span>
-          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span class="t-cyan">14.2k</span> <span class="t-dim">served ·</span> <span class="t-cyan">26.0k</span> <span class="t-dim">raw ·</span> <span class="t-cyan">48.0k</span> <span class="t-dim">baseline</span></span>
-          <span class="savings-line">&nbsp;</span>
-          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span style="font-weight:600">Token savings (split)</span></span>
-          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span class="s-used">⛁</span> <span class="t-info">Retrieval:</span>    <span class="t-save">46%</span>  <span class="t-dim">vs full files</span></span>
-          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span class="s-free">⛶</span> <span class="t-info">Compression:</span>  <span class="t-save">45%</span>  <span class="t-dim">chunk → summary</span></span>
-        </div>
-      </div>
-
-      <div class="savings-right">
-        <div>
-          <span class="section-tag">Token savings</span>
-          <h2 style="font-size:32px">Real numbers.<br>Not estimates.</h2>
-          <p class="sec-sub" style="font-size:15px">Every query through CCE is tracked. <code>cce savings</code> shows your actual token usage — how much was retrieved vs how much reading the full codebase would have cost.</p>
-        </div>
-
-        <div class="stat-duo">
-          <div class="stat-block">
-            <span class="stat-label">Token savings</span>
-            <span class="stat-val c-green">92.9%</span>
-            <span class="stat-desc"><a href="#benchmark" style="color:var(--text3);text-decoration:none;border-bottom:1px dashed var(--text3)">benchmarked on FastAPI</a></span>
-          </div>
-          <div class="stat-block">
-            <span class="stat-label">Retrieval quality</span>
-            <span class="stat-val c-amber">0.80</span>
-            <span class="stat-desc">recall@10</span>
-          </div>
-          <div class="stat-block">
-            <span class="stat-label">Languages</span>
-            <span class="stat-val c-cyan">7</span>
-            <span class="stat-desc">AST-aware</span>
-          </div>
-          <div class="stat-block">
-            <span class="stat-label">Cloud deps</span>
-            <span class="stat-val c-text2">0</span>
-            <span class="stat-desc">fully local</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ── FEATURES ───────────────────────────────────────── -->
-<section class="features-section" id="features">
-  <div class="wrap">
-    <span class="section-tag">Features</span>
-    <h2>Everything Claude needs.<br>Nothing it doesn't.</h2>
-
-    <div class="features-grid">
-      <div class="feat-card">
-        <div class="feat-icon" style="background:var(--cyan-dim)">🌳</div>
-        <div class="feat-title">AST-Aware Chunking</div>
-        <p class="feat-body">Tree-sitter parses Python, JavaScript, TypeScript, PHP, Go, Rust, and Java into semantic chunks. Functions, classes, imports. No raw file dumps, no context waste.</p>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon" style="background:var(--purple-dim)">⚡</div>
-        <div class="feat-title">Hybrid Search + Graph Expansion</div>
-        <p class="feat-body">Vector similarity + BM25 keyword search merged via Reciprocal Rank Fusion. Then CCE walks one hop on the code graph — if <code>auth.py</code> is a hit, <code>utils.py</code> it imports comes too.</p>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon" style="background:var(--green-dim)">🧠</div>
-        <div class="feat-title">Smart Compression</div>
-        <p class="feat-body">With Ollama running locally, chunks are summarized by phi3:mini. Without it, smart truncation extracts signatures and docstrings. Four output levels: <code>off</code>, <code>lite</code>, <code>standard</code>, <code>max</code>.</p>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon" style="background:var(--cyan-dim)">🔗</div>
-        <div class="feat-title">Session Memory</div>
-        <p class="feat-body">Recall decisions and code areas across sessions via <code>session_recall</code>, <code>record_decision</code>, and <code>record_code_area</code>. No re-explaining your architecture every session.</p>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon" style="background:var(--purple-dim)">🔄</div>
-        <div class="feat-title">Live File Watcher</div>
-        <p class="feat-body">Files are re-indexed automatically on save during <code>cce serve</code>. Git hooks handle commits. Debounced, deduped, zero manual effort.</p>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon" style="background:var(--green-dim)">📋</div>
-        <div class="feat-title">Project Commands</div>
-        <p class="feat-body">Persist rules, preferences, and shell hooks per project with <code>cce commands</code>. "Never use down() in migrations" — stored once, surfaced to Claude every session.</p>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon" style="background:var(--cyan-dim)">🎨</div>
-        <div class="feat-title">Colorful CLI</div>
-        <p class="feat-body">Every command outputs styled, animated results. Section headers, colored bullets, line-by-line reveal. Run <code>cce</code> for a 2-column status dashboard in your terminal.</p>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon" style="background:var(--purple-dim)">📊</div>
-        <div class="feat-title">Web Dashboard</div>
-        <p class="feat-body">Run <code>cce dashboard</code> for a Grafana-inspired dark theme with donut charts, bar graphs, file health, and live 5-second polling. All in a single embedded HTML file.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ── BENCHMARK ─────────────────────────────────────── -->
 <section class="bench-section" id="benchmark">
   <div class="wrap">
     <span class="section-tag">Benchmark</span>
@@ -1271,53 +1058,74 @@
   </div>
 </section>
 
-<!-- ── UNDER THE HOOD ────────────────────────────────── -->
-<section class="how-section" id="engineering" style="border-top:1px solid var(--border)">
+<!-- ── HOW IT WORKS ───────────────────────────────────── -->
+<section class="how-section" id="how">
   <div class="wrap">
-    <span class="section-tag">Under the hood</span>
-    <h2>Clever engineering.<br>Zero magic.</h2>
-    <p class="sec-sub" style="margin-bottom:42px">Every decision optimizes for speed, cost, or reliability. Here is what makes CCE tick.</p>
+    <span class="section-tag">How it works</span>
+    <h2>Three commands.<br>Permanent savings.</h2>
 
-    <div class="how-grid" style="grid-template-columns:repeat(2,1fr)">
+    <div class="how-grid">
       <div class="how-card">
-        <div class="how-icon" style="background:var(--cyan-dim)">⚡</div>
-        <div class="how-title">Content-Hash Embedding Cache</div>
-        <p class="how-body">SHA-256 fingerprint per chunk, salted with model name. Re-index skips unchanged code. Binary-packed embeddings (struct.pack) are 10x smaller than JSON. Typical re-index: 96% cache hit, under 1 second.</p>
+        <div class="how-num">01</div>
+        <div class="how-icon" style="background:var(--cyan-dim)">🗂</div>
+        <div class="how-title">Index your codebase</div>
+        <p class="how-body">Tree-sitter parses your code into semantic chunks (functions, classes, modules). Stored locally with vector embeddings. Git hooks keep the index current automatically.</p>
+        <span class="how-cmd">cce init</span>
       </div>
       <div class="how-card">
-        <div class="how-icon" style="background:var(--purple-dim)">🔀</div>
-        <div class="how-title">Hybrid Retrieval + RRF</div>
-        <p class="how-body">Vector search (semantic) and BM25 (exact keyword) run in parallel. Merged via Reciprocal Rank Fusion (K=60). Confidence blends similarity (50%), keyword match (30%), and recency (20%). Code-lookup queries boost FTS 1.5x.</p>
+        <div class="how-num">02</div>
+        <div class="how-icon" style="background:var(--purple-dim)">🔍</div>
+        <div class="how-title">Claude searches, not reads</div>
+        <p class="how-body">Instead of reading whole files, Claude calls <code>context_search</code> via MCP. Hybrid vector + keyword search finds the relevant chunks. Gets the 800 tokens it needs, not an 8,000-token dump.</p>
+        <span class="how-cmd">context_search "payment"</span>
       </div>
       <div class="how-card">
-        <div class="how-icon" style="background:var(--green-dim)">🪶</div>
-        <div class="how-title">sqlite-vec: 2 MB, not 217 MB</div>
-        <p class="how-body">Replaced LanceDB with sqlite-vec. Same search quality, 99% smaller install. WAL mode + PRAGMA NORMAL for 80% write speedup. Vectors, FTS5, code graph, compression cache all in three SQLite files.</p>
+        <div class="how-num">03</div>
+        <div class="how-icon" style="background:var(--green-dim)">📊</div>
+        <div class="how-title">Track real savings</div>
+        <p class="how-body">Every query is recorded. <code>cce savings</code> shows exactly how many tokens CCE saved you, with dollar estimates from live Anthropic pricing.</p>
+        <span class="how-cmd">cce savings</span>
       </div>
-      <div class="how-card">
-        <div class="how-icon" style="background:var(--cyan-dim)">📐</div>
-        <div class="how-title">Deterministic Grammar Compression</div>
-        <p class="how-body">No LLM needed. Drops articles, fillers, pronouns from memory entries. Three levels (lite/full/ultra, 20-60% savings). Code, paths, URLs preserved byte-for-byte. Same input always yields same output.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── FEATURES ───────────────────────────────────────── -->
+<section class="features-section" id="features">
+  <div class="wrap">
+    <span class="section-tag">Features</span>
+    <h2>Everything Claude needs.<br>Nothing it doesn't.</h2>
+
+    <div class="features-grid">
+      <div class="feat-card">
+        <div class="feat-icon" style="background:var(--cyan-dim)">🌳</div>
+        <div class="feat-title">AST-Aware Chunking</div>
+        <p class="feat-body">Tree-sitter parses Python, JavaScript, TypeScript, PHP, Go, Rust, and Java into semantic chunks. Functions, classes, imports. No raw file dumps, no context waste.</p>
       </div>
-      <div class="how-card">
-        <div class="how-icon" style="background:var(--purple-dim)">🔒</div>
-        <div class="how-title">Fail-Closed Hooks</div>
-        <p class="how-body">5 Claude Code lifecycle hooks capture session context. Every hook runs <code>curl ... || true</code> so a crashed server never blocks the user. SessionStart injects bootstrap context; others capture silently.</p>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:var(--purple-dim)">⚡</div>
+        <div class="feat-title">Hybrid Search + Graph Expansion</div>
+        <p class="feat-body">Vector similarity + BM25 keyword search merged via Reciprocal Rank Fusion. Then CCE walks one hop on the code graph — if <code>auth.py</code> is a hit, <code>utils.py</code> it imports comes too.</p>
       </div>
-      <div class="how-card">
-        <div class="how-icon" style="background:var(--green-dim)">💰</div>
-        <div class="how-title">Dynamic Pricing</div>
-        <p class="how-body"><code>cce savings</code> shows dollar estimates from live Anthropic pricing (fetched, cached 7 days, offline fallback). No manual updates when rates change. Per-bucket breakdown: retrieval, compression, grammar, memory.</p>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:var(--green-dim)">🧠</div>
+        <div class="feat-title">Smart Compression</div>
+        <p class="feat-body">With Ollama running locally, chunks are summarized by phi3:mini. Without it, smart truncation extracts signatures and docstrings. Four output levels: <code>off</code>, <code>lite</code>, <code>standard</code>, <code>max</code>.</p>
       </div>
-      <div class="how-card">
-        <div class="how-icon" style="background:var(--cyan-dim)">🛡</div>
-        <div class="how-title">Security by Default</div>
-        <p class="how-body">Path traversal protection on all MCP inputs. PII scrubbing (emails, IPs, SSNs, credit cards) on memory writes. Secret file detection (.env, *.pem) during indexing. Audit log with hashed queries.</p>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:var(--cyan-dim)">🔗</div>
+        <div class="feat-title">Session Memory</div>
+        <p class="feat-body">Recall decisions and code areas across sessions via <code>session_recall</code>, <code>record_decision</code>, and <code>record_code_area</code>. No re-explaining your architecture every session.</p>
       </div>
-      <div class="how-card">
-        <div class="how-icon" style="background:var(--purple-dim)">📊</div>
-        <div class="how-title">Append-Only Savings Ledger</div>
-        <p class="how-body">7 buckets track every token saved: retrieval, chunk compression, output compression, memory recall, grammar, turn summarization, progressive disclosure. Survives restarts. Powers CLI and dashboard analytics.</p>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:var(--cyan-dim)">🛡</div>
+        <div class="feat-title">Security by Default</div>
+        <p class="feat-body">Secret files (.env, *.pem) are never indexed. Content is scanned for API keys and credentials. PII is scrubbed from memory writes. Path traversal protection on all inputs.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:var(--purple-dim)">📊</div>
+        <div class="feat-title">Web Dashboard</div>
+        <p class="feat-body">Run <code>cce dashboard</code> for donut charts, bar graphs, file health, and live 5-second polling. Or use <code>cce savings</code> for a quick terminal summary.</p>
       </div>
     </div>
   </div>
@@ -1553,39 +1361,6 @@ function replayTerminal() {
   runTerminal(false);
 }
 
-// ── Ticker ─────────────────────────────────────────────
-function buildTicker() {
-  const items = [
-    { k: 'TOKEN SAVINGS', v: '92.9%', vc: 'g' },
-    { k: 'BENCHMARKED ON', v: 'FASTAPI', vc: 'v' },
-    { k: 'AST LANGUAGES', v: '7', vc: '' },
-    { k: 'RECALL@10', v: '0.80', vc: 'g' },
-    { k: 'LATENCY P50', v: '0.4MS', vc: 'v' },
-    { k: 'MCP', v: 'COMPATIBLE', vc: 'v' },
-    { k: 'SESSION MEMORY', v: 'YES', vc: 'g' },
-    { k: 'GRAPH EXPANSION', v: 'YES', vc: 'g' },
-    { k: 'CLOUD DEPS', v: '0', vc: '' },
-    { k: 'SETUP', v: '60 SECONDS', vc: '' },
-    { k: 'PRICE', v: '$0', vc: '' },
-    { k: 'LICENSE', v: 'MIT', vc: '' },
-    { k: 'INPUT SAVINGS', v: '92.9%', vc: 'g' },
-    { k: 'OUTPUT SAVINGS', v: '65%', vc: 'g' },
-    { k: 'STORAGE', v: 'LOCAL', vc: '' },
-    { k: 'LIVE WATCHER', v: 'YES', vc: 'g' },
-    { k: 'INSTALL SIZE', v: '189MB', vc: 'v' },
-    { k: 'VECTOR STORE', v: 'SQLITE-VEC', vc: 'v' },
-  ];
-  const track = document.getElementById('ticker');
-  [0, 1].forEach(() => {
-    items.forEach(it => {
-      const el = document.createElement('span');
-      el.className = 'tick';
-      el.innerHTML = `${it.k} <span class="${it.vc}">${it.v}</span>`;
-      track.appendChild(el);
-    });
-  });
-}
-
 // ── Scroll spy for nav ────────────────────────────────
 function initScrollSpy() {
   const links = document.querySelectorAll('.nav-center .nav-link[data-section]');
@@ -1614,7 +1389,6 @@ function initScrollSpy() {
 document.addEventListener('DOMContentLoaded', () => {
   runTypewriter();
   runTerminal(false);
-  buildTicker();
   initScrollSpy();
 });
 </script>
