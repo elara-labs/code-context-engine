@@ -33,7 +33,7 @@ payments.py (800 lines, ~12k tokens)
 
 Each chunk is embedded and stored independently. On retrieval, Claude gets the `calculate_shipping` function (600 tokens) rather than the entire file (12,000 tokens).
 
-**Supported languages with AST-aware chunking:** Python, JavaScript, TypeScript, JSX, TSX, PHP.
+**Supported languages with AST-aware chunking:** Python, JavaScript, TypeScript (JSX/TSX), PHP, Go, Rust, Java.
 
 Other file types use line-based chunking with reasonable defaults.
 

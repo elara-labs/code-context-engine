@@ -14,14 +14,15 @@ Every Claude Code session starts cold. Claude has no memory of your project. The
 | Large repos burn tokens just to orient Claude | Only relevant chunks are retrieved |
 | Silent result truncation when context is full | Overflow items listed as expandable references |
 
-**The token cost:**
+**The token cost (benchmarked on FastAPI, 20 queries):**
 
 ```
-Without CCE:  paste payments.py + shipping.py = 45,000 tokens
-With CCE:     search "payment processing"      =    800 tokens
+Without CCE:  read full files     = 75,355 tokens/query (avg)
+With CCE:     context_search      =  5,381 tokens/query (avg)
+Savings:      93% retrieval, 90% additional from compression
 ```
 
-Over 30 queries in a typical project, that difference compounds into real API cost savings.
+These numbers are reproducible. Run `python benchmarks/run_benchmark.py --repo https://github.com/fastapi/fastapi.git --source-dir fastapi` to verify.
 
 ## Quick Navigation
 

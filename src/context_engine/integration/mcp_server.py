@@ -1330,6 +1330,7 @@ class ContextEngineMCP:
         queries = self._stats["queries"]
         raw = self._stats["raw_tokens"]
         served = self._stats["served_tokens"]
+        full_file = self._stats.get("full_file_tokens", 0)
         saved = raw - served
         pct = int(saved / raw * 100) if raw > 0 else 0
 
@@ -1339,10 +1340,20 @@ class ContextEngineMCP:
             f"{get_level_description(self._output_level)}",
         ]
         if queries > 0:
-            status_parts.append(
-                f"Token savings ({queries} queries): {raw:,} raw → {served:,} served "
-                f"({saved:,} saved, {pct}%)"
-            )
+            # Show full-file baseline savings (the headline number)
+            if full_file > 0:
+                full_saved = full_file - served
+                full_pct = int(full_saved / full_file * 100)
+                status_parts.append(
+                    f"Token savings ({queries} queries): "
+                    f"{full_file:,} full-file baseline → {served:,} served "
+                    f"({full_pct}% saved)"
+                )
+            else:
+                status_parts.append(
+                    f"Token savings ({queries} queries): {raw:,} raw → {served:,} served "
+                    f"({saved:,} saved, {pct}%)"
+                )
         else:
             status_parts.append("Token savings: no queries recorded yet")
         return [TextContent(type="text", text="\n".join(status_parts))]

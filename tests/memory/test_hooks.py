@@ -343,3 +343,79 @@ async def test_compression_queue_dedupes(hook_app, aiohttp_client):
         "WHERE kind = 'turn' AND session_id = 'abc' AND prompt_number = 1"
     ).fetchone()["n"]
     assert n == 1, "double-enqueue should be deduped by UNIQUE constraint"
+
+
+# ── Savings visibility tests ──────────────────────────────────────────────
+
+
+async def test_build_savings_line_empty_db(hook_app):
+    """No savings data → empty string."""
+    _, conn = hook_app
+    from context_engine.memory.hooks import _build_savings_line
+    assert _build_savings_line(conn) == ""
+
+
+async def test_build_savings_line_with_data(hook_app):
+    """With savings_log rows, returns a formatted one-liner.
+
+    Uses retrieval baseline (full-file tokens) and chunk_compression served
+    (final compressed tokens) to avoid double-counting across pipeline stages.
+    Query count comes from retrieval calls only.
+    """
+    _, conn = hook_app
+    from context_engine.memory.hooks import _build_savings_line
+    memory_db.record_savings(conn, bucket="retrieval", baseline=10000, served=1000)
+    memory_db.record_savings(conn, bucket="retrieval", baseline=20000, served=2000)
+    memory_db.record_savings(conn, bucket="chunk_compression", baseline=3000, served=300)
+
+    line = _build_savings_line(conn)
+    assert "CCE saved" in line
+    assert "2 queries" in line
+    # retrieval baseline=30000, chunk_compression served=300 → 99% savings
+    assert "99%" in line
+    assert "30.0k" in line
+    assert "300" in line
+
+
+async def test_session_start_includes_savings(hook_app, aiohttp_client):
+    """SessionStart resume should include the savings line when data exists."""
+    app, conn = hook_app
+    # Need at least one decision or rollup for resume to be non-empty
+    conn.execute(
+        "INSERT INTO decisions (decision, reason, source, "
+        "created_at_epoch, created_at) VALUES "
+        "('Use SQLite', 'Simpler than Postgres', 'manual', "
+        "1700001000, '2023-11-14T22:30:00')"
+    )
+    # Add savings data
+    memory_db.record_savings(conn, bucket="retrieval", baseline=50000, served=5000)
+    conn.commit()
+
+    client = await aiohttp_client(app)
+    resp = await client.post(
+        "/hooks/SessionStart",
+        json={"session_id": "savings-test", "project": "demo"},
+    )
+    text = await resp.text()
+    assert "CCE saved" in text, f"Savings line missing from resume: {text!r}"
+    assert "90%" in text
+
+
+async def test_session_start_no_savings_no_line(hook_app, aiohttp_client):
+    """SessionStart resume should NOT include savings when no data exists."""
+    app, conn = hook_app
+    conn.execute(
+        "INSERT INTO decisions (decision, reason, source, "
+        "created_at_epoch, created_at) VALUES "
+        "('Use JWT', 'Legal requirement', 'manual', "
+        "1700001000, '2023-11-14T22:30:00')"
+    )
+    conn.commit()
+
+    client = await aiohttp_client(app)
+    resp = await client.post(
+        "/hooks/SessionStart",
+        json={"session_id": "no-savings", "project": "demo"},
+    )
+    text = await resp.text()
+    assert "CCE saved" not in text

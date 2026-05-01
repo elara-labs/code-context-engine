@@ -1,0 +1,570 @@
+{
+  "project": "fastapi",
+  "timestamp": "2026-05-01T11:38:18.835212+00:00",
+  "project_stats": {
+    "files": 53,
+    "total_tokens": 179794,
+    "indexed_files": 53,
+    "chunks": 425,
+    "index_time_s": 11.8
+  },
+  "token_savings": {
+    "full_project_tokens": 179794,
+    "avg_full_file_per_query": 75355,
+    "avg_raw_chunks_per_query": 5381,
+    "avg_compressed_per_query": 541,
+    "retrieval_savings_pct": 92.9,
+    "compression_savings_pct": 89.9,
+    "combined_savings_pct": 99.3
+  },
+  "layers": {
+    "retrieval": {
+      "baseline": 1507091,
+      "served": 107619,
+      "savings_pct": 92.9,
+      "method": "measured"
+    },
+    "chunk_compression": {
+      "baseline": 107619,
+      "served": 10819,
+      "savings_pct": 89.9,
+      "method": "measured"
+    },
+    "output_compression": {
+      "savings_pct": 65.0,
+      "method": "estimated"
+    },
+    "grammar": {
+      "baseline": 92,
+      "served": 80,
+      "savings_pct": 13.0,
+      "method": "measured"
+    }
+  },
+  "retrieval_quality": {
+    "num_queries": 20,
+    "avg_precision_at_10": 0.296,
+    "avg_recall_at_10": 0.8
+  },
+  "latency": {
+    "p50_ms": 0.4,
+    "p95_ms": 0.4,
+    "p99_ms": 0.5,
+    "runs_per_query": 5
+  },
+  "queries": [
+    {
+      "query": "How does FastAPI handle dependency injection?",
+      "category": "architecture",
+      "full_file_tokens": 75628,
+      "raw_chunk_tokens": 6493,
+      "compressed_tokens": 539,
+      "retrieval_savings_pct": 91.4,
+      "compression_savings_pct": 91.7,
+      "combined_savings_pct": 99.3,
+      "result_files": [
+        ".agents/skills/fastapi/references/dependencies.md",
+        "__init__.py",
+        "__main__.py",
+        "applications.py",
+        "dependencies/utils.py",
+        "exceptions.py",
+        "logger.py",
+        "param_functions.py"
+      ],
+      "expected_files": [
+        "dependencies/models.py",
+        "dependencies/utils.py"
+      ],
+      "hit_files": [
+        "dependencies/utils.py"
+      ],
+      "precision": 0.125,
+      "recall": 0.5
+    },
+    {
+      "query": "How are route decorators like @app.get implemented?",
+      "category": "routing",
+      "full_file_tokens": 94773,
+      "raw_chunk_tokens": 1133,
+      "compressed_tokens": 519,
+      "retrieval_savings_pct": 98.8,
+      "compression_savings_pct": 54.2,
+      "combined_savings_pct": 99.5,
+      "result_files": [
+        "applications.py",
+        "routing.py"
+      ],
+      "expected_files": [
+        "applications.py",
+        "routing.py"
+      ],
+      "hit_files": [
+        "applications.py",
+        "routing.py"
+      ],
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "query": "How does OAuth2 password bearer authentication work?",
+      "category": "security",
+      "full_file_tokens": 9396,
+      "raw_chunk_tokens": 8792,
+      "compressed_tokens": 589,
+      "retrieval_savings_pct": 6.4,
+      "compression_savings_pct": 93.3,
+      "combined_savings_pct": 93.7,
+      "result_files": [
+        "security/http.py",
+        "security/oauth2.py"
+      ],
+      "expected_files": [
+        "security/oauth2.py"
+      ],
+      "hit_files": [
+        "security/oauth2.py"
+      ],
+      "precision": 0.5,
+      "recall": 1.0
+    },
+    {
+      "query": "How does FastAPI generate OpenAPI schema?",
+      "category": "openapi",
+      "full_file_tokens": 58499,
+      "raw_chunk_tokens": 8233,
+      "compressed_tokens": 640,
+      "retrieval_savings_pct": 85.9,
+      "compression_savings_pct": 92.2,
+      "combined_savings_pct": 98.9,
+      "result_files": [
+        "applications.py",
+        "openapi/utils.py",
+        "params.py"
+      ],
+      "expected_files": [
+        "openapi/models.py",
+        "openapi/utils.py"
+      ],
+      "hit_files": [
+        "openapi/utils.py"
+      ],
+      "precision": 0.333,
+      "recall": 0.5
+    },
+    {
+      "query": "How are request body parameters validated?",
+      "category": "validation",
+      "full_file_tokens": 95380,
+      "raw_chunk_tokens": 4340,
+      "compressed_tokens": 533,
+      "retrieval_savings_pct": 95.4,
+      "compression_savings_pct": 87.7,
+      "combined_savings_pct": 99.4,
+      "result_files": [
+        "dependencies/utils.py",
+        "exceptions.py",
+        "openapi/constants.py",
+        "openapi/models.py",
+        "openapi/utils.py",
+        "param_functions.py",
+        "params.py",
+        "routing.py"
+      ],
+      "expected_files": [
+        "param_functions.py",
+        "params.py"
+      ],
+      "hit_files": [
+        "param_functions.py",
+        "params.py"
+      ],
+      "precision": 0.25,
+      "recall": 1.0
+    },
+    {
+      "query": "How does the Swagger UI docs page get served?",
+      "category": "openapi",
+      "full_file_tokens": 52119,
+      "raw_chunk_tokens": 6962,
+      "compressed_tokens": 569,
+      "retrieval_savings_pct": 86.6,
+      "compression_savings_pct": 91.8,
+      "combined_savings_pct": 98.9,
+      "result_files": [
+        "applications.py",
+        "openapi/docs.py",
+        "openapi/models.py"
+      ],
+      "expected_files": [
+        "openapi/docs.py"
+      ],
+      "hit_files": [
+        "openapi/docs.py"
+      ],
+      "precision": 0.333,
+      "recall": 1.0
+    },
+    {
+      "query": "How does FastAPI handle CORS middleware?",
+      "category": "middleware",
+      "full_file_tokens": 95073,
+      "raw_chunk_tokens": 4435,
+      "compressed_tokens": 449,
+      "retrieval_savings_pct": 95.3,
+      "compression_savings_pct": 89.9,
+      "combined_savings_pct": 99.5,
+      "result_files": [
+        "__main__.py",
+        "applications.py",
+        "cli.py",
+        "middleware/asyncexitstack.py",
+        "middleware/cors.py",
+        "routing.py"
+      ],
+      "expected_files": [
+        "middleware/cors.py"
+      ],
+      "hit_files": [
+        "middleware/cors.py"
+      ],
+      "precision": 0.167,
+      "recall": 1.0
+    },
+    {
+      "query": "How are HTTP exceptions and error handlers implemented?",
+      "category": "errors",
+      "full_file_tokens": 47547,
+      "raw_chunk_tokens": 1627,
+      "compressed_tokens": 487,
+      "retrieval_savings_pct": 96.6,
+      "compression_savings_pct": 70.1,
+      "combined_savings_pct": 99.0,
+      "result_files": [
+        "applications.py",
+        "exception_handlers.py",
+        "exceptions.py"
+      ],
+      "expected_files": [
+        "exception_handlers.py",
+        "exceptions.py"
+      ],
+      "hit_files": [
+        "exception_handlers.py",
+        "exceptions.py"
+      ],
+      "precision": 0.667,
+      "recall": 1.0
+    },
+    {
+      "query": "How does the APIRouter class work?",
+      "category": "routing",
+      "full_file_tokens": 98420,
+      "raw_chunk_tokens": 7890,
+      "compressed_tokens": 605,
+      "retrieval_savings_pct": 92.0,
+      "compression_savings_pct": 92.3,
+      "combined_savings_pct": 99.4,
+      "result_files": [
+        "applications.py",
+        "openapi/models.py",
+        "routing.py"
+      ],
+      "expected_files": [
+        "routing.py"
+      ],
+      "hit_files": [
+        "routing.py"
+      ],
+      "precision": 0.333,
+      "recall": 1.0
+    },
+    {
+      "query": "How does FastAPI encode response models with jsonable_encoder?",
+      "category": "serialization",
+      "full_file_tokens": 95821,
+      "raw_chunk_tokens": 10490,
+      "compressed_tokens": 671,
+      "retrieval_savings_pct": 89.1,
+      "compression_savings_pct": 93.6,
+      "combined_savings_pct": 99.3,
+      "result_files": [
+        "applications.py",
+        "responses.py",
+        "routing.py"
+      ],
+      "expected_files": [
+        "encoders.py"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How are WebSocket endpoints defined and handled?",
+      "category": "websocket",
+      "full_file_tokens": 96636,
+      "raw_chunk_tokens": 2499,
+      "compressed_tokens": 548,
+      "retrieval_savings_pct": 97.4,
+      "compression_savings_pct": 78.1,
+      "combined_savings_pct": 99.4,
+      "result_files": [
+        "applications.py",
+        "exceptions.py",
+        "routing.py"
+      ],
+      "expected_files": [
+        "routing.py",
+        "websockets.py"
+      ],
+      "hit_files": [
+        "routing.py"
+      ],
+      "precision": 0.333,
+      "recall": 0.5
+    },
+    {
+      "query": "How does the HTTPBearer security scheme work?",
+      "category": "security",
+      "full_file_tokens": 6999,
+      "raw_chunk_tokens": 4447,
+      "compressed_tokens": 574,
+      "retrieval_savings_pct": 36.5,
+      "compression_savings_pct": 87.1,
+      "combined_savings_pct": 91.8,
+      "result_files": [
+        "openapi/models.py",
+        "security/http.py"
+      ],
+      "expected_files": [
+        "security/http.py"
+      ],
+      "hit_files": [
+        "security/http.py"
+      ],
+      "precision": 0.5,
+      "recall": 1.0
+    },
+    {
+      "query": "How does FastAPI handle background tasks?",
+      "category": "background",
+      "full_file_tokens": 97997,
+      "raw_chunk_tokens": 5824,
+      "compressed_tokens": 537,
+      "retrieval_savings_pct": 94.1,
+      "compression_savings_pct": 90.8,
+      "combined_savings_pct": 99.5,
+      "result_files": [
+        ".agents/skills/fastapi/SKILL.md",
+        "applications.py",
+        "background.py",
+        "logger.py",
+        "middleware/asyncexitstack.py",
+        "routing.py"
+      ],
+      "expected_files": [
+        "background.py",
+        "routing.py"
+      ],
+      "hit_files": [
+        "background.py",
+        "routing.py"
+      ],
+      "precision": 0.333,
+      "recall": 1.0
+    },
+    {
+      "query": "How are API key security dependencies implemented?",
+      "category": "security",
+      "full_file_tokens": 38439,
+      "raw_chunk_tokens": 3568,
+      "compressed_tokens": 476,
+      "retrieval_savings_pct": 90.7,
+      "compression_savings_pct": 86.7,
+      "combined_savings_pct": 98.8,
+      "result_files": [
+        "dependencies/models.py",
+        "openapi/models.py",
+        "openapi/utils.py",
+        "param_functions.py",
+        "params.py",
+        "security/api_key.py"
+      ],
+      "expected_files": [
+        "security/api_key.py"
+      ],
+      "hit_files": [
+        "security/api_key.py"
+      ],
+      "precision": 0.167,
+      "recall": 1.0
+    },
+    {
+      "query": "How does FastAPI integrate with Jinja2 templates?",
+      "category": "templating",
+      "full_file_tokens": 103725,
+      "raw_chunk_tokens": 5604,
+      "compressed_tokens": 482,
+      "retrieval_savings_pct": 94.6,
+      "compression_savings_pct": 91.4,
+      "combined_savings_pct": 99.5,
+      "result_files": [
+        ".agents/skills/fastapi/SKILL.md",
+        "__init__.py",
+        "__main__.py",
+        "applications.py",
+        "logger.py",
+        "routing.py",
+        "security/oauth2.py",
+        "templating.py"
+      ],
+      "expected_files": [
+        "templating.py"
+      ],
+      "hit_files": [
+        "templating.py"
+      ],
+      "precision": 0.125,
+      "recall": 1.0
+    },
+    {
+      "query": "How does the FastAPI application class initialize?",
+      "category": "core",
+      "full_file_tokens": 56845,
+      "raw_chunk_tokens": 5158,
+      "compressed_tokens": 458,
+      "retrieval_savings_pct": 90.9,
+      "compression_savings_pct": 91.1,
+      "combined_savings_pct": 99.2,
+      "result_files": [
+        ".agents/skills/fastapi/SKILL.md",
+        "__init__.py",
+        "__main__.py",
+        "applications.py",
+        "exceptions.py",
+        "logger.py",
+        "middleware/asyncexitstack.py",
+        "params.py"
+      ],
+      "expected_files": [
+        "applications.py"
+      ],
+      "hit_files": [
+        "applications.py"
+      ],
+      "precision": 0.125,
+      "recall": 1.0
+    },
+    {
+      "query": "How are path parameters and query parameters resolved from the request?",
+      "category": "parameters",
+      "full_file_tokens": 85321,
+      "raw_chunk_tokens": 3943,
+      "compressed_tokens": 518,
+      "retrieval_savings_pct": 95.4,
+      "compression_savings_pct": 86.9,
+      "combined_savings_pct": 99.4,
+      "result_files": [
+        "applications.py",
+        "dependencies/utils.py",
+        "openapi/models.py",
+        "param_functions.py",
+        "params.py",
+        "security/api_key.py"
+      ],
+      "expected_files": [
+        "dependencies/utils.py",
+        "params.py"
+      ],
+      "hit_files": [
+        "dependencies/utils.py",
+        "params.py"
+      ],
+      "precision": 0.333,
+      "recall": 1.0
+    },
+    {
+      "query": "How does FastAPI serve static files?",
+      "category": "static",
+      "full_file_tokens": 99638,
+      "raw_chunk_tokens": 5495,
+      "compressed_tokens": 502,
+      "retrieval_savings_pct": 94.5,
+      "compression_savings_pct": 90.9,
+      "combined_savings_pct": 99.5,
+      "result_files": [
+        ".agents/skills/fastapi/SKILL.md",
+        "__init__.py",
+        "__main__.py",
+        "applications.py",
+        "cli.py",
+        "exceptions.py",
+        "logger.py",
+        "routing.py"
+      ],
+      "expected_files": [
+        "staticfiles.py"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does FastAPI implement Server-Sent Events streaming?",
+      "category": "streaming",
+      "full_file_tokens": 97299,
+      "raw_chunk_tokens": 4985,
+      "compressed_tokens": 549,
+      "retrieval_savings_pct": 94.9,
+      "compression_savings_pct": 89.0,
+      "combined_savings_pct": 99.4,
+      "result_files": [
+        ".agents/skills/fastapi/references/streaming.md",
+        "__init__.py",
+        "applications.py",
+        "logger.py",
+        "routing.py",
+        "sse.py"
+      ],
+      "expected_files": [
+        "sse.py"
+      ],
+      "hit_files": [
+        "sse.py"
+      ],
+      "precision": 0.167,
+      "recall": 1.0
+    },
+    {
+      "query": "What Pydantic compatibility layer does FastAPI use for v1 and v2?",
+      "category": "compatibility",
+      "full_file_tokens": 101536,
+      "raw_chunk_tokens": 5701,
+      "compressed_tokens": 574,
+      "retrieval_savings_pct": 94.4,
+      "compression_savings_pct": 89.9,
+      "combined_savings_pct": 99.4,
+      "result_files": [
+        ".agents/skills/fastapi/SKILL.md",
+        "__init__.py",
+        "_compat/shared.py",
+        "applications.py",
+        "cli.py",
+        "exceptions.py",
+        "middleware/asyncexitstack.py",
+        "routing.py"
+      ],
+      "expected_files": [
+        "_compat/shared.py",
+        "_compat/v2.py"
+      ],
+      "hit_files": [
+        "_compat/shared.py"
+      ],
+      "precision": 0.125,
+      "recall": 0.5
+    }
+  ],
+  "source_dir": "fastapi"
+}

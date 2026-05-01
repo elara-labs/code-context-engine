@@ -280,15 +280,15 @@ cce savings
 ```
   my-project · 42 queries
 
-  ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶  70% tokens saved
+  ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶  93% tokens saved
 
   Without CCE   48.0k  tokens   $0.24
-  With CCE      14.2k  tokens   $0.07
+  With CCE       3.4k  tokens   $0.02
   ──────────────────────────────────────────
-  Saved         33.8k  tokens   $0.17
-  ~804 tokens / query  ~<$0.01 / query
+  Saved         44.6k  tokens   $0.22
+  ~81 tokens / query  ~<$0.01 / query
 
-  How:  retrieval 46%  +  compression 45%
+  How:  retrieval 93%  +  compression 90%
   Cost estimate based on Opus input pricing ($5/1M tokens)
 ```
 

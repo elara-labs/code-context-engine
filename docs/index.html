@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Code Context Engine — Cut Token Costs by 70%</title>
-  <meta name="description" content="Local MCP server for Claude Code. AST-aware indexing, semantic search, and automatic compression. Cut token costs by 70%.">
+  <title>Code Context Engine — 93% Token Savings, Benchmarked</title>
+  <meta name="description" content="Local MCP server for Claude Code. AST-aware indexing, semantic search, and multi-layer compression. 93% token savings benchmarked on FastAPI.">
   <meta property="og:title" content="Code Context Engine">
-  <meta property="og:description" content="Index your codebase once. Cut Claude Code token costs by 70%. Local, zero-cloud.">
+  <meta property="og:description" content="Index your codebase once. 93% token savings benchmarked on FastAPI. Local, zero-cloud.">
   <meta property="og:type" content="website">
   <link rel="icon" type="image/svg+xml" href="logo.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,35 +36,40 @@
       --mono:       'DM Mono', 'JetBrains Mono', 'Fira Code', monospace;
     }
 
-    html { scroll-behavior: smooth; }
+    html { scroll-behavior: smooth; scroll-padding-top: 72px; }
 
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: 'DM Sans', 'Inter', system-ui, sans-serif;
+      font-family: 'Outfit', system-ui, sans-serif;
       line-height: 1.6;
       overflow-x: hidden;
     }
 
-    /* Dot grid */
+    /* Noise texture overlay */
     .dot-grid {
       position: fixed;
       inset: 0;
-      background-image: radial-gradient(circle, rgba(255,255,255,0.022) 1px, transparent 1px);
-      background-size: 30px 30px;
       pointer-events: none;
       z-index: 0;
+      opacity: .35;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E");
+      background-size: 256px 256px;
     }
 
     /* ── NAV ──────────────────────────────────────── */
     nav {
-      position: relative;
+      position: sticky;
+      top: 0;
       z-index: 100;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 18px 48px;
-      border-bottom: 1px solid var(--border);
+      padding: 14px 48px;
+      border-bottom: 1px solid rgba(24,41,62,.6);
+      background: rgba(6,12,24,.72);
+      backdrop-filter: blur(18px) saturate(1.4);
+      -webkit-backdrop-filter: blur(18px) saturate(1.4);
     }
 
     .nav-brand {
@@ -73,25 +78,37 @@
       gap: 11px;
       text-decoration: none;
       color: var(--text);
+      flex-shrink: 0;
     }
 
     .nav-logo-mark {
-      width: 30px;
-      height: 30px;
+      width: 28px;
+      height: 28px;
       flex-shrink: 0;
     }
 
     .nav-name {
       font-size: 14px;
-      font-weight: 600;
+      font-weight: 700;
       letter-spacing: -0.01em;
     }
     .nav-name em { color: var(--cyan); font-style: normal; }
+
+    .nav-center {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      background: rgba(16,30,52,.5);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 3px 4px;
+    }
 
     .nav-right {
       display: flex;
       align-items: center;
       gap: 6px;
+      flex-shrink: 0;
     }
 
     .nav-link {
@@ -100,22 +117,24 @@
       gap: 6px;
       color: var(--text2);
       text-decoration: none;
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 500;
-      padding: 6px 12px;
+      padding: 5px 11px;
       border-radius: 7px;
       transition: color .18s, background .18s;
+      white-space: nowrap;
     }
-    .nav-link:hover { color: var(--text); background: var(--bg3); }
-    .nav-link svg { width: 15px; height: 15px; }
+    .nav-link:hover { color: var(--text); background: rgba(0,200,240,.08); }
+    .nav-link.active { color: var(--text); background: var(--bg3); }
+    .nav-link svg { width: 14px; height: 14px; }
 
     .nav-pip {
       background: var(--cyan-dim);
       color: var(--cyan);
       border: 1px solid rgba(0,200,240,.28);
       border-radius: 7px;
-      padding: 6px 14px;
-      font-size: 13px;
+      padding: 5px 13px;
+      font-size: 12.5px;
       font-weight: 600;
       text-decoration: none;
       transition: background .18s, border-color .18s;
@@ -130,13 +149,16 @@
 
     .hero-glow {
       position: absolute;
-      top: -120px;
+      top: -180px;
       left: 50%;
       transform: translateX(-50%);
-      width: 900px;
-      height: 520px;
-      background: radial-gradient(ellipse at 50% 40%, rgba(0,200,240,.055) 0%, transparent 68%);
+      width: 1100px;
+      height: 700px;
       pointer-events: none;
+      background:
+        radial-gradient(ellipse at 35% 45%, rgba(0,200,240,.07) 0%, transparent 55%),
+        radial-gradient(ellipse at 65% 35%, rgba(139,92,246,.05) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 60%, rgba(62,207,142,.03) 0%, transparent 45%);
     }
 
     .hero {
@@ -246,13 +268,58 @@
     .install-alt a { color: var(--text2); text-decoration: none; }
     .install-alt a:hover { color: var(--cyan); }
 
+    /* ── EDITORS STRIP ────────────────────────────── */
+    .editors-section {
+      position: relative;
+      z-index: 1;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+      padding: 40px 0;
+      text-align: center;
+    }
+    .editors-label {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text3);
+      margin-bottom: 24px;
+    }
+    .editor-badges {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding: 0 24px;
+    }
+    .editor-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 22px;
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      transition: border-color .2s, transform .2s, box-shadow .2s;
+    }
+    .editor-badge:hover { border-color: rgba(0,200,240,.3); transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,.35); }
+    .editor-badge img { width: 28px; height: 28px; flex-shrink: 0; }
+    .editor-badge img.invert { filter: invert(1) brightness(1.5); }
+
     /* ── TERMINAL ─────────────────────────────────── */
     .terminal-window {
       background: #070f1c;
       border: 1px solid var(--border2);
       border-radius: 14px;
       overflow: hidden;
-      box-shadow: 0 24px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.03);
+      box-shadow:
+        0 24px 80px rgba(0,0,0,.55),
+        0 0 0 1px rgba(255,255,255,.03),
+        0 0 60px rgba(0,200,240,.04);
     }
 
     .terminal-bar {
@@ -276,11 +343,9 @@
       font-family: var(--mono);
       font-size: 12.5px;
       line-height: 1.72;
-      min-height: 310px;
     }
 
-    .tl { display: block; opacity: 0; transition: opacity .08s; }
-    .tl.on { opacity: 1; }
+    .tl { display: block; }
 
     .t-dim    { color: var(--text3); }
     .t-cmd    { color: var(--text); }
@@ -288,16 +353,6 @@
     .t-info   { color: var(--text2); }
     .t-cyan   { color: var(--cyan); }
     .t-save   { color: var(--green); font-weight: 600; }
-    .s-used, .s-free {
-      display: inline-block;
-      width: 14px; height: 14px;
-      border-radius: 3px;
-      font-size: 0;
-      vertical-align: middle;
-    }
-    .s-used   { background: var(--cyan); box-shadow: 0 0 4px rgba(0,200,240,.3); }
-    .s-free   { background: var(--bg3); border: 1px solid var(--border); }
-
     .cursor {
       display: inline-block;
       width: 7px; height: 13px;
@@ -307,66 +362,6 @@
       animation: blink 1s step-end infinite;
     }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-
-    .tw-cursor {
-      display: inline-block;
-      color: var(--cyan);
-      font-weight: 300;
-      animation: blink 0.7s step-end infinite;
-    }
-
-    .replay-btn {
-      display: block;
-      margin: 10px auto 0;
-      background: transparent;
-      border: 1px solid var(--border2);
-      border-radius: 7px;
-      color: var(--text3);
-      font-size: 11px;
-      font-family: var(--mono);
-      padding: 5px 16px;
-      cursor: pointer;
-      transition: color .18s, border-color .18s, opacity .4s;
-      opacity: 0;
-      letter-spacing: .04em;
-    }
-    .replay-btn:hover { color: var(--cyan); border-color: rgba(0,200,240,.4); }
-
-    /* ── TICKER ───────────────────────────────────── */
-    .ticker-wrap {
-      position: relative;
-      z-index: 1;
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-      background: var(--bg2);
-      overflow: hidden;
-      height: 38px;
-      display: flex;
-      align-items: center;
-    }
-
-    .ticker-track {
-      display: flex;
-      gap: 0;
-      white-space: nowrap;
-      animation: scroll-left 36s linear infinite;
-    }
-
-    .tick {
-      padding: 0 28px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      color: var(--text3);
-    }
-    .tick .v { color: var(--cyan); }
-    .tick .g { color: var(--green); }
-
-    @keyframes scroll-left {
-      0%   { transform: translateX(0); }
-      100% { transform: translateX(-50%); }
-    }
 
     /* ── SHARED SECTION STYLES ────────────────────── */
     section { position: relative; z-index: 1; }
@@ -378,13 +373,22 @@
     }
 
     .section-tag {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
       font-size: 11px;
       font-weight: 600;
       letter-spacing: .12em;
       text-transform: uppercase;
       color: var(--cyan);
       margin-bottom: 14px;
+    }
+    .section-tag::before {
+      content: '';
+      width: 20px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--cyan), rgba(139,92,246,.6));
+      border-radius: 2px;
     }
 
     h2 {
@@ -419,9 +423,9 @@
     .how-card {
       background: var(--bg);
       padding: 40px 34px;
-      transition: background .25s, transform .25s cubic-bezier(.22,1,.36,1);
+      transition: background .3s, transform .3s cubic-bezier(.22,1,.36,1), box-shadow .3s;
     }
-    .how-card:hover { background: var(--bg2); transform: translateY(-2px); }
+    .how-card:hover { background: var(--bg2); transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(0,200,240,.1); }
 
     .how-num {
       font-family: var(--mono);
@@ -467,79 +471,6 @@
       color: var(--cyan);
     }
 
-    /* ── SAVINGS DEMO ─────────────────────────────── */
-    .savings-section {
-      padding: 120px 0;
-      background: var(--bg2);
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .savings-layout {
-      display: grid;
-      grid-template-columns: 1.15fr 1fr;
-      gap: 64px;
-      align-items: center;
-    }
-
-    .savings-terminal {
-      background: #070f1c;
-      border: 1px solid var(--border2);
-      border-radius: 14px;
-      overflow: hidden;
-      box-shadow: 0 16px 52px rgba(0,0,0,.45);
-    }
-
-    .savings-body {
-      padding: 24px 22px;
-      font-family: var(--mono);
-      font-size: 13.5px;
-      line-height: 2;
-    }
-
-    .savings-line { display: block; white-space: pre; }
-
-    .grid-bar {
-      display: inline-flex;
-      gap: 3px;
-      vertical-align: middle;
-      margin-right: 6px;
-    }
-
-    .savings-right {
-      display: flex;
-      flex-direction: column;
-      gap: 36px;
-    }
-
-    .stat-duo {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
-    }
-
-    .stat-block { display: flex; flex-direction: column; gap: 5px; }
-
-    .stat-label {
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: .07em;
-      text-transform: uppercase;
-      color: var(--text3);
-    }
-
-    .stat-val {
-      font-size: 44px;
-      font-weight: 800;
-      line-height: 1;
-      letter-spacing: -.03em;
-    }
-
-    .stat-desc {
-      font-size: 13px;
-      color: var(--text3);
-    }
-
     .c-cyan   { color: var(--cyan); }
     .c-green  { color: var(--green); }
     .c-amber  { color: var(--amber); }
@@ -550,8 +481,8 @@
 
     .features-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 14px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
       margin-top: 52px;
     }
 
@@ -560,10 +491,16 @@
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 30px;
-      transition: border-color .25s cubic-bezier(.22,1,.36,1), background .25s, transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s;
+      transition: border-color .3s, background .3s, transform .3s cubic-bezier(.22,1,.36,1), box-shadow .3s;
       box-shadow: 0 2px 8px rgba(0,0,0,.2);
+      position: relative;
     }
-    .feat-card:hover { border-color: var(--border2); background: var(--bg3); transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,.35); }
+    .feat-card:hover {
+      border-color: rgba(0,200,240,.25);
+      background: var(--bg3);
+      transform: translateY(-4px);
+      box-shadow: 0 16px 40px rgba(0,0,0,.35), 0 0 20px rgba(0,200,240,.04);
+    }
 
     .feat-icon {
       width: 42px; height: 42px;
@@ -595,6 +532,147 @@
       font-family: var(--mono);
       font-size: .9em;
       color: var(--cyan);
+    }
+
+    /* ── BENCHMARK ────────────────────────────────── */
+    .bench-section {
+      padding: 120px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .bench-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 56px;
+      align-items: start;
+      margin-top: 48px;
+    }
+
+    .bench-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .bench-stat {
+      background: rgba(11,21,37,.7);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px 24px;
+      transition: border-color .3s, transform .3s cubic-bezier(.22,1,.36,1), box-shadow .3s;
+    }
+    .bench-stat:hover { border-color: rgba(0,200,240,.2); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+
+    .bench-stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text3);
+      margin-bottom: 8px;
+    }
+
+    .bench-stat-val {
+      font-size: 40px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -.03em;
+    }
+
+    .bench-stat-desc {
+      font-size: 12px;
+      color: var(--text3);
+      margin-top: 6px;
+    }
+
+    .bench-stat.wide {
+      grid-column: 1 / -1;
+    }
+
+    .bench-right {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .bench-methodology {
+      font-size: 14px;
+      color: var(--text2);
+      line-height: 1.7;
+    }
+
+    .bench-bar-chart {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .bench-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .bench-bar-label {
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--text2);
+      width: 110px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .bench-bar-track {
+      flex: 1;
+      height: 28px;
+      background: var(--bg3);
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bench-bar-fill {
+      height: 100%;
+      border-radius: 6px;
+    }
+
+    .bench-bar-fill.baseline { background: var(--text3); }
+    .bench-bar-fill.cce { background: var(--cyan); }
+    .bench-bar-fill.green { background: var(--green); }
+
+    .bench-bar-val {
+      font-size: 12px;
+      font-weight: 600;
+      font-family: var(--mono);
+      color: var(--text);
+      white-space: nowrap;
+      flex-shrink: 0;
+      min-width: 90px;
+    }
+
+    .bench-reproduce {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--text2);
+      line-height: 1.8;
+    }
+
+    .bench-reproduce .t-dim { color: var(--text3); }
+    .bench-reproduce .t-cmd { color: var(--text); }
+
+    @media (max-width: 1024px) {
+      .bench-layout { grid-template-columns: 1fr; }
+      .bench-stats { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .bench-stats { grid-template-columns: 1fr; }
+      .bench-stat.wide { grid-column: auto; }
     }
 
     /* ── COMPARE ──────────────────────────────────── */
@@ -742,22 +820,18 @@
 
     /* ── REDUCED MOTION ───────────────────────────── */
     @media (prefers-reduced-motion: reduce) {
-      .ticker-track { animation-play-state: paused; }
       .badge-dot { animation: none; }
       .cursor { animation: none; opacity: 1; }
-      .tw-cursor { animation: none; opacity: 0; }
-      .tl { opacity: 1 !important; transition: none !important; }
-      .replay-btn { opacity: 1; }
     }
 
     /* ── RESPONSIVE ───────────────────────────────── */
     @media (max-width: 1024px) {
       nav { padding: 14px 24px; }
+      .nav-center { display: none; }
       .hero { grid-template-columns: 1fr; padding: 60px 24px 40px; gap: 40px; }
       .hero-title { font-size: 46px; }
       .how-grid { grid-template-columns: 1fr; gap: 0; }
-      .savings-layout { grid-template-columns: 1fr; }
-      .features-grid { grid-template-columns: repeat(2, 1fr); }
+      .features-grid { grid-template-columns: 1fr 1fr; }
       .wrap { padding: 0 24px; }
       footer { flex-direction: column; gap: 16px; padding: 24px; text-align: center; }
       .terminal-body { overflow-x: auto; }
@@ -775,11 +849,9 @@
       h2 { font-size: 30px; }
       .cta-title { font-size: 36px; }
       .features-grid { grid-template-columns: 1fr; }
-      .stat-duo { grid-template-columns: 1fr; }
       .wrap { padding: 0 16px; }
       .install-row { max-width: 100%; }
       .install-text { font-size: 12px; }
-      .savings-body { overflow-x: auto; font-size: 12px; }
     }
   </style>
 </head>
@@ -799,6 +871,12 @@
     </svg>
     <span class="nav-name">Code <em>Context Engine</em></span>
   </a>
+  <div class="nav-center">
+    <a href="#benchmark" class="nav-link" data-section="benchmark">Benchmark</a>
+    <a href="#how" class="nav-link" data-section="how">How it works</a>
+    <a href="#features" class="nav-link" data-section="features">Features</a>
+    <a href="#compare" class="nav-link" data-section="compare">Compare</a>
+  </div>
   <div class="nav-right">
     <a href="https://github.com/elara-labs/code-context-engine" class="nav-link" target="_blank" rel="noopener">
       <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -819,7 +897,7 @@
         MCP Server &nbsp;·&nbsp; Local &nbsp;·&nbsp; Zero Cloud
       </div>
 
-      <h1 class="hero-title" id="hero-title" aria-label="Index once. Pay 70% less."></h1>
+      <h1 class="hero-title">Index once.<br><span class="accent">Save 93%.</span></h1>
 
       <p class="hero-desc">
         A local MCP server for Claude Code. AST-aware indexing, semantic search, and automatic compression. Claude stops re-reading your entire codebase every session.
@@ -835,6 +913,7 @@
           or: <a href="https://pypi.org/project/code-context-engine/" target="_blank">pipx install code-context-engine</a>
         </div>
       </div>
+
     </div>
 
     <div>
@@ -845,21 +924,143 @@
           <div class="win-dot" style="background:#27c93f"></div>
           <span class="terminal-label">~/my-project</span>
         </div>
-        <div class="terminal-body" id="hero-term"></div>
+        <div class="terminal-body">
+          <span class="tl on"><span class="t-dim">$</span> <span class="t-cmd">cce init</span></span>
+          <span class="tl on">&nbsp;</span>
+          <span class="tl on">  <span class="t-cyan" style="font-weight:700">Code Context Engine</span>  <span class="t-dim">·  my-project</span></span>
+          <span class="tl on">  <span class="t-dim">────────────────────────────────</span></span>
+          <span class="tl on">&nbsp;</span>
+          <span class="tl on">  <span class="t-ok">✓</span> <span class="t-info">Git hooks installed  </span><span class="t-dim">(3 hooks, auto-updates)</span></span>
+          <span class="tl on">  <span class="t-ok">✓</span> <span class="t-info">MCP server registered in </span><span class="t-cyan">.mcp.json</span></span>
+          <span class="tl on">  <span class="t-ok">✓</span> <span class="t-info">CLAUDE.md created</span></span>
+          <span class="tl on">  <span class="t-ok">✓</span> <span class="t-info">.gitignore updated</span></span>
+          <span class="tl on">&nbsp;</span>
+          <span class="tl on">  <span class="t-cyan" style="font-weight:600">Indexing project</span>...</span>
+          <span class="tl on">    <span class="t-cyan">██████████████████████████████</span>  <span style="font-weight:600;color:#dde8ff">89/89</span> <span class="t-dim">files  100%</span></span>
+          <span class="tl on">&nbsp;</span>
+          <span class="tl on">  <span class="t-ok">✓</span> <span style="font-weight:700;color:#dde8ff">Indexed 1,247 chunks</span> <span class="t-info">from 89 files</span></span>
+          <span class="tl on">&nbsp;</span>
+          <span class="tl on">  <span class="t-ok" style="font-weight:700">Done!</span>  <span class="t-dim">Restart Claude Code to activate CCE.</span></span>
+          <span class="cursor"></span>
+        </div>
       </div>
-      <button class="replay-btn" id="replay-btn" onclick="replayTerminal()">↺ replay</button>
     </div>
 
   </div>
 </div>
 
-<!-- ── TICKER ─────────────────────────────────────────── -->
-<div class="ticker-wrap">
-  <div class="ticker-track" id="ticker"></div>
+<!-- ── EDITORS ───────────────────────────────────────────── -->
+<div class="editors-section">
+  <div class="editors-label">Works with your editor</div>
+  <div class="editor-badges">
+    <span class="editor-badge"><img src="https://cdn.simpleicons.org/anthropic/D97757" alt="Anthropic">Claude Code</span>
+    <span class="editor-badge"><img src="https://cdn.simpleicons.org/cursor/00A3FF" alt="Cursor">Cursor</span>
+    <span class="editor-badge"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/vscode/vscode-original.svg" alt="VS Code">VS Code</span>
+    <span class="editor-badge"><img src="https://cdn.simpleicons.org/googlegemini/88A5F8" alt="Gemini">Gemini CLI</span>
+    <span class="editor-badge"><img src="https://svgl.app/library/openai.svg" alt="OpenAI" class="invert">Codex CLI</span>
+  </div>
 </div>
 
+<section class="bench-section" id="benchmark">
+  <div class="wrap">
+    <span class="section-tag">Benchmark</span>
+    <h2>Verified on FastAPI.<br>Reproduce it yourself.</h2>
+    <p class="sec-sub">20 real coding questions against FastAPI (48 source files, 19K lines). No synthetic queries, no cherry-picking.</p>
+
+    <div class="bench-layout">
+      <div class="bench-stats">
+        <div class="bench-stat">
+          <div class="bench-stat-label">Retrieval</div>
+          <div class="bench-stat-val c-green">93%</div>
+          <div class="bench-stat-desc">full files → relevant chunks</div>
+        </div>
+        <div class="bench-stat">
+          <div class="bench-stat-label">Compression</div>
+          <div class="bench-stat-val c-cyan">90%</div>
+          <div class="bench-stat-desc">chunks → signatures</div>
+        </div>
+        <div class="bench-stat">
+          <div class="bench-stat-label">Recall@10</div>
+          <div class="bench-stat-val c-amber">0.80</div>
+          <div class="bench-stat-desc">found the right files</div>
+        </div>
+        <div class="bench-stat">
+          <div class="bench-stat-label">Latency p50</div>
+          <div class="bench-stat-val c-text2">0.4ms</div>
+          <div class="bench-stat-desc">per search query</div>
+        </div>
+        <div class="bench-stat wide">
+          <div class="bench-stat-label">Token flow per query (avg)</div>
+          <div class="bench-bar-chart" style="margin-top:14px">
+            <div class="bench-bar-row">
+              <span class="bench-bar-label">Full files</span>
+              <div class="bench-bar-track">
+                <div class="bench-bar-fill baseline" style="width:100%"></div>
+              </div>
+              <span class="bench-bar-val">75,355</span>
+            </div>
+            <div class="bench-bar-row">
+              <span class="bench-bar-label">After retrieval</span>
+              <div class="bench-bar-track">
+                <div class="bench-bar-fill cce" style="width:7.1%"></div>
+              </div>
+              <span class="bench-bar-val" style="color:var(--cyan)">5,381</span>
+            </div>
+            <div class="bench-bar-row">
+              <span class="bench-bar-label">After compression</span>
+              <div class="bench-bar-track">
+                <div class="bench-bar-fill green" style="width:0.7%"></div>
+              </div>
+              <span class="bench-bar-val" style="color:var(--green)">541</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bench-right">
+        <div>
+          <h3 style="font-size:18px;font-weight:700;margin-bottom:12px">Per-Layer Savings</h3>
+          <p class="bench-methodology" style="margin-bottom:14px">Each layer measured against its own baseline. Not stacked.</p>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px">
+              <span>Retrieval <span style="color:var(--text3);font-size:11px">· measured</span></span>
+              <span class="c-green" style="font-weight:700">93%</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px">
+              <span>Chunk Compression <span style="color:var(--text3);font-size:11px">· measured</span></span>
+              <span class="c-green" style="font-weight:700">90%</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px">
+              <span>Output Compression <span style="color:var(--text3);font-size:11px">· estimated</span></span>
+              <span class="c-cyan" style="font-weight:700">65%</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px">
+              <span>Grammar <span style="color:var(--text3);font-size:11px">· measured</span></span>
+              <span class="c-cyan" style="font-weight:700">13%</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 style="font-size:18px;font-weight:700;margin-bottom:12px">Reproduce it</h3>
+          <div class="bench-reproduce">
+            <span class="t-dim">$</span> <span class="t-cmd">pip install code-context-engine</span><br>
+            <span class="t-dim">$</span> <span class="t-cmd">python benchmarks/run_benchmark.py \</span><br>
+            <span class="t-dim">&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="t-cmd">--repo https://github.com/fastapi/fastapi.git \</span><br>
+            <span class="t-dim">&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="t-cmd">--source-dir fastapi</span>
+          </div>
+        </div>
+
+        <p style="font-size:13px;color:var(--text3)">
+          Full results: <a href="https://github.com/elara-labs/code-context-engine/blob/main/benchmarks/results/fastapi.md" target="_blank" rel="noopener" style="color:var(--cyan);text-decoration:none">benchmarks/results/fastapi.md</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ── HOW IT WORKS ───────────────────────────────────── -->
-<section class="how-section">
+<section class="how-section" id="how">
   <div class="wrap">
     <span class="section-tag">How it works</span>
     <h2>Three commands.<br>Permanent savings.</h2>
@@ -869,85 +1070,29 @@
         <div class="how-num">01</div>
         <div class="how-icon" style="background:var(--cyan-dim)">🗂</div>
         <div class="how-title">Index your codebase</div>
-        <p class="how-body">Tree-sitter parses your code into semantic chunks — functions, classes, modules. Stored locally with vector embeddings. A live progress bar shows indexing status. Git hooks keep it current automatically on every commit.</p>
+        <p class="how-body">Tree-sitter parses your code into semantic chunks (functions, classes, modules). Stored locally with vector embeddings. Git hooks keep the index current automatically.</p>
         <span class="how-cmd">cce init</span>
       </div>
       <div class="how-card">
         <div class="how-num">02</div>
         <div class="how-icon" style="background:var(--purple-dim)">🔍</div>
         <div class="how-title">Claude searches, not reads</div>
-        <p class="how-body">Instead of reading whole files, Claude calls <code>context_search</code> via MCP. Hybrid vector + keyword search, then one hop on the code graph for related files. Gets the 800 tokens it needs, not an 8,000-token dump.</p>
+        <p class="how-body">Instead of reading whole files, Claude calls <code>context_search</code> via MCP. Hybrid vector + keyword search finds the relevant chunks. Gets the 800 tokens it needs, not an 8,000-token dump.</p>
         <span class="how-cmd">context_search "payment"</span>
       </div>
       <div class="how-card">
         <div class="how-num">03</div>
         <div class="how-icon" style="background:var(--green-dim)">📊</div>
         <div class="how-title">Track real savings</div>
-        <p class="how-body">Every query is recorded. <code>cce savings</code> shows exactly how many tokens CCE saved you — not an estimate, your actual usage data.</p>
+        <p class="how-body">Every query is recorded. <code>cce savings</code> shows exactly how many tokens CCE saved you, with dollar estimates from live Anthropic pricing.</p>
         <span class="how-cmd">cce savings</span>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ── SAVINGS DEMO ───────────────────────────────────── -->
-<section class="savings-section">
-  <div class="wrap">
-    <div class="savings-layout">
-
-      <div class="savings-terminal">
-        <div class="terminal-bar">
-          <div class="win-dot" style="background:#ff5f56"></div>
-          <div class="win-dot" style="background:#ffbd2e"></div>
-          <div class="win-dot" style="background:#27c93f"></div>
-          <span class="terminal-label">cce savings</span>
-        </div>
-        <div class="savings-body">
-          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-used">⛁</span><span class="s-used">⛁</span><span class="s-used">⛁</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span class="t-cyan" style="font-weight:600">my-project</span> <span class="t-dim">·</span> <span class="t-cyan">38</span> <span class="t-dim">queries</span></span>
-          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span class="t-cyan">14.2k</span> <span class="t-dim">served ·</span> <span class="t-cyan">26.0k</span> <span class="t-dim">raw ·</span> <span class="t-cyan">48.0k</span> <span class="t-dim">baseline</span></span>
-          <span class="savings-line">&nbsp;</span>
-          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span style="font-weight:600">Token savings (split)</span></span>
-          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span class="s-used">⛁</span> <span class="t-info">Retrieval:</span>    <span class="t-save">46%</span>  <span class="t-dim">vs full files</span></span>
-          <span class="savings-line"><span class="t-dim">  </span><span class="grid-bar"><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span><span class="s-free">⛶</span></span><span class="s-free">⛶</span> <span class="t-info">Compression:</span>  <span class="t-save">45%</span>  <span class="t-dim">chunk → summary</span></span>
-        </div>
-      </div>
-
-      <div class="savings-right">
-        <div>
-          <span class="section-tag">Token savings</span>
-          <h2 style="font-size:32px">Real numbers.<br>Not estimates.</h2>
-          <p class="sec-sub" style="font-size:15px">Every query through CCE is tracked. <code>cce savings</code> shows your actual token usage — how much was retrieved vs how much reading the full codebase would have cost.</p>
-        </div>
-
-        <div class="stat-duo">
-          <div class="stat-block">
-            <span class="stat-label">Token savings</span>
-            <span class="stat-val c-green">~70%</span>
-            <span class="stat-desc">per Claude session</span>
-          </div>
-          <div class="stat-block">
-            <span class="stat-label">Cost saved</span>
-            <span class="stat-val c-amber">$1.57</span>
-            <span class="stat-desc">per session (Opus 4)</span>
-          </div>
-          <div class="stat-block">
-            <span class="stat-label">Languages</span>
-            <span class="stat-val c-cyan">6</span>
-            <span class="stat-desc">AST-aware</span>
-          </div>
-          <div class="stat-block">
-            <span class="stat-label">Cloud deps</span>
-            <span class="stat-val c-text2">0</span>
-            <span class="stat-desc">fully local</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
 <!-- ── FEATURES ───────────────────────────────────────── -->
-<section class="features-section">
+<section class="features-section" id="features">
   <div class="wrap">
     <span class="section-tag">Features</span>
     <h2>Everything Claude needs.<br>Nothing it doesn't.</h2>
@@ -956,7 +1101,7 @@
       <div class="feat-card">
         <div class="feat-icon" style="background:var(--cyan-dim)">🌳</div>
         <div class="feat-title">AST-Aware Chunking</div>
-        <p class="feat-body">Tree-sitter parses Python, JavaScript, TypeScript, JSX, TSX, and PHP into semantic chunks — functions, classes, imports. No raw file dumps, no context waste.</p>
+        <p class="feat-body">Tree-sitter parses Python, JavaScript, TypeScript, PHP, Go, Rust, and Java into semantic chunks. Functions, classes, imports. No raw file dumps, no context waste.</p>
       </div>
       <div class="feat-card">
         <div class="feat-icon" style="background:var(--purple-dim)">⚡</div>
@@ -974,83 +1119,21 @@
         <p class="feat-body">Recall decisions and code areas across sessions via <code>session_recall</code>, <code>record_decision</code>, and <code>record_code_area</code>. No re-explaining your architecture every session.</p>
       </div>
       <div class="feat-card">
-        <div class="feat-icon" style="background:var(--purple-dim)">🔄</div>
-        <div class="feat-title">Live File Watcher</div>
-        <p class="feat-body">Files are re-indexed automatically on save during <code>cce serve</code>. Git hooks handle commits. Debounced, deduped, zero manual effort.</p>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon" style="background:var(--green-dim)">📋</div>
-        <div class="feat-title">Project Commands</div>
-        <p class="feat-body">Persist rules, preferences, and shell hooks per project with <code>cce commands</code>. "Never use down() in migrations" — stored once, surfaced to Claude every session.</p>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon" style="background:var(--cyan-dim)">🎨</div>
-        <div class="feat-title">Colorful CLI</div>
-        <p class="feat-body">Every command outputs styled, animated results. Section headers, colored bullets, line-by-line reveal. Run <code>cce</code> for a 2-column status dashboard in your terminal.</p>
+        <div class="feat-icon" style="background:var(--cyan-dim)">🛡</div>
+        <div class="feat-title">Security by Default</div>
+        <p class="feat-body">Secret files (.env, *.pem) are never indexed. Content is scanned for API keys and credentials. PII is scrubbed from memory writes. Path traversal protection on all inputs.</p>
       </div>
       <div class="feat-card">
         <div class="feat-icon" style="background:var(--purple-dim)">📊</div>
         <div class="feat-title">Web Dashboard</div>
-        <p class="feat-body">Run <code>cce dashboard</code> for a Grafana-inspired dark theme with donut charts, bar graphs, file health, and live 5-second polling. All in a single embedded HTML file.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ── UNDER THE HOOD ────────────────────────────────── -->
-<section class="how-section" style="border-top:1px solid var(--border)">
-  <div class="wrap">
-    <span class="section-tag">Under the hood</span>
-    <h2>Clever engineering.<br>Zero magic.</h2>
-    <p class="sec-sub" style="margin-bottom:42px">Every decision optimizes for speed, cost, or reliability. Here is what makes CCE tick.</p>
-
-    <div class="how-grid" style="grid-template-columns:repeat(2,1fr)">
-      <div class="how-card">
-        <div class="how-icon" style="background:var(--cyan-dim)">⚡</div>
-        <div class="how-title">Content-Hash Embedding Cache</div>
-        <p class="how-body">SHA-256 fingerprint per chunk, salted with model name. Re-index skips unchanged code. Binary-packed embeddings (struct.pack) are 10x smaller than JSON. Typical re-index: 96% cache hit, under 1 second.</p>
-      </div>
-      <div class="how-card">
-        <div class="how-icon" style="background:var(--purple-dim)">🔀</div>
-        <div class="how-title">Hybrid Retrieval + RRF</div>
-        <p class="how-body">Vector search (semantic) and BM25 (exact keyword) run in parallel. Merged via Reciprocal Rank Fusion (K=60). Confidence blends similarity (50%), keyword match (30%), and recency (20%). Code-lookup queries boost FTS 1.5x.</p>
-      </div>
-      <div class="how-card">
-        <div class="how-icon" style="background:var(--green-dim)">🪶</div>
-        <div class="how-title">sqlite-vec: 2 MB, not 217 MB</div>
-        <p class="how-body">Replaced LanceDB with sqlite-vec. Same search quality, 99% smaller install. WAL mode + PRAGMA NORMAL for 80% write speedup. Vectors, FTS5, code graph, compression cache all in three SQLite files.</p>
-      </div>
-      <div class="how-card">
-        <div class="how-icon" style="background:var(--cyan-dim)">📐</div>
-        <div class="how-title">Deterministic Grammar Compression</div>
-        <p class="how-body">No LLM needed. Drops articles, fillers, pronouns from memory entries. Three levels (lite/full/ultra, 20-60% savings). Code, paths, URLs preserved byte-for-byte. Same input always yields same output.</p>
-      </div>
-      <div class="how-card">
-        <div class="how-icon" style="background:var(--purple-dim)">🔒</div>
-        <div class="how-title">Fail-Closed Hooks</div>
-        <p class="how-body">5 Claude Code lifecycle hooks capture session context. Every hook runs <code>curl ... || true</code> so a crashed server never blocks the user. SessionStart injects bootstrap context; others capture silently.</p>
-      </div>
-      <div class="how-card">
-        <div class="how-icon" style="background:var(--green-dim)">💰</div>
-        <div class="how-title">Dynamic Pricing</div>
-        <p class="how-body"><code>cce savings</code> shows dollar estimates from live Anthropic pricing (fetched, cached 7 days, offline fallback). No manual updates when rates change. Per-bucket breakdown: retrieval, compression, grammar, memory.</p>
-      </div>
-      <div class="how-card">
-        <div class="how-icon" style="background:var(--cyan-dim)">🛡</div>
-        <div class="how-title">Security by Default</div>
-        <p class="how-body">Path traversal protection on all MCP inputs. PII scrubbing (emails, IPs, SSNs, credit cards) on memory writes. Secret file detection (.env, *.pem) during indexing. Audit log with hashed queries.</p>
-      </div>
-      <div class="how-card">
-        <div class="how-icon" style="background:var(--purple-dim)">📊</div>
-        <div class="how-title">Append-Only Savings Ledger</div>
-        <p class="how-body">7 buckets track every token saved: retrieval, chunk compression, output compression, memory recall, grammar, turn summarization, progressive disclosure. Survives restarts. Powers CLI and dashboard analytics.</p>
+        <p class="feat-body">Run <code>cce dashboard</code> for donut charts, bar graphs, file health, and live 5-second polling. Or use <code>cce savings</code> for a quick terminal summary.</p>
       </div>
     </div>
   </div>
 </section>
 
 <!-- ── COMPARE ────────────────────────────────────────── -->
-<section class="compare-section">
+<section class="compare-section" id="compare">
   <div class="wrap">
     <span class="section-tag">Comparison</span>
     <h2>How CCE stacks up</h2>
@@ -1175,160 +1258,33 @@ function copyText(btn, text) {
   });
 }
 
-// ── Typewriter headline ────────────────────────────────
-function runTypewriter() {
-  const el = document.getElementById('hero-title');
-  if (!el) return;
-
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    el.innerHTML = 'Index once.<br><span class="accent">Pay 70% less.</span>';
-    return;
-  }
-
-  el.innerHTML = '<span id="tw-l1"></span><br><span class="accent" id="tw-l2"></span><span class="tw-cursor">|</span>';
-  const l1 = document.getElementById('tw-l1');
-  const l2 = document.getElementById('tw-l2');
-  const cur = el.querySelector('.tw-cursor');
-  const t1 = 'Index once.', t2 = 'Pay 70% less.';
-  const speed = 52;
-  let i = 0, j = 0;
-
-  function tick1() {
-    if (i < t1.length) { l1.textContent += t1[i++]; setTimeout(tick1, speed); }
-    else setTimeout(tick2, 360);
-  }
-  function tick2() {
-    if (j < t2.length) { l2.textContent += t2[j++]; setTimeout(tick2, speed); }
-    else setTimeout(() => { if (cur) cur.remove(); }, 1400);
-  }
-  setTimeout(tick1, 320);
-}
-
-// ── Hero terminal animation ────────────────────────────
-const HERO_LINES = [
-  { html: '<span class="t-dim">$</span> <span class="t-cmd">cce init</span>', delay: 600 },
-  { html: '', delay: 280 },
-  { html: '  <span class="t-cyan" style="font-weight:700">Code Context Engine</span>  <span class="t-dim">·  my-project</span>', delay: 520 },
-  { html: '  <span class="t-dim">────────────────────────────────</span>', delay: 100 },
-  { html: '', delay: 220 },
-  { html: '  <span class="t-dim">Checking embedding model...</span> <span class="t-ok">ready.</span>', delay: 1100 },
-  { html: '  Ollama <span style="color:#f59e0b">not running</span> <span class="t-dim">— truncation compression.</span>', delay: 460 },
-  { html: '', delay: 280 },
-  { html: '  <span class="t-ok">✓</span> <span class="t-info">Git hooks installed  </span><span class="t-dim">(3 hooks, auto-updates)</span>', delay: 480 },
-  { html: '  <span class="t-ok">✓</span> <span class="t-info">MCP server registered in </span><span class="t-cyan">.mcp.json</span>', delay: 420 },
-  { html: '  <span class="t-ok">✓</span> <span class="t-info">CLAUDE.md created</span>', delay: 380 },
-  { html: '  <span class="t-ok">✓</span> <span class="t-info">.gitignore updated</span>', delay: 380 },
-  { html: '', delay: 240 },
-  { html: '  <span class="t-cyan" style="font-weight:600">Indexing project</span>...', delay: 520 },
-  { html: '    <span class="t-cyan">████████████████</span><span class="t-dim">██████████████</span>  <span style="font-weight:600;color:#dde8ff">52/89</span> <span class="t-dim">files  58%</span>', delay: 900 },
-  { html: '    <span class="t-cyan">██████████████████████████████</span>  <span style="font-weight:600;color:#dde8ff">89/89</span> <span class="t-dim">files  100%</span>', delay: 820 },
-  { html: '', delay: 140 },
-  { html: '  <span class="t-ok">✓</span> <span style="font-weight:700;color:#dde8ff">Indexed 1,247 chunks</span> <span class="t-info">from 89 files</span>', delay: 520 },
-  { html: '', delay: 200 },
-  { html: '  <span class="t-ok" style="font-weight:700">Done!</span>  <span class="t-dim">Restart Claude Code to activate CCE.</span>', delay: 420 },
-  { html: '', delay: 300 },
-  { html: '<span class="t-dim">$</span> <span class="t-cmd">cce</span>', delay: 500 },
-  { html: '', delay: 200 },
-  { html: '<span class="t-dim">╭──────────────── Code Context Engine v0.4.0 ────────────────╮</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>                        <span class="t-cyan" style="font-weight:700">⬡  C C E  ⬡</span>                         <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>                         <span style="font-weight:700">my-project</span>                         <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>             <span class="t-dim">standard profile  ·  ~/my-project</span>              <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">├───────────────────────────┬────────────────────────────────┤</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span> <span class="t-info">Status</span>                    <span class="t-dim">│</span> <span class="t-info">Getting started</span>                <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Indexed   <span class="t-cyan">1,247</span> chunks <span class="t-dim">│</span>  <span class="t-cyan">cce status</span>   <span class="t-dim">full diagnostics</span> <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Compress  <span class="t-dim">truncation</span>   <span class="t-dim">│</span>  <span class="t-cyan">cce savings</span>  <span class="t-dim">token savings</span>    <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Savings   <span class="t-save">70%</span>          <span class="t-dim">│</span>  <span class="t-cyan">cce list</span>     <span class="t-dim">all commands</span>     <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">╰───────────────────────────┴────────────────────────────────╯</span>', delay: 80 },
-];
-
-let _termTimers = [];
-
-function runTerminal(instant) {
-  const el = document.getElementById('hero-term');
-  el.innerHTML = '';
-
-  if (instant || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    HERO_LINES.forEach(line => {
-      const span = document.createElement('span');
-      span.className = 'tl on';
-      span.innerHTML = line.html || '&nbsp;';
-      el.appendChild(span);
-    });
-    const cur = document.createElement('span');
-    cur.className = 'cursor';
-    el.appendChild(cur);
-    const btn = document.getElementById('replay-btn');
-    if (btn) btn.style.opacity = '1';
-    return;
-  }
-
-  let t = 0;
-  HERO_LINES.forEach(line => {
-    t += line.delay;
-    const id = setTimeout(() => {
-      const span = document.createElement('span');
-      span.className = 'tl';
-      span.innerHTML = line.html || '&nbsp;';
-      el.appendChild(span);
-      requestAnimationFrame(() => requestAnimationFrame(() => span.classList.add('on')));
-    }, t);
-    _termTimers.push(id);
+// ── Scroll spy for nav ────────────────────────────────
+function initScrollSpy() {
+  const links = document.querySelectorAll('.nav-center .nav-link[data-section]');
+  const sections = [];
+  links.forEach(link => {
+    const id = link.getAttribute('data-section');
+    const el = document.getElementById(id);
+    if (el) sections.push({ id, el, link });
   });
-  const id = setTimeout(() => {
-    const cur = document.createElement('span');
-    cur.className = 'cursor';
-    el.appendChild(cur);
-    const btn = document.getElementById('replay-btn');
-    if (btn) btn.style.opacity = '1';
-  }, t + 220);
-  _termTimers.push(id);
-}
+  if (!sections.length) return;
 
-function replayTerminal() {
-  _termTimers.forEach(clearTimeout);
-  _termTimers = [];
-  const btn = document.getElementById('replay-btn');
-  if (btn) btn.style.opacity = '0';
-  runTerminal(false);
-}
+  function update() {
+    const scrollY = window.scrollY + 120;
+    let active = sections[0];
+    for (const s of sections) {
+      if (s.el.offsetTop <= scrollY) active = s;
+    }
+    links.forEach(l => l.classList.remove('active'));
+    if (active) active.link.classList.add('active');
+  }
 
-// ── Ticker ─────────────────────────────────────────────
-function buildTicker() {
-  const items = [
-    { k: 'TOKEN SAVINGS', v: '70%', vc: 'g' },
-    { k: 'PRICE', v: '$0', vc: '' },
-    { k: 'AST LANGUAGES', v: '6', vc: '' },
-    { k: 'CLOUD DEPS', v: '0', vc: '' },
-    { k: 'STORAGE', v: 'LOCAL', vc: '' },
-    { k: 'MCP', v: 'COMPATIBLE', vc: 'v' },
-    { k: 'SESSION MEMORY', v: 'YES', vc: 'g' },
-    { k: 'GRAPH EXPANSION', v: 'YES', vc: 'g' },
-    { k: 'PROGRESS BAR', v: 'YES', vc: 'g' },
-    { k: 'SETUP', v: '60 SECONDS', vc: '' },
-    { k: 'PROJECT COMMANDS', v: 'YES', vc: 'g' },
-    { k: 'LICENSE', v: 'MIT', vc: '' },
-    { k: 'INPUT SAVINGS', v: '70%', vc: 'g' },
-    { k: 'OUTPUT SAVINGS', v: '65%', vc: 'g' },
-    { k: 'COLORFUL CLI', v: 'YES', vc: 'v' },
-    { k: 'LIVE WATCHER', v: 'YES', vc: 'g' },
-    { k: 'INSTALL SIZE', v: '204MB', vc: 'v' },
-    { k: 'VECTOR STORE', v: 'SQLITE-VEC', vc: 'v' },
-  ];
-  const track = document.getElementById('ticker');
-  [0, 1].forEach(() => {
-    items.forEach(it => {
-      const el = document.createElement('span');
-      el.className = 'tick';
-      el.innerHTML = `${it.k} <span class="${it.vc}">${it.v}</span>`;
-      track.appendChild(el);
-    });
-  });
+  window.addEventListener('scroll', update, { passive: true });
+  update();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  runTypewriter();
-  runTerminal(false);
-  buildTicker();
+  initScrollSpy();
 });
 </script>
 </body>
