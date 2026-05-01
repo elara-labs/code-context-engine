@@ -103,7 +103,14 @@ async def run_benchmark(
     queries: list[dict],
     storage_dir: Path | None = None,
 ) -> dict:
-    """Run the full benchmark suite with per-bucket savings. Returns structured results."""
+    """Run the full benchmark suite with per-layer savings. Returns structured results.
+
+    Each layer is measured independently against its own baseline (no stacking):
+      - Retrieval: full files → relevant chunks (measured per query)
+      - Chunk compression: raw chunks → compressed chunks (measured per query)
+      - Output compression: Claude reply reduction (estimated per level)
+      - Grammar: prose → grammar-compressed prose (measured on sample text)
+    """
     config = Config()
     if storage_dir:
         config.storage_path = str(storage_dir)
@@ -129,25 +136,17 @@ async def run_benchmark(
     full_project_tokens, file_count = _count_project_tokens(project_dir)
     print(f"  {file_count} files, {full_project_tokens:,} tokens total")
 
-    # Phase 3: Query benchmark with per-bucket savings
-    print("\nPhase 3: Running queries (7-layer savings)...")
+    # Phase 3: Query benchmark — measure retrieval + compression per query
+    print("\nPhase 3: Running queries...")
     query_results = []
+    total_full_file = 0
+    total_raw_chunks = 0
+    total_compressed = 0
     precision_sum = 0
     recall_sum = 0
 
-    # Accumulate per-bucket totals across all queries
-    buckets = {
-        "retrieval":              {"baseline": 0, "served": 0},
-        "chunk_compression":      {"baseline": 0, "served": 0},
-        "output_compression":     {"baseline": 0, "served": 0},
-        "memory_recall":          {"baseline": 0, "served": 0},
-        "grammar":                {"baseline": 0, "served": 0},
-        "turn_summarization":     {"baseline": 0, "served": 0},
-        "progressive_disclosure": {"baseline": 0, "served": 0},
-    }
-
     for q in queries:
-        # Layer 1: Retrieval — full files → raw chunks
+        # Retrieval: full files → raw chunks
         chunks = await retriever.retrieve(q["query"], top_k=10)
         result_files = {c.file_path for c in chunks}
         raw_chunk_tokens = sum(_count_tokens(c.content) for c in chunks)
@@ -155,34 +154,16 @@ async def run_benchmark(
             _read_file_tokens(project_dir, fp) for fp in result_files
         )
 
-        buckets["retrieval"]["baseline"] += full_file_tokens
-        buckets["retrieval"]["served"] += raw_chunk_tokens
-
-        # Layer 2: Chunk compression — raw chunks → compressed chunks
+        # Chunk compression: raw chunks → compressed
         compressed_chunks = await compressor.compress(chunks, config.compression_level)
         compressed_tokens = sum(
             _count_tokens(c.compressed_content or c.content) for c in compressed_chunks
         )
 
-        buckets["chunk_compression"]["baseline"] += raw_chunk_tokens
-        buckets["chunk_compression"]["served"] += compressed_tokens
+        total_full_file += full_file_tokens
+        total_raw_chunks += raw_chunk_tokens
+        total_compressed += compressed_tokens
 
-        # Layer 3: Output compression — estimated savings on Claude's reply
-        output_pct = ADVERTISED_PCT.get("standard", 0.65)
-        buckets["output_compression"]["baseline"] += ESTIMATED_AVG_REPLY_TOKENS
-        buckets["output_compression"]["served"] += int(ESTIMATED_AVG_REPLY_TOKENS * (1 - output_pct))
-
-        # Layer 5: Grammar compression — compress a sample decision text
-        sample_decision = (
-            f"Using hybrid retrieval for {q['query'][:40]}. "
-            "The vector search finds semantic matches while BM25 catches exact identifiers. "
-            "Reciprocal Rank Fusion merges the two result sets with K=60."
-        )
-        _, grammar_baseline, grammar_served = grammar_compress(sample_decision)
-        buckets["grammar"]["baseline"] += grammar_baseline
-        buckets["grammar"]["served"] += grammar_served
-
-        # Precision / recall
         expected = set(q.get("expected_files", []))
         hits = result_files & expected
         precision = len(hits) / len(result_files) if result_files else 0
@@ -190,16 +171,24 @@ async def run_benchmark(
         precision_sum += precision
         recall_sum += recall
 
-        # Final served = compressed chunks (what Claude actually sees)
-        per_query_savings = (
+        retrieval_pct = (
+            (1 - raw_chunk_tokens / full_file_tokens) * 100
+            if full_file_tokens > 0 else 0
+        )
+        compression_pct = (
+            (1 - compressed_tokens / raw_chunk_tokens) * 100
+            if raw_chunk_tokens > 0 else 0
+        )
+        combined_pct = (
             (1 - compressed_tokens / full_file_tokens) * 100
             if full_file_tokens > 0 else 0
         )
+
         status = "HIT" if hits else ("MISS" if expected else "N/A")
         print(f"  [{status}] {q['query'][:45]:<45} "
-              f"full={full_file_tokens:>6} → raw={raw_chunk_tokens:>5} "
-              f"→ compressed={compressed_tokens:>5}  "
-              f"saved={per_query_savings:.0f}%  "
+              f"full={full_file_tokens:>6} → chunks={raw_chunk_tokens:>5} "
+              f"({retrieval_pct:.0f}%) → compressed={compressed_tokens:>4} "
+              f"({compression_pct:.0f}%)  "
               f"P={precision:.2f} R={recall:.2f}")
 
         query_results.append({
@@ -208,7 +197,9 @@ async def run_benchmark(
             "full_file_tokens": full_file_tokens,
             "raw_chunk_tokens": raw_chunk_tokens,
             "compressed_tokens": compressed_tokens,
-            "savings_pct": round(per_query_savings, 1),
+            "retrieval_savings_pct": round(retrieval_pct, 1),
+            "compression_savings_pct": round(compression_pct, 1),
+            "combined_savings_pct": round(combined_pct, 1),
             "result_files": sorted(result_files),
             "expected_files": sorted(expected),
             "hit_files": sorted(hits),
@@ -217,55 +208,44 @@ async def run_benchmark(
         })
 
     n = len(queries)
+    avg_full_file = total_full_file / n if n else 0
+    avg_raw_chunks = total_raw_chunks / n if n else 0
+    avg_compressed = total_compressed / n if n else 0
+    avg_precision = precision_sum / n if n else 0
+    avg_recall = recall_sum / n if n else 0
 
-    # Layer 4: Memory recall — simulate recalling 5 decisions with grammar compression
-    sample_decisions = [
+    # Per-layer savings (each against its own baseline, no stacking)
+    retrieval_savings = (1 - total_raw_chunks / total_full_file) * 100 if total_full_file > 0 else 0
+    compression_savings = (1 - total_compressed / total_raw_chunks) * 100 if total_raw_chunks > 0 else 0
+    combined_savings = (1 - total_compressed / total_full_file) * 100 if total_full_file > 0 else 0
+
+    # Grammar compression — measured on representative decision text
+    sample_texts = [
         "Use JWT tokens for authentication because the legal team flagged session-based tokens.",
         "Adopted the repository pattern for database access to simplify testing.",
         "Switched from REST to GraphQL for the internal dashboard API.",
         "Chose SQLite over PostgreSQL for the local storage layer to minimize dependencies.",
         "Implemented content-hash embedding cache to skip unchanged chunks on re-index.",
     ]
-    for d in sample_decisions:
-        raw_tokens = _count_tokens(d)
-        _, _, compressed = grammar_compress(d)
-        buckets["memory_recall"]["baseline"] += raw_tokens
-        buckets["memory_recall"]["served"] += compressed
+    grammar_baseline = 0
+    grammar_served = 0
+    for text in sample_texts:
+        _, b, s = grammar_compress(text)
+        grammar_baseline += b
+        grammar_served += s
+    grammar_savings = (1 - grammar_served / grammar_baseline) * 100 if grammar_baseline > 0 else 0
 
-    # Layer 6: Turn summarization — estimate context window savings
-    # Without CCE, Claude keeps the full conversation. With CCE, extractive
-    # summaries compress previous turns. Estimated at 60% savings on an
-    # average 2000-token turn context.
-    avg_turn_context = 2000
-    turn_summarization_pct = 0.60
-    buckets["turn_summarization"]["baseline"] = avg_turn_context * n
-    buckets["turn_summarization"]["served"] = int(avg_turn_context * n * (1 - turn_summarization_pct))
+    # Output compression — from advertised rates
+    output_savings = ADVERTISED_PCT.get("standard", 0.65) * 100
 
-    # Layer 7: Progressive disclosure — bootstrap context at session start
-    # Without CCE: Claude has no prior context (0 useful tokens from prior sessions)
-    # With CCE: SessionStart hook injects ~500 tokens of resume context
-    # The "baseline" is what you'd have to manually re-explain (~2000 tokens)
-    buckets["progressive_disclosure"]["baseline"] = 2000
-    buckets["progressive_disclosure"]["served"] = 500
-
-    # Compute totals
-    total_baseline = buckets["retrieval"]["baseline"]
-    total_served = buckets["chunk_compression"]["served"]
-    avg_full_file = total_baseline / n if n else 0
-    avg_served = total_served / n if n else 0
-    avg_precision = precision_sum / n if n else 0
-    avg_recall = recall_sum / n if n else 0
-    overall_savings = (
-        (1 - total_served / total_baseline) * 100
-        if total_baseline > 0 else 0
-    )
-
-    # Print bucket summary
-    print(f"\n--- Per-Bucket Savings ---")
-    for name, b in buckets.items():
-        if b["baseline"] > 0:
-            pct = (1 - b["served"] / b["baseline"]) * 100
-            print(f"  {name:<25} {b['baseline']:>8,} → {b['served']:>8,}  ({pct:.0f}% saved)")
+    # Print layer summary
+    print(f"\n--- Per-Layer Savings (each measured independently) ---")
+    print(f"  {'Retrieval':<25} full files → chunks          {retrieval_savings:.0f}%  (measured)")
+    print(f"  {'Chunk Compression':<25} chunks → signatures         {compression_savings:.0f}%  (measured)")
+    print(f"  {'Output Compression':<25} Claude reply reduction      {output_savings:.0f}%  (estimated)")
+    print(f"  {'Grammar':<25} prose → compressed prose     {grammar_savings:.0f}%  (measured)")
+    print(f"  {'Combined (retrieval+compression)'}")
+    print(f"  {'  full files → compressed':<25}                            {combined_savings:.0f}%  (measured)")
 
     # Phase 4: Latency
     print("\nPhase 4: Latency benchmark...")
@@ -285,15 +265,23 @@ async def run_benchmark(
     p99 = latencies[int(len(latencies) * 0.99)]
     print(f"  p50={p50:.1f}ms  p95={p95:.1f}ms  p99={p99:.1f}ms")
 
-    # Format bucket results for output
-    bucket_results = {}
-    for name, b in buckets.items():
-        pct = (1 - b["served"] / b["baseline"]) * 100 if b["baseline"] > 0 else 0
-        bucket_results[name] = {
-            "baseline": b["baseline"],
-            "served": b["served"],
-            "savings_pct": round(pct, 1),
-        }
+    layers = {
+        "retrieval": {
+            "baseline": total_full_file, "served": total_raw_chunks,
+            "savings_pct": round(retrieval_savings, 1), "method": "measured",
+        },
+        "chunk_compression": {
+            "baseline": total_raw_chunks, "served": total_compressed,
+            "savings_pct": round(compression_savings, 1), "method": "measured",
+        },
+        "output_compression": {
+            "savings_pct": round(output_savings, 1), "method": "estimated",
+        },
+        "grammar": {
+            "baseline": grammar_baseline, "served": grammar_served,
+            "savings_pct": round(grammar_savings, 1), "method": "measured",
+        },
+    }
 
     results = {
         "project": project_dir.name,
@@ -308,10 +296,13 @@ async def run_benchmark(
         "token_savings": {
             "full_project_tokens": full_project_tokens,
             "avg_full_file_per_query": round(avg_full_file),
-            "avg_served_per_query": round(avg_served),
-            "savings_pct": round(overall_savings, 1),
+            "avg_raw_chunks_per_query": round(avg_raw_chunks),
+            "avg_compressed_per_query": round(avg_compressed),
+            "retrieval_savings_pct": round(retrieval_savings, 1),
+            "compression_savings_pct": round(compression_savings, 1),
+            "combined_savings_pct": round(combined_savings, 1),
         },
-        "buckets": bucket_results,
+        "layers": layers,
         "retrieval_quality": {
             "num_queries": n,
             "avg_precision_at_10": round(avg_precision, 3),
@@ -337,18 +328,6 @@ def format_markdown(results: dict) -> str:
     lat = r["latency"]
     ps = r["project_stats"]
 
-    bk = r.get("buckets", {})
-
-    bucket_display = [
-        ("retrieval", "Retrieval", "Full files vs relevant chunks"),
-        ("chunk_compression", "Chunk Compression", "Raw chunks vs compressed (signatures + docstrings)"),
-        ("output_compression", "Output Compression", "Claude's reply length (estimated)"),
-        ("memory_recall", "Memory Recall", "Decision text with grammar compression"),
-        ("grammar", "Grammar Compression", "Deterministic article/filler removal"),
-        ("turn_summarization", "Turn Summarization", "Previous turn context (estimated)"),
-        ("progressive_disclosure", "Progressive Disclosure", "Session bootstrap vs manual re-explanation"),
-    ]
-
     lines = [
         f"# Benchmark: {r['project']}",
         "",
@@ -362,66 +341,62 @@ def format_markdown(results: dict) -> str:
         "",
         "| Metric | Value |",
         "|--------|-------|",
-        f"| Token savings per query | **{ts['savings_pct']}%** |",
-        f"| Avg full-file baseline per query | {ts['avg_full_file_per_query']:,} tokens |",
-        f"| Avg served per query | {ts['avg_served_per_query']:,} tokens |",
+        f"| Retrieval savings | **{ts['retrieval_savings_pct']}%** (full files → relevant chunks) |",
+        f"| Compression savings | **{ts['compression_savings_pct']}%** (chunks → signatures) |",
+        f"| Combined | **{ts['combined_savings_pct']}%** (full files → compressed chunks) |",
+        f"| Avg full-file baseline | {ts['avg_full_file_per_query']:,} tokens/query |",
+        f"| Avg after retrieval | {ts['avg_raw_chunks_per_query']:,} tokens/query |",
+        f"| Avg after compression | {ts['avg_compressed_per_query']:,} tokens/query |",
         f"| Precision@10 | {rq['avg_precision_at_10']:.2f} |",
         f"| Recall@10 | {rq['avg_recall_at_10']:.2f} |",
         f"| Latency p50 | {lat['p50_ms']}ms |",
-        f"| Latency p95 | {lat['p95_ms']}ms |",
         f"| Queries tested | {rq['num_queries']} |",
         "",
-        "## 7-Layer Savings Breakdown",
+        "## Per-Layer Savings (each measured independently)",
         "",
-        "CCE saves tokens at every layer of the pipeline:",
+        "Each layer has its own baseline. These are NOT stacked.",
         "",
-        "| Layer | Baseline | Served | Saved | What it does |",
-        "|-------|----------|--------|-------|--------------|",
+        "| Layer | What it does | Savings | Method |",
+        "|-------|-------------|---------|--------|",
     ]
 
-    for key, display_name, description in bucket_display:
-        b = bk.get(key, {})
-        baseline = b.get("baseline", 0)
-        served = b.get("served", 0)
-        pct = b.get("savings_pct", 0)
-        if baseline > 0:
-            lines.append(
-                f"| **{display_name}** | {baseline:,} | {served:,} | "
-                f"{pct:.0f}% | {description} |"
-            )
+    ly = r.get("layers", {})
+    layer_display = [
+        ("retrieval", "Full files → relevant code chunks", "measured"),
+        ("chunk_compression", "Raw chunks → signatures + docstrings", "measured"),
+        ("output_compression", "Reduces Claude's reply length", "estimated"),
+        ("grammar", "Drops articles/fillers from memory text", "measured"),
+    ]
+    for key, desc, method in layer_display:
+        layer = ly.get(key, {})
+        pct = layer.get("savings_pct", 0)
+        lines.append(f"| **{key.replace('_', ' ').title()}** | {desc} | {pct:.0f}% | {method} |")
 
     lines.extend([
         "",
-        "## Token Savings Methodology",
-        "",
-        "For each query, we compare:",
-        "",
-        ("- **Without CCE:** Read the full content of every file the query touches "
-         "(the files CCE retrieved chunks from)"),
-        ("- **With CCE:** Only the relevant, compressed code chunks are returned"),
-        "",
-        "Layers 1-2 (retrieval + compression) are measured directly per query. "
-        "Layer 3 (output compression) uses advertised reduction rates. "
-        "Layers 4-7 are measured with representative samples or estimated from typical session data.",
+        "## Token Flow",
         "",
         "```",
-        f"Without CCE (avg):  {ts['avg_full_file_per_query']:,} tokens per query",
-        f"With CCE (avg):     {ts['avg_served_per_query']:,} tokens per query",
-        f"Savings:            {ts['savings_pct']}%",
+        f"Full files (avg):      {ts['avg_full_file_per_query']:,} tokens",
+        f"  → After retrieval:   {ts['avg_raw_chunks_per_query']:,} tokens  ({ts['retrieval_savings_pct']}% saved)",
+        f"  → After compression: {ts['avg_compressed_per_query']:,} tokens  ({ts['compression_savings_pct']}% more saved)",
+        f"Combined savings:      {ts['combined_savings_pct']}%",
         "```",
         "",
         "## Per-Query Results",
         "",
-        "| Query | Full file | Raw chunks | Compressed | Saved | P@10 | R@10 |",
-        "|-------|-----------|------------|------------|-------|------|------|",
+        "| Query | Full file | Chunks | Compressed | Retrieval | Compression | P@10 | R@10 |",
+        "|-------|-----------|--------|------------|-----------|-------------|------|------|",
     ])
     for q in r["queries"]:
-        query_text = q["query"][:45]
+        query_text = q["query"][:40]
         lines.append(
             f"| {query_text} | {q['full_file_tokens']:,} | "
-            f"{q.get('raw_chunk_tokens', q.get('served_tokens', 0)):,} | "
-            f"{q.get('compressed_tokens', q.get('served_tokens', 0)):,} | "
-            f"{q['savings_pct']:.0f}% | {q['precision']:.2f} | {q['recall']:.2f} |"
+            f"{q.get('raw_chunk_tokens', 0):,} | "
+            f"{q.get('compressed_tokens', 0):,} | "
+            f"{q.get('retrieval_savings_pct', 0):.0f}% | "
+            f"{q.get('compression_savings_pct', 0):.0f}% | "
+            f"{q['precision']:.2f} | {q['recall']:.2f} |"
         )
 
     source_dir = r.get("source_dir", "")
@@ -508,15 +483,19 @@ def main():
         ts = results["token_savings"]
         rq = results["retrieval_quality"]
         lat = results["latency"]
-        print(f"\n{'='*60}")
+        print(f"\n{'='*64}")
         print(f"  BENCHMARK RESULTS: {results['project']}")
-        print(f"{'='*60}")
-        print(f"  Token savings:   {ts['savings_pct']}%  "
-              f"({ts['avg_full_file_per_query']:,} -> {ts['avg_served_per_query']:,} tokens/query)")
-        print(f"  Precision@10:    {rq['avg_precision_at_10']:.2f}")
-        print(f"  Recall@10:       {rq['avg_recall_at_10']:.2f}")
-        print(f"  Latency p50:     {lat['p50_ms']}ms")
-        print(f"{'='*60}")
+        print(f"{'='*64}")
+        print(f"  Retrieval:     {ts['retrieval_savings_pct']}%  "
+              f"({ts['avg_full_file_per_query']:,} → {ts['avg_raw_chunks_per_query']:,} tokens/query)")
+        print(f"  Compression:   {ts['compression_savings_pct']}%  "
+              f"({ts['avg_raw_chunks_per_query']:,} → {ts['avg_compressed_per_query']:,} tokens/query)")
+        print(f"  Combined:      {ts['combined_savings_pct']}%  "
+              f"({ts['avg_full_file_per_query']:,} → {ts['avg_compressed_per_query']:,} tokens/query)")
+        print(f"  Precision@10:  {rq['avg_precision_at_10']:.2f}")
+        print(f"  Recall@10:     {rq['avg_recall_at_10']:.2f}")
+        print(f"  Latency p50:   {lat['p50_ms']}ms")
+        print(f"{'='*64}")
 
         # Save outputs
         if args.output:

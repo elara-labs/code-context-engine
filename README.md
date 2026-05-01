@@ -98,24 +98,22 @@ We benchmarked CCE against [FastAPI](https://github.com/fastapi/fastapi) (48 sou
 
 | Metric | Result |
 |--------|--------|
-| **Token savings** | **99.3%** (75,355 → 541 tokens/query avg) |
+| **Retrieval** | **93%** savings (75,355 → 5,381 tokens/query) |
+| **+ Compression** | **90%** additional (5,381 → 541 tokens/query) |
+| **Combined** | **99.3%** (75,355 → 541 tokens/query) |
 | Recall@10 (found the right files) | 0.80 |
 | Precision@10 | 0.30 |
 | Latency p50 | 0.4ms |
 | Queries tested | 20 |
 
-### 7-Layer Savings Breakdown
+### Per-Layer Savings (each measured independently)
 
-CCE saves tokens at every layer of the pipeline:
-
-| Layer | Baseline | Served | Saved | What it does |
-|-------|----------|--------|-------|--------------|
-| **Retrieval** | 1,507,091 | 107,619 | 93% | Full files vs relevant chunks |
-| **Chunk Compression** | 107,619 | 10,819 | 90% | Raw chunks vs signatures + docstrings |
-| **Output Compression** | 10,000 | 3,500 | 65% | Claude's reply length (estimated) |
-| **Grammar Compression** | 1,037 | 924 | 11% | Deterministic article/filler removal |
-| **Turn Summarization** | 40,000 | 16,000 | 60% | Previous turn context (estimated) |
-| **Progressive Disclosure** | 2,000 | 500 | 75% | Session bootstrap vs manual re-explanation |
+| Layer | What it does | Savings | Method |
+|-------|-------------|---------|--------|
+| **Retrieval** | Full files → relevant code chunks | 93% | measured |
+| **Chunk Compression** | Raw chunks → signatures + docstrings | 90% | measured |
+| **Output Compression** | Reduces Claude's reply length | 65% | estimated |
+| **Grammar** | Drops articles/fillers from memory text | 13% | measured |
 
 **Reproduce it yourself:**
 
@@ -178,7 +176,7 @@ Re-indexing after edits takes under 1 second (96% embedding cache hit rate). Git
 
 Output compression tools (like Caveman) save 20-75% on output tokens. Output is 5-15% of your bill. Net savings: ~11%.
 
-CCE saves on **input** tokens (99.3% on FastAPI with 7-layer pipeline, [independently benchmarked](#benchmark-fastapi-independently-verified)). Input is 85-95% of your bill.
+CCE saves on **input** tokens (93% retrieval + 90% compression on FastAPI, [independently benchmarked](#benchmark-fastapi-independently-verified)). Input is 85-95% of your bill.
 
 ### It actually understands your code
 

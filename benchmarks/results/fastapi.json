@@ -1,54 +1,44 @@
 {
   "project": "fastapi",
-  "timestamp": "2026-05-01T11:30:28.179096+00:00",
+  "timestamp": "2026-05-01T11:38:18.835212+00:00",
   "project_stats": {
     "files": 53,
     "total_tokens": 179794,
     "indexed_files": 53,
     "chunks": 425,
-    "index_time_s": 11.5
+    "index_time_s": 11.8
   },
   "token_savings": {
     "full_project_tokens": 179794,
     "avg_full_file_per_query": 75355,
-    "avg_served_per_query": 541,
-    "savings_pct": 99.3
+    "avg_raw_chunks_per_query": 5381,
+    "avg_compressed_per_query": 541,
+    "retrieval_savings_pct": 92.9,
+    "compression_savings_pct": 89.9,
+    "combined_savings_pct": 99.3
   },
-  "buckets": {
+  "layers": {
     "retrieval": {
       "baseline": 1507091,
       "served": 107619,
-      "savings_pct": 92.9
+      "savings_pct": 92.9,
+      "method": "measured"
     },
     "chunk_compression": {
       "baseline": 107619,
       "served": 10819,
-      "savings_pct": 89.9
+      "savings_pct": 89.9,
+      "method": "measured"
     },
     "output_compression": {
-      "baseline": 10000,
-      "served": 3500,
-      "savings_pct": 65.0
-    },
-    "memory_recall": {
-      "baseline": 92,
-      "served": 80,
-      "savings_pct": 13.0
+      "savings_pct": 65.0,
+      "method": "estimated"
     },
     "grammar": {
-      "baseline": 1037,
-      "served": 924,
-      "savings_pct": 10.9
-    },
-    "turn_summarization": {
-      "baseline": 40000,
-      "served": 16000,
-      "savings_pct": 60.0
-    },
-    "progressive_disclosure": {
-      "baseline": 2000,
-      "served": 500,
-      "savings_pct": 75.0
+      "baseline": 92,
+      "served": 80,
+      "savings_pct": 13.0,
+      "method": "measured"
     }
   },
   "retrieval_quality": {
@@ -69,7 +59,9 @@
       "full_file_tokens": 75628,
       "raw_chunk_tokens": 6493,
       "compressed_tokens": 539,
-      "savings_pct": 99.3,
+      "retrieval_savings_pct": 91.4,
+      "compression_savings_pct": 91.7,
+      "combined_savings_pct": 99.3,
       "result_files": [
         ".agents/skills/fastapi/references/dependencies.md",
         "__init__.py",
@@ -96,7 +88,9 @@
       "full_file_tokens": 94773,
       "raw_chunk_tokens": 1133,
       "compressed_tokens": 519,
-      "savings_pct": 99.5,
+      "retrieval_savings_pct": 98.8,
+      "compression_savings_pct": 54.2,
+      "combined_savings_pct": 99.5,
       "result_files": [
         "applications.py",
         "routing.py"
@@ -118,7 +112,9 @@
       "full_file_tokens": 9396,
       "raw_chunk_tokens": 8792,
       "compressed_tokens": 589,
-      "savings_pct": 93.7,
+      "retrieval_savings_pct": 6.4,
+      "compression_savings_pct": 93.3,
+      "combined_savings_pct": 93.7,
       "result_files": [
         "security/http.py",
         "security/oauth2.py"
@@ -138,7 +134,9 @@
       "full_file_tokens": 58499,
       "raw_chunk_tokens": 8233,
       "compressed_tokens": 640,
-      "savings_pct": 98.9,
+      "retrieval_savings_pct": 85.9,
+      "compression_savings_pct": 92.2,
+      "combined_savings_pct": 98.9,
       "result_files": [
         "applications.py",
         "openapi/utils.py",
@@ -160,7 +158,9 @@
       "full_file_tokens": 95380,
       "raw_chunk_tokens": 4340,
       "compressed_tokens": 533,
-      "savings_pct": 99.4,
+      "retrieval_savings_pct": 95.4,
+      "compression_savings_pct": 87.7,
+      "combined_savings_pct": 99.4,
       "result_files": [
         "dependencies/utils.py",
         "exceptions.py",
@@ -188,7 +188,9 @@
       "full_file_tokens": 52119,
       "raw_chunk_tokens": 6962,
       "compressed_tokens": 569,
-      "savings_pct": 98.9,
+      "retrieval_savings_pct": 86.6,
+      "compression_savings_pct": 91.8,
+      "combined_savings_pct": 98.9,
       "result_files": [
         "applications.py",
         "openapi/docs.py",
@@ -209,7 +211,9 @@
       "full_file_tokens": 95073,
       "raw_chunk_tokens": 4435,
       "compressed_tokens": 449,
-      "savings_pct": 99.5,
+      "retrieval_savings_pct": 95.3,
+      "compression_savings_pct": 89.9,
+      "combined_savings_pct": 99.5,
       "result_files": [
         "__main__.py",
         "applications.py",
@@ -233,7 +237,9 @@
       "full_file_tokens": 47547,
       "raw_chunk_tokens": 1627,
       "compressed_tokens": 487,
-      "savings_pct": 99.0,
+      "retrieval_savings_pct": 96.6,
+      "compression_savings_pct": 70.1,
+      "combined_savings_pct": 99.0,
       "result_files": [
         "applications.py",
         "exception_handlers.py",
@@ -256,7 +262,9 @@
       "full_file_tokens": 98420,
       "raw_chunk_tokens": 7890,
       "compressed_tokens": 605,
-      "savings_pct": 99.4,
+      "retrieval_savings_pct": 92.0,
+      "compression_savings_pct": 92.3,
+      "combined_savings_pct": 99.4,
       "result_files": [
         "applications.py",
         "openapi/models.py",
@@ -277,7 +285,9 @@
       "full_file_tokens": 95821,
       "raw_chunk_tokens": 10490,
       "compressed_tokens": 671,
-      "savings_pct": 99.3,
+      "retrieval_savings_pct": 89.1,
+      "compression_savings_pct": 93.6,
+      "combined_savings_pct": 99.3,
       "result_files": [
         "applications.py",
         "responses.py",
@@ -296,7 +306,9 @@
       "full_file_tokens": 96636,
       "raw_chunk_tokens": 2499,
       "compressed_tokens": 548,
-      "savings_pct": 99.4,
+      "retrieval_savings_pct": 97.4,
+      "compression_savings_pct": 78.1,
+      "combined_savings_pct": 99.4,
       "result_files": [
         "applications.py",
         "exceptions.py",
@@ -318,7 +330,9 @@
       "full_file_tokens": 6999,
       "raw_chunk_tokens": 4447,
       "compressed_tokens": 574,
-      "savings_pct": 91.8,
+      "retrieval_savings_pct": 36.5,
+      "compression_savings_pct": 87.1,
+      "combined_savings_pct": 91.8,
       "result_files": [
         "openapi/models.py",
         "security/http.py"
@@ -338,7 +352,9 @@
       "full_file_tokens": 97997,
       "raw_chunk_tokens": 5824,
       "compressed_tokens": 537,
-      "savings_pct": 99.5,
+      "retrieval_savings_pct": 94.1,
+      "compression_savings_pct": 90.8,
+      "combined_savings_pct": 99.5,
       "result_files": [
         ".agents/skills/fastapi/SKILL.md",
         "applications.py",
@@ -364,7 +380,9 @@
       "full_file_tokens": 38439,
       "raw_chunk_tokens": 3568,
       "compressed_tokens": 476,
-      "savings_pct": 98.8,
+      "retrieval_savings_pct": 90.7,
+      "compression_savings_pct": 86.7,
+      "combined_savings_pct": 98.8,
       "result_files": [
         "dependencies/models.py",
         "openapi/models.py",
@@ -388,7 +406,9 @@
       "full_file_tokens": 103725,
       "raw_chunk_tokens": 5604,
       "compressed_tokens": 482,
-      "savings_pct": 99.5,
+      "retrieval_savings_pct": 94.6,
+      "compression_savings_pct": 91.4,
+      "combined_savings_pct": 99.5,
       "result_files": [
         ".agents/skills/fastapi/SKILL.md",
         "__init__.py",
@@ -414,7 +434,9 @@
       "full_file_tokens": 56845,
       "raw_chunk_tokens": 5158,
       "compressed_tokens": 458,
-      "savings_pct": 99.2,
+      "retrieval_savings_pct": 90.9,
+      "compression_savings_pct": 91.1,
+      "combined_savings_pct": 99.2,
       "result_files": [
         ".agents/skills/fastapi/SKILL.md",
         "__init__.py",
@@ -440,7 +462,9 @@
       "full_file_tokens": 85321,
       "raw_chunk_tokens": 3943,
       "compressed_tokens": 518,
-      "savings_pct": 99.4,
+      "retrieval_savings_pct": 95.4,
+      "compression_savings_pct": 86.9,
+      "combined_savings_pct": 99.4,
       "result_files": [
         "applications.py",
         "dependencies/utils.py",
@@ -466,7 +490,9 @@
       "full_file_tokens": 99638,
       "raw_chunk_tokens": 5495,
       "compressed_tokens": 502,
-      "savings_pct": 99.5,
+      "retrieval_savings_pct": 94.5,
+      "compression_savings_pct": 90.9,
+      "combined_savings_pct": 99.5,
       "result_files": [
         ".agents/skills/fastapi/SKILL.md",
         "__init__.py",
@@ -490,7 +516,9 @@
       "full_file_tokens": 97299,
       "raw_chunk_tokens": 4985,
       "compressed_tokens": 549,
-      "savings_pct": 99.4,
+      "retrieval_savings_pct": 94.9,
+      "compression_savings_pct": 89.0,
+      "combined_savings_pct": 99.4,
       "result_files": [
         ".agents/skills/fastapi/references/streaming.md",
         "__init__.py",
@@ -514,7 +542,9 @@
       "full_file_tokens": 101536,
       "raw_chunk_tokens": 5701,
       "compressed_tokens": 574,
-      "savings_pct": 99.4,
+      "retrieval_savings_pct": 94.4,
+      "compression_savings_pct": 89.9,
+      "combined_savings_pct": 99.4,
       "result_files": [
         ".agents/skills/fastapi/SKILL.md",
         "__init__.py",
