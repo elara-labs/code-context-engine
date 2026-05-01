@@ -2,6 +2,12 @@
 
 All notable changes to Code Context Engine are documented here.
 
+## [0.4.8] - 2026-05-01
+
+### Added
+- Platform badges (macOS, Linux, Windows) in README
+- Per-platform system requirements table with Fedora/RHEL support
+
 ## [0.4.7] - 2026-05-01
 
 ### Fixed
