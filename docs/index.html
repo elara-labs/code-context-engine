@@ -11,7 +11,7 @@
   <link rel="icon" type="image/svg+xml" href="logo.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,35 +36,40 @@
       --mono:       'DM Mono', 'JetBrains Mono', 'Fira Code', monospace;
     }
 
-    html { scroll-behavior: smooth; }
+    html { scroll-behavior: smooth; scroll-padding-top: 72px; }
 
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: 'DM Sans', 'Inter', system-ui, sans-serif;
+      font-family: 'Outfit', system-ui, sans-serif;
       line-height: 1.6;
       overflow-x: hidden;
     }
 
-    /* Dot grid */
+    /* Noise texture overlay */
     .dot-grid {
       position: fixed;
       inset: 0;
-      background-image: radial-gradient(circle, rgba(255,255,255,0.022) 1px, transparent 1px);
-      background-size: 30px 30px;
       pointer-events: none;
       z-index: 0;
+      opacity: .35;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E");
+      background-size: 256px 256px;
     }
 
     /* ── NAV ──────────────────────────────────────── */
     nav {
-      position: relative;
+      position: sticky;
+      top: 0;
       z-index: 100;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 18px 48px;
-      border-bottom: 1px solid var(--border);
+      padding: 14px 48px;
+      border-bottom: 1px solid rgba(24,41,62,.6);
+      background: rgba(6,12,24,.72);
+      backdrop-filter: blur(18px) saturate(1.4);
+      -webkit-backdrop-filter: blur(18px) saturate(1.4);
     }
 
     .nav-brand {
@@ -73,25 +78,37 @@
       gap: 11px;
       text-decoration: none;
       color: var(--text);
+      flex-shrink: 0;
     }
 
     .nav-logo-mark {
-      width: 30px;
-      height: 30px;
+      width: 28px;
+      height: 28px;
       flex-shrink: 0;
     }
 
     .nav-name {
       font-size: 14px;
-      font-weight: 600;
+      font-weight: 700;
       letter-spacing: -0.01em;
     }
     .nav-name em { color: var(--cyan); font-style: normal; }
+
+    .nav-center {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      background: rgba(16,30,52,.5);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 3px 4px;
+    }
 
     .nav-right {
       display: flex;
       align-items: center;
       gap: 6px;
+      flex-shrink: 0;
     }
 
     .nav-link {
@@ -100,22 +117,24 @@
       gap: 6px;
       color: var(--text2);
       text-decoration: none;
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 500;
-      padding: 6px 12px;
+      padding: 5px 11px;
       border-radius: 7px;
       transition: color .18s, background .18s;
+      white-space: nowrap;
     }
-    .nav-link:hover { color: var(--text); background: var(--bg3); }
-    .nav-link svg { width: 15px; height: 15px; }
+    .nav-link:hover { color: var(--text); background: rgba(0,200,240,.08); }
+    .nav-link.active { color: var(--text); background: var(--bg3); }
+    .nav-link svg { width: 14px; height: 14px; }
 
     .nav-pip {
       background: var(--cyan-dim);
       color: var(--cyan);
       border: 1px solid rgba(0,200,240,.28);
       border-radius: 7px;
-      padding: 6px 14px;
-      font-size: 13px;
+      padding: 5px 13px;
+      font-size: 12.5px;
       font-weight: 600;
       text-decoration: none;
       transition: background .18s, border-color .18s;
@@ -130,13 +149,21 @@
 
     .hero-glow {
       position: absolute;
-      top: -120px;
+      top: -180px;
       left: 50%;
       transform: translateX(-50%);
-      width: 900px;
-      height: 520px;
-      background: radial-gradient(ellipse at 50% 40%, rgba(0,200,240,.055) 0%, transparent 68%);
+      width: 1100px;
+      height: 700px;
       pointer-events: none;
+      background:
+        radial-gradient(ellipse at 35% 45%, rgba(0,200,240,.07) 0%, transparent 55%),
+        radial-gradient(ellipse at 65% 35%, rgba(139,92,246,.05) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 60%, rgba(62,207,142,.03) 0%, transparent 45%);
+      animation: glow-drift 12s ease-in-out infinite alternate;
+    }
+    @keyframes glow-drift {
+      0% { transform: translateX(-50%) scale(1) rotate(0deg); }
+      100% { transform: translateX(-48%) scale(1.06) rotate(2deg); }
     }
 
     .hero {
@@ -252,7 +279,10 @@
       border: 1px solid var(--border2);
       border-radius: 14px;
       overflow: hidden;
-      box-shadow: 0 24px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.03);
+      box-shadow:
+        0 24px 80px rgba(0,0,0,.55),
+        0 0 0 1px rgba(255,255,255,.03),
+        0 0 60px rgba(0,200,240,.04);
     }
 
     .terminal-bar {
@@ -377,13 +407,22 @@
     }
 
     .section-tag {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
       font-size: 11px;
       font-weight: 600;
       letter-spacing: .12em;
       text-transform: uppercase;
       color: var(--cyan);
       margin-bottom: 14px;
+    }
+    .section-tag::before {
+      content: '';
+      width: 20px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--cyan), rgba(139,92,246,.6));
+      border-radius: 2px;
     }
 
     h2 {
@@ -418,9 +457,9 @@
     .how-card {
       background: var(--bg);
       padding: 40px 34px;
-      transition: background .25s, transform .25s cubic-bezier(.22,1,.36,1);
+      transition: background .3s, transform .3s cubic-bezier(.22,1,.36,1), box-shadow .3s;
     }
-    .how-card:hover { background: var(--bg2); transform: translateY(-2px); }
+    .how-card:hover { background: var(--bg2); transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(0,200,240,.1); }
 
     .how-num {
       font-family: var(--mono);
@@ -559,10 +598,16 @@
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 30px;
-      transition: border-color .25s cubic-bezier(.22,1,.36,1), background .25s, transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s;
+      transition: border-color .3s, background .3s, transform .3s cubic-bezier(.22,1,.36,1), box-shadow .3s;
       box-shadow: 0 2px 8px rgba(0,0,0,.2);
+      position: relative;
     }
-    .feat-card:hover { border-color: var(--border2); background: var(--bg3); transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,.35); }
+    .feat-card:hover {
+      border-color: rgba(0,200,240,.25);
+      background: var(--bg3);
+      transform: translateY(-4px);
+      box-shadow: 0 16px 40px rgba(0,0,0,.35), 0 0 20px rgba(0,200,240,.04);
+    }
 
     .feat-icon {
       width: 42px; height: 42px;
@@ -617,13 +662,14 @@
     }
 
     .bench-stat {
-      background: var(--bg2);
+      background: rgba(11,21,37,.7);
+      backdrop-filter: blur(8px);
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 28px 24px;
-      transition: border-color .25s, transform .25s cubic-bezier(.22,1,.36,1);
+      transition: border-color .3s, transform .3s cubic-bezier(.22,1,.36,1), box-shadow .3s;
     }
-    .bench-stat:hover { border-color: var(--border2); transform: translateY(-2px); }
+    .bench-stat:hover { border-color: rgba(0,200,240,.2); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.3); }
 
     .bench-stat-label {
       font-size: 11px;
@@ -895,6 +941,7 @@
     /* ── RESPONSIVE ───────────────────────────────── */
     @media (max-width: 1024px) {
       nav { padding: 14px 24px; }
+      .nav-center { display: none; }
       .hero { grid-template-columns: 1fr; padding: 60px 24px 40px; gap: 40px; }
       .hero-title { font-size: 46px; }
       .how-grid { grid-template-columns: 1fr; gap: 0; }
@@ -941,8 +988,15 @@
     </svg>
     <span class="nav-name">Code <em>Context Engine</em></span>
   </a>
+  <div class="nav-center">
+    <a href="#how" class="nav-link" data-section="how">How it works</a>
+    <a href="#savings" class="nav-link" data-section="savings">Savings</a>
+    <a href="#features" class="nav-link" data-section="features">Features</a>
+    <a href="#benchmark" class="nav-link" data-section="benchmark">Benchmark</a>
+    <a href="#engineering" class="nav-link" data-section="engineering">Engineering</a>
+    <a href="#compare" class="nav-link" data-section="compare">Compare</a>
+  </div>
   <div class="nav-right">
-    <a href="#benchmark" class="nav-link">Benchmark</a>
     <a href="https://github.com/elara-labs/code-context-engine" class="nav-link" target="_blank" rel="noopener">
       <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
       GitHub
@@ -1002,7 +1056,7 @@
 </div>
 
 <!-- ── HOW IT WORKS ───────────────────────────────────── -->
-<section class="how-section">
+<section class="how-section" id="how">
   <div class="wrap">
     <span class="section-tag">How it works</span>
     <h2>Three commands.<br>Permanent savings.</h2>
@@ -1034,7 +1088,7 @@
 </section>
 
 <!-- ── SAVINGS DEMO ───────────────────────────────────── -->
-<section class="savings-section">
+<section class="savings-section" id="savings">
   <div class="wrap">
     <div class="savings-layout">
 
@@ -1090,7 +1144,7 @@
 </section>
 
 <!-- ── FEATURES ───────────────────────────────────────── -->
-<section class="features-section">
+<section class="features-section" id="features">
   <div class="wrap">
     <span class="section-tag">Features</span>
     <h2>Everything Claude needs.<br>Nothing it doesn't.</h2>
@@ -1218,7 +1272,7 @@
 </section>
 
 <!-- ── UNDER THE HOOD ────────────────────────────────── -->
-<section class="how-section" style="border-top:1px solid var(--border)">
+<section class="how-section" id="engineering" style="border-top:1px solid var(--border)">
   <div class="wrap">
     <span class="section-tag">Under the hood</span>
     <h2>Clever engineering.<br>Zero magic.</h2>
@@ -1270,7 +1324,7 @@
 </section>
 
 <!-- ── COMPARE ────────────────────────────────────────── -->
-<section class="compare-section">
+<section class="compare-section" id="compare">
   <div class="wrap">
     <span class="section-tag">Comparison</span>
     <h2>How CCE stacks up</h2>
@@ -1532,10 +1586,36 @@ function buildTicker() {
   });
 }
 
+// ── Scroll spy for nav ────────────────────────────────
+function initScrollSpy() {
+  const links = document.querySelectorAll('.nav-center .nav-link[data-section]');
+  const sections = [];
+  links.forEach(link => {
+    const id = link.getAttribute('data-section');
+    const el = document.getElementById(id);
+    if (el) sections.push({ id, el, link });
+  });
+  if (!sections.length) return;
+
+  function update() {
+    const scrollY = window.scrollY + 120;
+    let active = sections[0];
+    for (const s of sections) {
+      if (s.el.offsetTop <= scrollY) active = s;
+    }
+    links.forEach(l => l.classList.remove('active'));
+    if (active) active.link.classList.add('active');
+  }
+
+  window.addEventListener('scroll', update, { passive: true });
+  update();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   runTypewriter();
   runTerminal(false);
   buildTicker();
+  initScrollSpy();
 });
 </script>
 </body>
