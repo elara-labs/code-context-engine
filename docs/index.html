@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Code Context Engine — Cut Token Costs by 70%</title>
-  <meta name="description" content="Local MCP server for Claude Code. AST-aware indexing, semantic search, and automatic compression. Cut token costs by 70%.">
+  <title>Code Context Engine — 93% Token Savings, Benchmarked</title>
+  <meta name="description" content="Local MCP server for Claude Code. AST-aware indexing, semantic search, and automatic compression. 92.9% token savings benchmarked on FastAPI.">
   <meta property="og:title" content="Code Context Engine">
-  <meta property="og:description" content="Index your codebase once. Cut Claude Code token costs by 70%. Local, zero-cloud.">
+  <meta property="og:description" content="Index your codebase once. 92.9% token savings benchmarked on FastAPI. Local, zero-cloud.">
   <meta property="og:type" content="website">
   <link rel="icon" type="image/svg+xml" href="logo.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -597,6 +597,149 @@
       color: var(--cyan);
     }
 
+    /* ── BENCHMARK ────────────────────────────────── */
+    .bench-section {
+      padding: 120px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .bench-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 56px;
+      align-items: start;
+      margin-top: 48px;
+    }
+
+    .bench-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .bench-stat {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px 24px;
+      transition: border-color .25s, transform .25s cubic-bezier(.22,1,.36,1);
+    }
+    .bench-stat:hover { border-color: var(--border2); transform: translateY(-2px); }
+
+    .bench-stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text3);
+      margin-bottom: 8px;
+    }
+
+    .bench-stat-val {
+      font-size: 40px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -.03em;
+    }
+
+    .bench-stat-desc {
+      font-size: 12px;
+      color: var(--text3);
+      margin-top: 6px;
+    }
+
+    .bench-stat.wide {
+      grid-column: 1 / -1;
+    }
+
+    .bench-right {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .bench-methodology {
+      font-size: 14px;
+      color: var(--text2);
+      line-height: 1.7;
+    }
+
+    .bench-bar-chart {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .bench-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .bench-bar-label {
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--text2);
+      width: 110px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .bench-bar-track {
+      flex: 1;
+      height: 28px;
+      background: var(--bg3);
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bench-bar-fill {
+      height: 100%;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--mono);
+      color: var(--bg);
+      white-space: nowrap;
+    }
+
+    .bench-bar-fill.baseline {
+      background: var(--text3);
+      color: var(--text);
+    }
+
+    .bench-bar-fill.cce {
+      background: var(--cyan);
+    }
+
+    .bench-reproduce {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--text2);
+      line-height: 1.8;
+    }
+
+    .bench-reproduce .t-dim { color: var(--text3); }
+    .bench-reproduce .t-cmd { color: var(--text); }
+
+    @media (max-width: 1024px) {
+      .bench-layout { grid-template-columns: 1fr; }
+      .bench-stats { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .bench-stats { grid-template-columns: 1fr; }
+      .bench-stat.wide { grid-column: auto; }
+    }
+
     /* ── COMPARE ──────────────────────────────────── */
     .compare-section {
       padding: 120px 0;
@@ -800,6 +943,7 @@
     <span class="nav-name">Code <em>Context Engine</em></span>
   </a>
   <div class="nav-right">
+    <a href="#benchmark" class="nav-link">Benchmark</a>
     <a href="https://github.com/elara-labs/code-context-engine" class="nav-link" target="_blank" rel="noopener">
       <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
       GitHub
@@ -819,7 +963,7 @@
         MCP Server &nbsp;·&nbsp; Local &nbsp;·&nbsp; Zero Cloud
       </div>
 
-      <h1 class="hero-title" id="hero-title" aria-label="Index once. Pay 70% less."></h1>
+      <h1 class="hero-title" id="hero-title" aria-label="Index once. Save 93%."></h1>
 
       <p class="hero-desc">
         A local MCP server for Claude Code. AST-aware indexing, semantic search, and automatic compression. Claude stops re-reading your entire codebase every session.
@@ -922,17 +1066,17 @@
         <div class="stat-duo">
           <div class="stat-block">
             <span class="stat-label">Token savings</span>
-            <span class="stat-val c-green">~70%</span>
-            <span class="stat-desc">per Claude session</span>
+            <span class="stat-val c-green">92.9%</span>
+            <span class="stat-desc"><a href="#benchmark" style="color:var(--text3);text-decoration:none;border-bottom:1px dashed var(--text3)">benchmarked on FastAPI</a></span>
           </div>
           <div class="stat-block">
-            <span class="stat-label">Cost saved</span>
-            <span class="stat-val c-amber">$1.57</span>
-            <span class="stat-desc">per session (Opus 4)</span>
+            <span class="stat-label">Retrieval quality</span>
+            <span class="stat-val c-amber">0.80</span>
+            <span class="stat-desc">recall@10</span>
           </div>
           <div class="stat-block">
             <span class="stat-label">Languages</span>
-            <span class="stat-val c-cyan">6</span>
+            <span class="stat-val c-cyan">7</span>
             <span class="stat-desc">AST-aware</span>
           </div>
           <div class="stat-block">
@@ -956,7 +1100,7 @@
       <div class="feat-card">
         <div class="feat-icon" style="background:var(--cyan-dim)">🌳</div>
         <div class="feat-title">AST-Aware Chunking</div>
-        <p class="feat-body">Tree-sitter parses Python, JavaScript, TypeScript, JSX, TSX, and PHP into semantic chunks — functions, classes, imports. No raw file dumps, no context waste.</p>
+        <p class="feat-body">Tree-sitter parses Python, JavaScript, TypeScript, PHP, Go, Rust, and Java into semantic chunks. Functions, classes, imports. No raw file dumps, no context waste.</p>
       </div>
       <div class="feat-card">
         <div class="feat-icon" style="background:var(--purple-dim)">⚡</div>
@@ -992,6 +1136,83 @@
         <div class="feat-icon" style="background:var(--purple-dim)">📊</div>
         <div class="feat-title">Web Dashboard</div>
         <p class="feat-body">Run <code>cce dashboard</code> for a Grafana-inspired dark theme with donut charts, bar graphs, file health, and live 5-second polling. All in a single embedded HTML file.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── BENCHMARK ─────────────────────────────────────── -->
+<section class="bench-section" id="benchmark">
+  <div class="wrap">
+    <span class="section-tag">Benchmark</span>
+    <h2>Verified on FastAPI.<br>Reproduce it yourself.</h2>
+    <p class="sec-sub">20 real coding questions against FastAPI (48 source files, 19K lines). No synthetic queries, no cherry-picking.</p>
+
+    <div class="bench-layout">
+      <div class="bench-stats">
+        <div class="bench-stat">
+          <div class="bench-stat-label">Token Savings</div>
+          <div class="bench-stat-val c-green">92.9%</div>
+          <div class="bench-stat-desc">per query average</div>
+        </div>
+        <div class="bench-stat">
+          <div class="bench-stat-label">Recall@10</div>
+          <div class="bench-stat-val c-cyan">0.80</div>
+          <div class="bench-stat-desc">found the right files</div>
+        </div>
+        <div class="bench-stat">
+          <div class="bench-stat-label">Latency p50</div>
+          <div class="bench-stat-val c-amber">0.4ms</div>
+          <div class="bench-stat-desc">per search query</div>
+        </div>
+        <div class="bench-stat">
+          <div class="bench-stat-label">Index Time</div>
+          <div class="bench-stat-val c-text2">11.7s</div>
+          <div class="bench-stat-desc">425 chunks, 53 files</div>
+        </div>
+        <div class="bench-stat wide">
+          <div class="bench-stat-label">Avg tokens per query</div>
+          <div class="bench-bar-chart" style="margin-top:14px">
+            <div class="bench-bar-row">
+              <span class="bench-bar-label">Without CCE</span>
+              <div class="bench-bar-track">
+                <div class="bench-bar-fill baseline" style="width:100%">75,355 tokens</div>
+              </div>
+            </div>
+            <div class="bench-bar-row">
+              <span class="bench-bar-label">With CCE</span>
+              <div class="bench-bar-track">
+                <div class="bench-bar-fill cce" style="width:7.1%">5,381</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bench-right">
+        <div>
+          <h3 style="font-size:18px;font-weight:700;margin-bottom:12px">Methodology</h3>
+          <p class="bench-methodology">
+            For each query, "without CCE" is the full content of every file the query touches (what an AI agent would read). "With CCE" is only the relevant code chunks returned by <code>context_search</code>.
+          </p>
+          <p class="bench-methodology" style="margin-top:10px">
+            This is conservative. Without CCE, AI agents typically read more files than needed because they don't know which are relevant upfront.
+          </p>
+        </div>
+
+        <div>
+          <h3 style="font-size:18px;font-weight:700;margin-bottom:12px">Reproduce it</h3>
+          <div class="bench-reproduce">
+            <span class="t-dim">$</span> <span class="t-cmd">pip install code-context-engine</span><br>
+            <span class="t-dim">$</span> <span class="t-cmd">python benchmarks/run_benchmark.py \</span><br>
+            <span class="t-dim">&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="t-cmd">--repo https://github.com/fastapi/fastapi.git \</span><br>
+            <span class="t-dim">&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="t-cmd">--source-dir fastapi</span>
+          </div>
+        </div>
+
+        <p style="font-size:13px;color:var(--text3)">
+          Full results: <a href="https://github.com/elara-labs/code-context-engine/blob/main/benchmarks/results/fastapi.md" target="_blank" rel="noopener" style="color:var(--cyan);text-decoration:none">benchmarks/results/fastapi.md</a>
+        </p>
       </div>
     </div>
   </div>
@@ -1181,7 +1402,7 @@ function runTypewriter() {
   if (!el) return;
 
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    el.innerHTML = 'Index once.<br><span class="accent">Pay 70% less.</span>';
+    el.innerHTML = 'Index once.<br><span class="accent">Save 93%.</span>';
     return;
   }
 
@@ -1189,7 +1410,7 @@ function runTypewriter() {
   const l1 = document.getElementById('tw-l1');
   const l2 = document.getElementById('tw-l2');
   const cur = el.querySelector('.tw-cursor');
-  const t1 = 'Index once.', t2 = 'Pay 70% less.';
+  const t1 = 'Index once.', t2 = 'Save 93%.';
   const speed = 52;
   let i = 0, j = 0;
 
@@ -1237,7 +1458,7 @@ const HERO_LINES = [
   { html: '<span class="t-dim">│</span> <span class="t-info">Status</span>                    <span class="t-dim">│</span> <span class="t-info">Getting started</span>                <span class="t-dim">│</span>', delay: 80 },
   { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Indexed   <span class="t-cyan">1,247</span> chunks <span class="t-dim">│</span>  <span class="t-cyan">cce status</span>   <span class="t-dim">full diagnostics</span> <span class="t-dim">│</span>', delay: 80 },
   { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Compress  <span class="t-dim">truncation</span>   <span class="t-dim">│</span>  <span class="t-cyan">cce savings</span>  <span class="t-dim">token savings</span>    <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Savings   <span class="t-save">70%</span>          <span class="t-dim">│</span>  <span class="t-cyan">cce list</span>     <span class="t-dim">all commands</span>     <span class="t-dim">│</span>', delay: 80 },
+  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Savings   <span class="t-save">93%</span>          <span class="t-dim">│</span>  <span class="t-cyan">cce list</span>     <span class="t-dim">all commands</span>     <span class="t-dim">│</span>', delay: 80 },
   { html: '<span class="t-dim">╰───────────────────────────┴────────────────────────────────╯</span>', delay: 80 },
 ];
 
@@ -1295,23 +1516,23 @@ function replayTerminal() {
 // ── Ticker ─────────────────────────────────────────────
 function buildTicker() {
   const items = [
-    { k: 'TOKEN SAVINGS', v: '70%', vc: 'g' },
-    { k: 'PRICE', v: '$0', vc: '' },
-    { k: 'AST LANGUAGES', v: '6', vc: '' },
-    { k: 'CLOUD DEPS', v: '0', vc: '' },
-    { k: 'STORAGE', v: 'LOCAL', vc: '' },
+    { k: 'TOKEN SAVINGS', v: '92.9%', vc: 'g' },
+    { k: 'BENCHMARKED ON', v: 'FASTAPI', vc: 'v' },
+    { k: 'AST LANGUAGES', v: '7', vc: '' },
+    { k: 'RECALL@10', v: '0.80', vc: 'g' },
+    { k: 'LATENCY P50', v: '0.4MS', vc: 'v' },
     { k: 'MCP', v: 'COMPATIBLE', vc: 'v' },
     { k: 'SESSION MEMORY', v: 'YES', vc: 'g' },
     { k: 'GRAPH EXPANSION', v: 'YES', vc: 'g' },
-    { k: 'PROGRESS BAR', v: 'YES', vc: 'g' },
+    { k: 'CLOUD DEPS', v: '0', vc: '' },
     { k: 'SETUP', v: '60 SECONDS', vc: '' },
-    { k: 'PROJECT COMMANDS', v: 'YES', vc: 'g' },
+    { k: 'PRICE', v: '$0', vc: '' },
     { k: 'LICENSE', v: 'MIT', vc: '' },
-    { k: 'INPUT SAVINGS', v: '70%', vc: 'g' },
+    { k: 'INPUT SAVINGS', v: '92.9%', vc: 'g' },
     { k: 'OUTPUT SAVINGS', v: '65%', vc: 'g' },
-    { k: 'COLORFUL CLI', v: 'YES', vc: 'v' },
+    { k: 'STORAGE', v: 'LOCAL', vc: '' },
     { k: 'LIVE WATCHER', v: 'YES', vc: 'g' },
-    { k: 'INSTALL SIZE', v: '204MB', vc: 'v' },
+    { k: 'INSTALL SIZE', v: '189MB', vc: 'v' },
     { k: 'VECTOR STORE', v: 'SQLITE-VEC', vc: 'v' },
   ];
   const track = document.getElementById('ticker');
