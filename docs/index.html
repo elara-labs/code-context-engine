@@ -635,25 +635,20 @@
     .bench-bar-fill {
       height: 100%;
       border-radius: 6px;
-      display: flex;
-      align-items: center;
-      padding: 0 10px;
-      font-size: 11px;
+    }
+
+    .bench-bar-fill.baseline { background: var(--text3); }
+    .bench-bar-fill.cce { background: var(--cyan); }
+    .bench-bar-fill.green { background: var(--green); }
+
+    .bench-bar-val {
+      font-size: 12px;
       font-weight: 600;
       font-family: var(--mono);
-      color: var(--bg);
-      white-space: nowrap;
-    }
-
-    .bench-bar-fill.baseline {
-      background: var(--text3);
       color: var(--text);
-    }
-
-    .bench-bar-fill.cce {
-      background: var(--cyan);
-      overflow: visible;
-      color: var(--cyan);
+      white-space: nowrap;
+      flex-shrink: 0;
+      min-width: 90px;
     }
 
     .bench-reproduce {
@@ -1000,20 +995,23 @@
             <div class="bench-bar-row">
               <span class="bench-bar-label">Full files</span>
               <div class="bench-bar-track">
-                <div class="bench-bar-fill baseline" style="width:100%">75,355 tokens</div>
+                <div class="bench-bar-fill baseline" style="width:100%"></div>
               </div>
+              <span class="bench-bar-val">75,355</span>
             </div>
             <div class="bench-bar-row">
               <span class="bench-bar-label">After retrieval</span>
               <div class="bench-bar-track">
-                <div class="bench-bar-fill cce" style="width:7.1%">5,381</div>
+                <div class="bench-bar-fill cce" style="width:7.1%"></div>
               </div>
+              <span class="bench-bar-val" style="color:var(--cyan)">5,381</span>
             </div>
             <div class="bench-bar-row">
               <span class="bench-bar-label">After compression</span>
               <div class="bench-bar-track">
-                <div class="bench-bar-fill" style="width:0.7%;background:var(--green);overflow:visible;color:var(--green)">541</div>
+                <div class="bench-bar-fill green" style="width:0.7%"></div>
               </div>
+              <span class="bench-bar-val" style="color:var(--green)">541</span>
             </div>
           </div>
         </div>
