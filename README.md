@@ -5,7 +5,7 @@
 <h1 align="center">Code Context Engine</h1>
 
 <p align="center">
-  <strong>Index your codebase. AI searches instead of re-reading files. Save 70%+ on tokens.</strong>
+  <strong>Index your codebase. AI searches instead of re-reading files. 93% token savings, benchmarked.</strong>
 </p>
 
 <p align="center">
@@ -60,12 +60,12 @@ Multiple editors in the same project? All get configured in one command.
 ```
   my-project · 38 queries
 
-  ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶  70% tokens saved
+  ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶  93% tokens saved
 
   Without CCE   48.0k  tokens   $0.24
-  With CCE      14.2k  tokens   $0.07
+  With CCE       3.4k  tokens   $0.02
   ──────────────────────────────────────────
-  Saved         33.8k  tokens   $0.17
+  Saved         44.6k  tokens   $0.22
 
   Cost estimate based on Opus input pricing ($5/1M tokens)
 ```
@@ -74,7 +74,7 @@ Multiple editors in the same project? All get configured in one command.
 
 ## Why this matters
 
-Input tokens are 85-95% of your Claude Code bill. CCE cuts them significantly.
+Input tokens are 85-95% of your Claude Code bill. CCE cuts them by 93% ([benchmarked on FastAPI](#benchmark-fastapi-independently-verified)).
 
 ```
 Without CCE:    Claude reads payments.py + shipping.py   = 45,000 tokens
@@ -188,7 +188,7 @@ Not a text search. Tree-sitter AST parsing creates semantic chunks. Hybrid retri
 
 ### It tracks real savings
 
-Not estimates. Actual tokens served vs full-file baseline, broken down by 7 buckets (retrieval, compression, output, memory, grammar, summarization, progressive disclosure). Dollar costs fetched from Anthropic's pricing page.
+Not estimates. Actual tokens served vs full-file baseline, broken down by buckets (retrieval, compression, output, memory, grammar). Dollar costs fetched from Anthropic's pricing page. Savings summary shown at every session start.
 
 ### It is secure by default
 
@@ -346,6 +346,8 @@ No GPU required. Embedding model runs on CPU via ONNX Runtime.
 - [x] Clean uninstall (removes all CCE artifacts)
 - [x] AST-aware chunking for PHP, Go, Rust, Java (tree-sitter)
 - [x] Multi-editor support (Cursor, VS Code/Copilot, Gemini CLI)
+- [x] Reproducible benchmark suite (93% savings on FastAPI, per-layer breakdown)
+- [x] Session savings visibility (shown at every session start)
 - [ ] Tree-sitter support for C, C++, Ruby, Swift, Kotlin
 - [ ] Docker support for remote mode
 
