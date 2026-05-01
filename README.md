@@ -163,6 +163,14 @@ cce savings --all    # see savings across all projects
 
 ---
 
+## How is CCE different?
+
+CCE is editor-agnostic, local-first, and gives you measurable token savings. Your code never leaves your machine. Unlike built-in indexing (Cursor, Continue), CCE works across Claude Code, VS Code, Cursor, Gemini CLI, and Codex with a single index. Unlike cloud tools (Greptile), it's free and private.
+
+See the [full comparison with alternatives](docs/comparison.md) for an honest look at trade-offs.
+
+---
+
 ## How it works (the short version)
 
 1. **Index:** Tree-sitter parses your code into semantic chunks (functions, classes, modules). Stored as vector embeddings locally.
