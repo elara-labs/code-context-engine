@@ -276,7 +276,6 @@
       font-family: var(--mono);
       font-size: 12.5px;
       line-height: 1.72;
-      min-height: 310px;
     }
 
     .tl { display: block; opacity: 0; transition: opacity .08s; }
@@ -1447,19 +1446,6 @@ const HERO_LINES = [
   { html: '  <span class="t-ok">✓</span> <span style="font-weight:700;color:#dde8ff">Indexed 1,247 chunks</span> <span class="t-info">from 89 files</span>', delay: 520 },
   { html: '', delay: 200 },
   { html: '  <span class="t-ok" style="font-weight:700">Done!</span>  <span class="t-dim">Restart Claude Code to activate CCE.</span>', delay: 420 },
-  { html: '', delay: 300 },
-  { html: '<span class="t-dim">$</span> <span class="t-cmd">cce</span>', delay: 500 },
-  { html: '', delay: 200 },
-  { html: '<span class="t-dim">╭──────────────── Code Context Engine v0.4.0 ────────────────╮</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>                        <span class="t-cyan" style="font-weight:700">⬡  C C E  ⬡</span>                         <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>                         <span style="font-weight:700">my-project</span>                         <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>             <span class="t-dim">standard profile  ·  ~/my-project</span>              <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">├───────────────────────────┬────────────────────────────────┤</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span> <span class="t-info">Status</span>                    <span class="t-dim">│</span> <span class="t-info">Getting started</span>                <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Indexed   <span class="t-cyan">1,247</span> chunks <span class="t-dim">│</span>  <span class="t-cyan">cce status</span>   <span class="t-dim">full diagnostics</span> <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Compress  <span class="t-dim">truncation</span>   <span class="t-dim">│</span>  <span class="t-cyan">cce savings</span>  <span class="t-dim">token savings</span>    <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">│</span>  <span class="t-ok">●</span> Savings   <span class="t-save">93%</span>          <span class="t-dim">│</span>  <span class="t-cyan">cce list</span>     <span class="t-dim">all commands</span>     <span class="t-dim">│</span>', delay: 80 },
-  { html: '<span class="t-dim">╰───────────────────────────┴────────────────────────────────╯</span>', delay: 80 },
 ];
 
 let _termTimers = [];
