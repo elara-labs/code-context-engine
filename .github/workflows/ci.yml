@@ -32,14 +32,20 @@ jobs:
         run: choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
 
       # macOS setup-python ships Python without loadable SQLite extensions.
-      # Install pysqlite3-binary (compiled with extensions enabled) and patch
-      # sys.modules so `import sqlite3` uses it instead of the stock module.
+      # Build pysqlite3 from source against Homebrew SQLite (which has
+      # extensions enabled), then patch sys.modules so `import sqlite3`
+      # uses the extension-capable build.
       - name: Fix SQLite extensions (macOS)
         if: runner.os == 'macOS'
         run: |
-          pip install pysqlite3-binary
+          brew install sqlite3
+          LDFLAGS="-L$(brew --prefix sqlite3)/lib" \
+          CPPFLAGS="-I$(brew --prefix sqlite3)/include" \
+          pip install pysqlite3
           SITE=$(python -c "import site; print(site.getsitepackages()[0])")
-          echo "import pysqlite3; import sys; sys.modules['sqlite3'] = pysqlite3; sys.modules['sqlite3.dbapi2'] = pysqlite3" > "$SITE/patch_sqlite3.pth"
+          cat > "$SITE/patch_sqlite3.pth" << 'PATCH'
+          import pysqlite3; import sys; sys.modules["sqlite3"] = pysqlite3; sys.modules["sqlite3.dbapi2"] = pysqlite3
+          PATCH
           python -c "import sqlite3; c = sqlite3.connect(':memory:'); c.enable_load_extension(True); print('SQLite extensions: OK')"
 
       - name: Install package

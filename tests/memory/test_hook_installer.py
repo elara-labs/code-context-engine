@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -17,10 +18,13 @@ def test_install_hook_script_writes_executable(tmp_path: Path):
     assert created is True
     assert target.exists()
     body = target.read_text()
-    assert body.startswith("#!/bin/sh")
-    assert "curl" in body
-    # Owner exec bit set.
-    assert target.stat().st_mode & stat.S_IXUSR
+    if sys.platform == "win32":
+        assert body.startswith("@echo off")
+    else:
+        assert body.startswith("#!/bin/sh")
+        assert "curl" in body
+        # Owner exec bit set (not applicable on Windows).
+        assert target.stat().st_mode & stat.S_IXUSR
 
 
 def test_install_hook_script_idempotent(tmp_path: Path):
@@ -81,7 +85,7 @@ def test_install_settings_uses_cmd_quoting_on_windows(tmp_path: Path, monkeypatc
 
 
 def test_install_settings_quotes_command_for_paths_with_spaces(tmp_path: Path, monkeypatch):
-    """A HOOK_PATH containing a space must be shell-quoted in the command.
+    """A HOOK_PATH containing a space must be quoted in the command.
 
     Without quoting, Claude Code passes `command` to sh -c, which would
     tokenise on the space and try to exec the wrong binary. This is the
@@ -96,11 +100,13 @@ def test_install_settings_quotes_command_for_paths_with_spaces(tmp_path: Path, m
     hi.install_settings(project)
     data = json.loads((project / ".claude" / "settings.json").read_text())
     cmd = data["hooks"][hi.LIFECYCLE_HOOKS[0]][0]["hooks"][0]["command"]
-    # The path must be shell-quoted (single quotes around the spaced path),
-    # and the hook name must appear unquoted after a space.
-    assert "'" in cmd, f"path with space should be shell-quoted: {cmd}"
+    # The path must be quoted: single quotes on POSIX, double quotes on Windows.
     assert "Alice Smith" in cmd
     assert cmd.endswith(f" {hi.LIFECYCLE_HOOKS[0]}")
+    if sys.platform == "win32":
+        assert '"' in cmd, f"Windows path should be double-quoted: {cmd}"
+    else:
+        assert "'" in cmd, f"POSIX path should be single-quoted: {cmd}"
 
 
 def test_session_start_matcher_covers_clear_and_compact(tmp_path: Path):
