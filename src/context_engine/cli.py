@@ -1249,8 +1249,8 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             baseline = max(full_file, raw) if full_file > 0 else raw
             served = served_legacy
 
-        tokens_saved = max(0, baseline - served)
-        saved_pct = int(tokens_saved / baseline * 100) if baseline > 0 else 0
+        tokens_saved = max(0, baseline - served) if queries > 0 else 0
+        saved_pct = int(tokens_saved / baseline * 100) if baseline > 0 and queries > 0 else 0
 
         q_label = "query" if queries == 1 else "queries"
 

@@ -142,8 +142,9 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
 
         full_file = stats.get("full_file_tokens", 0)
         served = stats.get("served_tokens", 0)
+        queries = stats.get("queries", 0)
         baseline = full_file if full_file > 0 else stats.get("raw_tokens", 0)
-        saved_pct = max(0, int((1 - served / baseline) * 100)) if baseline > 0 else 0
+        saved_pct = max(0, int((1 - served / baseline) * 100)) if baseline > 0 and queries > 0 else 0
 
         output_level = state.get("output_level", config.output_compression)
 
