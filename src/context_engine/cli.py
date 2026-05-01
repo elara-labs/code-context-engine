@@ -828,8 +828,8 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
             served = stats.get("served_tokens", 0)
             queries = stats.get("queries", 0)
             baseline = max(full, raw) if full > 0 else raw
-            saved = max(0, baseline - served)
-            pct = int(saved / baseline * 100) if baseline > 0 else 0
+            saved = max(0, baseline - served) if queries > 0 else 0
+            pct = int(saved / baseline * 100) if baseline > 0 and queries > 0 else 0
             lines.append(f"    {dim('Queries:')}        {value(f'{queries:,}')}")
             lines.append(f"    {dim('Full codebase:')}  {value(f'{baseline:,}')} {dim('tokens')}")
             lines.append(f"    {dim('Served:')}         {value(f'{served:,}')} {dim('tokens')}")
