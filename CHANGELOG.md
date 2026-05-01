@@ -2,6 +2,13 @@
 
 All notable changes to Code Context Engine are documented here.
 
+## [0.4.7] - 2026-05-01
+
+### Fixed
+- macOS CI: build pysqlite3 from source against Homebrew SQLite for loadable extension support
+- Windows CI: platform-aware hook installer tests (double-quote quoting on Windows)
+- Windows CI: handle spurious SIGINT during pytest teardown on GitHub Actions runners
+
 ## [0.4.6] - 2026-05-01
 
 ### Added
