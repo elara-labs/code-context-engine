@@ -1259,6 +1259,16 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
         click.echo(f"  {bold(name)} {dim('·')} {value(str(queries))} {dim(q_label)}")
         click.echo()
 
+        # Show friendly message when no searches have happened yet.
+        # Exception: bucket data with real savings means context_search
+        # was called but the legacy query counter wasn't incremented.
+        has_bucket_savings = bucket_baseline > 0 and bucket_served < bucket_baseline
+        if queries == 0 and not has_bucket_savings:
+            click.echo(f"  {dim('Waiting for first search.')}")
+            click.echo(f"  {dim('Stats populate after context_search calls via MCP.')}")
+            click.echo()
+            return
+
         # Headline bar + percentage
         click.echo(
             f"  {_bar(saved_pct)}  "
