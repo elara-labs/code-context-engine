@@ -940,21 +940,35 @@ class ContextEngineMCP:
 
         inline_chunks, overflow_chunks = _split_inline_overflow(all_chunks, max_tokens)
 
-        # Accounting
-        raw_tokens = 0
-        served_tokens = 0
+        # Accounting — track per-file to cap overlapping chunks
+        per_file_raw: dict[str, int] = {}
+        per_file_served: dict[str, int] = {}
         seen_files: set[str] = set()
         for chunk in inline_chunks:
             served_text = chunk.compressed_content or chunk.content
-            raw_tokens += _count_tokens(chunk.content)
-            served_tokens += _count_tokens(served_text)
-            seen_files.add(chunk.file_path)
+            fp = chunk.file_path
+            per_file_raw[fp] = per_file_raw.get(fp, 0) + _count_tokens(chunk.content)
+            per_file_served[fp] = per_file_served.get(fp, 0) + _count_tokens(served_text)
+            seen_files.add(fp)
         for chunk in overflow_chunks:
-            raw_tokens += _count_tokens(chunk.content)
-            served_tokens += 30  # compact reference ~30 tokens
-            seen_files.add(chunk.file_path)
+            fp = chunk.file_path
+            per_file_raw[fp] = per_file_raw.get(fp, 0) + _count_tokens(chunk.content)
+            per_file_served[fp] = per_file_served.get(fp, 0) + 30
+            seen_files.add(fp)
 
         full_file_tokens = self._estimate_full_file_tokens(seen_files)
+
+        # Cap per-file served/raw at full-file size to prevent overlapping
+        # chunks (class + method) from inflating tokens beyond the file size.
+        file_token_caps = self._per_file_token_caps(seen_files)
+        raw_tokens = sum(
+            min(per_file_raw.get(fp, 0), file_token_caps.get(fp, per_file_raw.get(fp, 0)))
+            for fp in seen_files
+        )
+        served_tokens = sum(
+            min(per_file_served.get(fp, 0), file_token_caps.get(fp, per_file_served.get(fp, 0)))
+            for fp in seen_files
+        )
 
         # Auto-capture: every file that surfaced as a relevant result counts as
         # "touched" — we can't tell from here whether Claude will act on it,
@@ -1012,6 +1026,20 @@ class ContextEngineMCP:
                 continue
             total += max(1, size // _CHARS_PER_TOKEN)
         return total
+
+    def _per_file_token_caps(self, file_paths: set[str]) -> dict[str, int]:
+        """Return {file_path: estimated_tokens} for capping overlapping chunks."""
+        from pathlib import Path as _Path
+        caps = {}
+        project_dir = _Path.cwd()
+        for fp in file_paths:
+            full_path = project_dir / fp
+            try:
+                size = full_path.stat().st_size
+            except OSError:
+                continue
+            caps[fp] = max(1, size // _CHARS_PER_TOKEN)
+        return caps
 
     async def _handle_expand_chunk(self, args):
         chunk_id = (args.get("chunk_id") or "").strip()

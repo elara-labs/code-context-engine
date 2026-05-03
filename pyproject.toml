@@ -1,6 +1,6 @@
 [project]
 name = "code-context-engine"
-version = "0.4.15"
+version = "0.4.16"
 description = "Index your codebase. AI searches instead of re-reading files. 94% token savings, benchmarked on FastAPI. Works with Claude Code, Cursor, VS Code, Gemini CLI, Codex, and OpenCode."
 readme = {file = "README.md", content-type = "text/markdown"}
 license = "MIT"

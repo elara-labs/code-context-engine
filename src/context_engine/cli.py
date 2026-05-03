@@ -1688,23 +1688,24 @@ def search(ctx: click.Context, query: str, top_k: int) -> None:
         if not results:
             lines.append(f"    {DOT} {dim('No results found')}")
         else:
-            # Compute tokens
-            served_tokens = 0
-            seen_files: set[str] = set()
+            # Compute tokens per file, capping served at full-file size to
+            # handle overlapping chunks (e.g. class + method from same file).
+            per_file_served: dict[str, int] = {}
             for r in results:
                 chunk_tokens = max(1, len(r.content) // 4)
-                served_tokens += chunk_tokens
-                seen_files.add(r.file_path)
+                per_file_served[r.file_path] = per_file_served.get(r.file_path, 0) + chunk_tokens
 
-            # Estimate full file tokens
+            # Estimate full file tokens and cap served per file
             full_file_tokens = 0
-            for fp in seen_files:
+            served_tokens = 0
+            for fp, raw_served in per_file_served.items():
                 full_path = Path(project_dir) / fp
-                if full_path.exists():
-                    try:
-                        full_file_tokens += max(1, len(full_path.read_text(errors="ignore")) // 4)
-                    except OSError:
-                        pass
+                try:
+                    file_tokens = max(1, len(full_path.read_text(errors="ignore")) // 4)
+                except OSError:
+                    file_tokens = raw_served
+                full_file_tokens += file_tokens
+                served_tokens += min(raw_served, file_tokens)
 
             for i, r in enumerate(results, 1):
                 conf = r.metadata.get("confidence", "")
