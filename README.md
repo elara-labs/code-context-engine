@@ -29,7 +29,8 @@
   <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/VS_Code-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="VS Code" height="36"></a>&nbsp;&nbsp;
   <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Cursor-000000?style=for-the-badge&logo=cursor&logoColor=white" alt="Cursor" height="36"></a>&nbsp;&nbsp;
   <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Gemini_CLI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Gemini CLI" height="36"></a>&nbsp;&nbsp;
-  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white" alt="Codex CLI" height="36"></a>
+  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white" alt="Codex CLI" height="36"></a>&nbsp;&nbsp;
+  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/OpenCode-22C55E?style=for-the-badge&logo=terminal&logoColor=white" alt="OpenCode" height="36"></a>
 </p>
 
 <p align="center">
@@ -76,6 +77,7 @@ Restart your editor. Done. Every question now hits the index instead of re-readi
 | Cursor | `.cursor/mcp.json` | `.cursorrules` |
 | Gemini CLI | `.gemini/settings.json` | `GEMINI.md` |
 | OpenAI Codex | `.codex/config.toml` | |
+| OpenCode | `opencode.json` | |
 
 Multiple editors in the same project? All get configured in one command.
 

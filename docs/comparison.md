@@ -8,7 +8,7 @@ This page explains ours.
 
 | | CCE | Cursor (built-in) | Aider (repo-map) | Continue.dev | Greptile |
 |---|---|---|---|---|---|
-| **Editor support** | Any (Claude Code, Cursor, VS Code, Gemini CLI, Codex) | Cursor only | CLI only | VS Code, JetBrains | SaaS API |
+| **Editor support** | Any (Claude Code, Cursor, VS Code, Gemini CLI, Codex, OpenCode) | Cursor only | CLI only | VS Code, JetBrains | SaaS API |
 | **Code stays local** | Yes | No (cloud indexed) | Yes | Depends on LLM | No (cloud) |
 | **Setup** | `cce init` + `cce serve` | Zero (built in) | Zero (built in) | Extension install | API key + config |
 | **Token savings tracking** | Yes (per-query metrics) | No | No | No | N/A |
@@ -28,7 +28,7 @@ For Cursor-only users who don't mind cloud indexing, there's no reason to add CC
 
 **Where CCE wins:**
 Editor independence. If you switch between Claude Code and Cursor (or use VS Code,
-Gemini CLI, or Codex), Cursor's index doesn't follow you. CCE works across all of
+Gemini CLI, Codex, or OpenCode), Cursor's index doesn't follow you. CCE works across all of
 them with a single index. Your code never leaves your machine. And you get
 measurable token savings with per-query tracking.
 
@@ -57,7 +57,7 @@ looking at right now, not just what's in the repo.
 Continue's context is session-scoped. Close the editor and it's gone. CCE's
 cross-session memory preserves decisions, architectural context, and code area
 annotations across sessions. CCE also works outside the IDE (Claude Code CLI,
-Gemini CLI, Codex).
+Gemini CLI, Codex, OpenCode).
 
 ### vs Greptile
 

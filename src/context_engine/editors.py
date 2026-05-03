@@ -1,8 +1,8 @@
 """Multi-editor MCP configuration.
 
 Detects installed editors and writes MCP server config in each editor's
-format. Supports Claude Code, VS Code/Copilot, Cursor, Gemini CLI, and
-OpenAI Codex CLI.
+format. Supports Claude Code, VS Code/Copilot, Cursor, Gemini CLI,
+OpenAI Codex CLI, and OpenCode.
 """
 from __future__ import annotations
 
@@ -49,6 +49,13 @@ EDITORS: dict[str, dict] = {
         "config_path": ".codex/config.toml",
         "format": "toml",
         "detect": [".codex"],
+    },
+    "opencode": {
+        "name": "OpenCode",
+        "config_path": "opencode.json",
+        "servers_key": "mcp",
+        "format": "opencode",
+        "detect": ["opencode.json", "opencode.jsonc"],
     },
 }
 
@@ -129,6 +136,9 @@ def configure_mcp(project_dir: Path, editor_key: str) -> bool:
     if editor.get("format") == "toml":
         return _configure_toml(config_path, command, str(project_dir))
 
+    if editor.get("format") == "opencode":
+        return _configure_opencode(config_path, command, str(project_dir))
+
     servers_key = editor["servers_key"]
     entry = {"command": command, "args": ["serve", "--project-dir", str(project_dir)]}
 
@@ -154,6 +164,53 @@ def configure_mcp(project_dir: Path, editor_key: str) -> bool:
     return True
 
 
+def _configure_opencode(config_path: Path, command: str, project_dir: str) -> bool:
+    """Add CCE to OpenCode's opencode.json. Returns True if changed.
+
+    OpenCode uses a different MCP entry format: type "local" with command
+    as an array (not a string + args).
+    """
+    # OpenCode may also have opencode.jsonc; if the .jsonc exists and .json
+    # doesn't, use the .jsonc path instead.
+    jsonc_path = config_path.with_suffix(".jsonc")
+    if jsonc_path.exists() and not config_path.exists():
+        config_path = jsonc_path
+
+    entry = {
+        "type": "local",
+        "command": [command, "serve", "--project-dir", project_dir],
+    }
+
+    if config_path.exists():
+        try:
+            content = config_path.read_text()
+            # Strip JSONC comments for parsing
+            data = json.loads(_strip_jsonc_comments(content))
+        except (json.JSONDecodeError, OSError):
+            data = {}
+    else:
+        data = {}
+
+    servers = data.setdefault("mcp", {})
+    if "context-engine" in servers:
+        existing = servers["context-engine"]
+        if existing.get("command") == entry["command"] and existing.get("type") == "local":
+            return False
+        servers["context-engine"] = entry
+        atomic_write_text(config_path, json.dumps(data, indent=2) + "\n")
+        return True
+
+    servers["context-engine"] = entry
+    atomic_write_text(config_path, json.dumps(data, indent=2) + "\n")
+    return True
+
+
+def _strip_jsonc_comments(text: str) -> str:
+    """Strip single-line // comments from JSONC content for JSON parsing."""
+    import re
+    return re.sub(r'//.*?$', '', text, flags=re.MULTILINE)
+
+
 def _configure_toml(config_path: Path, command: str, project_dir: str) -> bool:
     """Add CCE to a TOML config file (Codex). Returns True if changed."""
     block = _codex_toml_block(command, project_dir)
@@ -173,6 +230,12 @@ def remove_mcp(project_dir: Path, editor_key: str) -> str | None:
     """Remove CCE from an editor's MCP config. Returns status message or None."""
     editor = EDITORS[editor_key]
     config_path = project_dir / editor["config_path"]
+
+    # OpenCode may use .jsonc instead of .json
+    if editor.get("format") == "opencode":
+        jsonc_path = config_path.with_suffix(".jsonc")
+        if jsonc_path.exists() and not config_path.exists():
+            config_path = jsonc_path
 
     if not config_path.exists():
         return None
