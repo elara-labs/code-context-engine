@@ -1676,6 +1676,10 @@ def search(ctx: click.Context, query: str, top_k: int) -> None:
         retriever = HybridRetriever(backend=backend, embedder=embedder)
         results = await retriever.retrieve(query, top_k=top_k)
 
+        # Filter out CCE config/editor files (same filter as MCP server)
+        from context_engine.integration.mcp_server import _is_cce_config
+        results = [r for r in results if not _is_cce_config(r.file_path)]
+
         lines: list[str] = []
         lines.append("")
         lines.append(section(f"Search · {query}"))
