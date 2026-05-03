@@ -61,6 +61,34 @@ def _count_tokens(text: str) -> int:
     return max(1, len(text) // _CHARS_PER_TOKEN)
 
 
+# Files created by CCE itself — not user code. Filtering these from search
+# results prevents config files from dominating results on small projects
+# and inflating served_tokens (which causes negative savings).
+_CCE_CONFIG_PREFIXES = (
+    ".claude/",
+    ".mcp.json",
+    ".cursor/",
+    ".cursorrules",
+    ".vscode/mcp.json",
+    ".gemini/",
+    "GEMINI.md",
+    ".codex/",
+    "opencode.json",
+    "opencode.jsonc",
+)
+
+_CCE_CONFIG_FILES = {
+    "CLAUDE.md",
+}
+
+
+def _is_cce_config(file_path: str) -> bool:
+    """True if the chunk comes from a CCE-managed or editor config file."""
+    if file_path in _CCE_CONFIG_FILES:
+        return True
+    return any(file_path.startswith(p) for p in _CCE_CONFIG_PREFIXES)
+
+
 def _cosine_sim(a, b) -> float:
     """Cosine similarity between two equal-length numeric sequences. Returns 0
     on degenerate input (zero norm) instead of NaN.
@@ -905,6 +933,10 @@ class ContextEngineMCP:
             max_tokens=None,
         )
         all_chunks = await self._compressor.compress(all_chunks, self._config.compression_level)
+
+        # Filter out CCE config/editor files — they inflate token counts on
+        # small projects and aren't what users are searching for.
+        all_chunks = [c for c in all_chunks if not _is_cce_config(c.file_path)]
 
         inline_chunks, overflow_chunks = _split_inline_overflow(all_chunks, max_tokens)
 
