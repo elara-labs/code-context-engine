@@ -32,4 +32,4 @@ Run: `python benchmarks/run_benchmark.py --repo https://github.com/fastapi/fasta
 - **Precision/Recall**: Curated queries with known-relevant files in `benchmarks/sample_queries.json`
 - **Latency**: 5 iterations per query, report percentiles (after 3 warm-up runs)
 
-Full results in [`benchmarks/results/fastapi.md`](benchmarks/results/fastapi.md).
+Full results in [`benchmarks/results/fastapi.md`](https://github.com/elara-labs/code-context-engine/blob/main/benchmarks/results/fastapi.md).
