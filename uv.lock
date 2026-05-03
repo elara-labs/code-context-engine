@@ -358,7 +358,7 @@ wheels = [
 
 [[package]]
 name = "code-context-engine"
-version = "0.4.8"
+version = "0.4.11"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
