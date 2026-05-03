@@ -1,19 +1,19 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.elara-labs/code-context-engine",
-  "description": "Index your codebase. AI searches instead of re-reading files. 94% token savings, benchmarked on FastAPI.",
+  "name": "io.github.ai-elara/code-context-engine",
+  "description": "Index your codebase. AI searches instead of re-reading files. 94% token savings.",
   "title": "Code Context Engine",
   "repository": {
     "url": "https://github.com/elara-labs/code-context-engine",
     "source": "github"
   },
-  "version": "0.4.12",
+  "version": "0.4.13",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "code-context-engine",
-      "version": "0.4.12",
+      "version": "0.4.13",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
