@@ -2,6 +2,28 @@
 
 All notable changes to Code Context Engine are documented here.
 
+## [0.4.17] - 2026-05-04
+
+### Added
+- Configurable Ollama URL via `compression.ollama_url` config or `CCE_OLLAMA_URL` env var
+- Codex detection via `~/.codex` with per-project TOML sections
+- Friendly error message when `os.getcwd()` fails (macOS Full Disk Access)
+- Streaming embed+ingest pipeline (memory usage capped at 50 files)
+- SEO foundation: robots.txt, sitemap.xml, blog post
+- Use cases section and quick start in README
+- Downloads badge, MCP Registry badge
+- Comparison page "honest limitations" section
+
+### Changed
+- README: "independently verified" replaced with "reproducible"
+- Default pricing switched from Opus to Sonnet
+- Roadmap moved shipped items to CHANGELOG
+- Landing page synced to 94% retrieval, 0.90 recall numbers
+
+### Fixed
+- Windows TOML escaping for Codex config paths
+- OpenCode icon on landing page
+
 ## Shipped Features
 
 - Semantic indexing + hybrid retrieval + graph expansion
