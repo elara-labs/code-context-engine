@@ -76,7 +76,7 @@ Restart your editor. Done. Every question now hits the index instead of re-readi
 | VS Code / Copilot | `.vscode/mcp.json` | |
 | Cursor | `.cursor/mcp.json` | `.cursorrules` |
 | Gemini CLI | `.gemini/settings.json` | `GEMINI.md` |
-| OpenAI Codex | `.codex/config.toml` | |
+| OpenAI Codex | `.codex/config.toml` | `AGENTS.md` |
 | OpenCode | `opencode.json` | |
 
 Multiple editors in the same project? All get configured in one command.

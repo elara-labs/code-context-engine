@@ -98,6 +98,11 @@ INSTRUCTION_FILES: dict[str, dict] = {
         "path": ".cursorrules",
         "detect": [".cursor", ".cursorrules"],
     },
+    "codex": {
+        "name": "AGENTS.md",
+        "path": "AGENTS.md",
+        "detect": [".codex", "AGENTS.md"],
+    },
     "gemini": {
         "name": "GEMINI.md",
         "path": "GEMINI.md",
