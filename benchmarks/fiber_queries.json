@@ -1,0 +1,102 @@
+[
+    {
+        "query": "How does fiber's App struct initialize and configure the server?",
+        "expected_files": ["app.go"],
+        "category": "core"
+    },
+    {
+        "query": "How does fiber implement its Ctx (context) object for request and response?",
+        "expected_files": ["ctx.go"],
+        "category": "context"
+    },
+    {
+        "query": "How does fiber handle route registration with GET, POST, PUT, DELETE?",
+        "expected_files": ["app.go", "router.go"],
+        "category": "routing"
+    },
+    {
+        "query": "How does fiber's router match incoming requests to handlers?",
+        "expected_files": ["router.go"],
+        "category": "routing"
+    },
+    {
+        "query": "How does fiber implement middleware chaining with Use()?",
+        "expected_files": ["app.go", "router.go"],
+        "category": "middleware"
+    },
+    {
+        "query": "How does fiber handle path parameters and query strings?",
+        "expected_files": ["ctx.go", "router.go"],
+        "category": "routing"
+    },
+    {
+        "query": "How does fiber implement request body parsing and binding?",
+        "expected_files": ["ctx.go"],
+        "category": "binding"
+    },
+    {
+        "query": "How does fiber's error handling and ErrorHandler work?",
+        "expected_files": ["app.go", "utils.go"],
+        "category": "errors"
+    },
+    {
+        "query": "How does fiber implement route groups with Group()?",
+        "expected_files": ["group.go", "app.go"],
+        "category": "routing"
+    },
+    {
+        "query": "How does the fiber Logger middleware log requests?",
+        "expected_files": ["middleware/logger/logger.go"],
+        "category": "middleware"
+    },
+    {
+        "query": "How does fiber implement static file serving?",
+        "expected_files": ["app.go", "ctx.go"],
+        "category": "static"
+    },
+    {
+        "query": "How does fiber's Recover middleware handle panics?",
+        "expected_files": ["middleware/recover/recover.go"],
+        "category": "middleware"
+    },
+    {
+        "query": "How does fiber implement WebSocket support?",
+        "expected_files": ["middleware/websocket/websocket.go"],
+        "category": "websocket"
+    },
+    {
+        "query": "How does fiber's CORS middleware handle cross-origin requests?",
+        "expected_files": ["middleware/cors/cors.go"],
+        "category": "middleware"
+    },
+    {
+        "query": "How does fiber implement rate limiting middleware?",
+        "expected_files": ["middleware/limiter/limiter.go"],
+        "category": "middleware"
+    },
+    {
+        "query": "How does fiber use fasthttp under the hood for HTTP handling?",
+        "expected_files": ["app.go", "ctx.go"],
+        "category": "internals"
+    },
+    {
+        "query": "How does fiber implement hooks for application lifecycle events?",
+        "expected_files": ["hooks.go"],
+        "category": "lifecycle"
+    },
+    {
+        "query": "How does fiber's compress middleware handle gzip and deflate?",
+        "expected_files": ["middleware/compress/compress.go"],
+        "category": "middleware"
+    },
+    {
+        "query": "How does fiber implement Server-Sent Events?",
+        "expected_files": ["ctx.go"],
+        "category": "streaming"
+    },
+    {
+        "query": "How does fiber's cache middleware store and retrieve cached responses?",
+        "expected_files": ["middleware/cache/cache.go"],
+        "category": "middleware"
+    }
+]

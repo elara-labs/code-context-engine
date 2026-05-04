@@ -1,0 +1,92 @@
+[
+    {
+        "query": "How does chi implement its Router interface?",
+        "expected_files": ["router.go", "mux.go"],
+        "category": "routing"
+    },
+    {
+        "query": "How are URL parameters extracted from a request context?",
+        "expected_files": ["context.go"],
+        "category": "routing"
+    },
+    {
+        "query": "How does chi handle subrouters and route mounting?",
+        "expected_files": ["mux.go"],
+        "category": "routing"
+    },
+    {
+        "query": "How is middleware chained and applied to routes?",
+        "expected_files": ["mux.go", "chain.go"],
+        "category": "middleware"
+    },
+    {
+        "query": "How does the middleware.Logger log HTTP requests?",
+        "expected_files": ["middleware/logger.go"],
+        "category": "middleware"
+    },
+    {
+        "query": "How does chi implement route groups?",
+        "expected_files": ["mux.go"],
+        "category": "routing"
+    },
+    {
+        "query": "How does middleware.Recoverer handle panics?",
+        "expected_files": ["middleware/recoverer.go"],
+        "category": "middleware"
+    },
+    {
+        "query": "How does chi match wildcard and parameterized routes?",
+        "expected_files": ["tree.go", "mux.go"],
+        "category": "routing"
+    },
+    {
+        "query": "How does middleware.RealIP extract client IP from headers?",
+        "expected_files": ["middleware/realip.go"],
+        "category": "middleware"
+    },
+    {
+        "query": "How is request context used to pass values between middleware and handlers?",
+        "expected_files": ["context.go", "mux.go"],
+        "category": "context"
+    },
+    {
+        "query": "How does chi implement the HTTP method routing (GET, POST, DELETE)?",
+        "expected_files": ["mux.go", "router.go"],
+        "category": "routing"
+    },
+    {
+        "query": "How does middleware.Timeout cancel long running requests?",
+        "expected_files": ["middleware/timeout.go"],
+        "category": "middleware"
+    },
+    {
+        "query": "How does chi's radix tree store and resolve routes?",
+        "expected_files": ["tree.go"],
+        "category": "internals"
+    },
+    {
+        "query": "How does middleware.Compress handle gzip response compression?",
+        "expected_files": ["middleware/compress.go"],
+        "category": "middleware"
+    },
+    {
+        "query": "How are 404 and 405 not found and method not allowed handlers set?",
+        "expected_files": ["mux.go"],
+        "category": "errors"
+    },
+    {
+        "query": "How does middleware.Throttle limit concurrent requests?",
+        "expected_files": ["middleware/throttle.go"],
+        "category": "middleware"
+    },
+    {
+        "query": "How does chi handle route walking for introspection?",
+        "expected_files": ["mux.go"],
+        "category": "internals"
+    },
+    {
+        "query": "How does middleware.StripSlashes normalize trailing slashes in URLs?",
+        "expected_files": ["middleware/strip.go"],
+        "category": "middleware"
+    }
+]
