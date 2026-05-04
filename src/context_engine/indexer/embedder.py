@@ -27,7 +27,9 @@ _DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 # Even parallel=1 takes the multiprocessing path — and that path deadlocks on
 # macOS (workers idle on SimpleQueue.get while the main thread sits in
 # asyncio.poll, leaving `cce init` stuck after the file-scan progress bar
-# hits 100%). Default to None on darwin; allow override via CCE_EMBED_PARALLEL.
+# hits 100%). On Windows, ONNX Runtime worker processes crash with
+# ACCESS_VIOLATION (0xC0000005) due to DLL handle inheritance issues.
+# Default to None on darwin and win32; allow override via CCE_EMBED_PARALLEL.
 def _resolve_parallel() -> int | None:
     override = os.environ.get("CCE_EMBED_PARALLEL")
     if override:
@@ -36,6 +38,8 @@ def _resolve_parallel() -> int | None:
         except ValueError:
             pass
     if sys.platform == "darwin":
+        return None
+    if sys.platform == "win32":
         return None
     return min(os.cpu_count() or 2, 4)
 
