@@ -12,6 +12,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/code-context-engine/"><img src="https://img.shields.io/pypi/v/code-context-engine?style=flat-square&color=blue&label=PyPI" alt="PyPI"></a>
+  <a href="https://pepy.tech/project/code-context-engine"><img src="https://img.shields.io/pepy/dt/code-context-engine?style=flat-square&label=downloads&color=blue" alt="Downloads"></a>
   <a href="https://github.com/elara-labs/code-context-engine/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/elara-labs/code-context-engine/ci.yml?style=flat-square&label=CI" alt="CI"></a>
   <a href="https://registry.modelcontextprotocol.io/?q=code-context-engine"><img src="https://img.shields.io/badge/MCP_Registry-listed-brightgreen?style=flat-square" alt="MCP Registry"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-yellow?style=flat-square" alt="MIT License"></a>
@@ -42,6 +43,31 @@
 <p align="center">
   <img src="https://raw.githubusercontent.com/elara-labs/code-context-engine/main/docs/demo.gif" alt="CCE Demo" width="720">
 </p>
+
+---
+
+## Use cases
+
+| | Use case | How CCE helps |
+|---|---|---|
+| **💰** | **Reduce Claude Code costs** | 94% fewer input tokens per session |
+| **🔒** | **Keep code private** | Everything local, no cloud indexing |
+| **🔄** | **Multi-editor teams** | One index across Claude Code, Cursor, VS Code, Gemini CLI |
+| **🧠** | **Cross-session memory** | Decisions and context survive restarts |
+| **⚡** | **Faster responses** | Less context = faster Claude replies |
+| **📊** | **Track actual savings** | Dollar amounts, not estimates |
+
+---
+
+## Quick start (3 lines)
+
+```bash
+uv tool install code-context-engine
+cd /path/to/your/project
+cce init
+```
+
+That's it. Claude now searches your index instead of reading entire files. No config needed.
 
 ---
 
@@ -371,6 +397,16 @@ No GPU required. Embedding model runs on CPU via ONNX Runtime.
 - [ ] Docker support for remote mode
 
 See [CHANGELOG.md](CHANGELOG.md) for shipped features.
+
+---
+
+## Star History
+
+<p align="center">
+  <a href="https://star-history.com/#elara-labs/code-context-engine&Date">
+    <img src="https://api.star-history.com/svg?repos=elara-labs/code-context-engine&type=Date" alt="Star History" width="600">
+  </a>
+</p>
 
 ---
 
