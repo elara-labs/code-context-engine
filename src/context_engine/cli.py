@@ -701,16 +701,26 @@ def init(ctx: click.Context) -> None:
     else:
         _ok("MCP server already configured in " + click.style(".mcp.json", fg="cyan"))
 
-    # Configure MCP for other detected editors (Cursor, VS Code, Gemini)
+    # Configure MCP for other detected editors (Cursor, VS Code, Gemini, Codex)
+    from context_engine.editors import _editor_section  # noqa: SLF001
     detected = detect_editors(project_dir)
     for editor_key in detected:
         if editor_key == "claude":
             continue  # already handled above
         editor = EDITORS[editor_key]
-        if configure_mcp(project_dir, editor_key):
-            _ok(f"MCP server registered for {editor['name']}")
-        else:
-            _ok(f"MCP server already configured for {editor['name']}")
+        changed = configure_mcp(project_dir, editor_key)
+        if changed is None:
+            _warn(f"MCP server skipped for {editor['name']} (could not read or write config file)")
+            continue
+        verb = "registered" if changed else "already configured"
+        _ok(f"MCP server {verb} for {editor['name']}")
+        # User-scoped editors (Codex) share one config file across all
+        # projects, so surface the file + per-project section so users
+        # can see what landed where (and which block to remove by hand
+        # if they ever skip `cce uninstall`).
+        if editor.get("scope") == "user":
+            section = _editor_section(editor, project_dir)
+            click.echo(_dim(f"    ~/{editor['config_path']}  →  [{section}]"))
 
     # Write instruction files for detected editors
     for file_key, info in INSTRUCTION_FILES.items():
