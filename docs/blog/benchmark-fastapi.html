@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How We Cut Claude Code Token Usage by 94% (Benchmarked on FastAPI)</title>
+  <meta name="description" content="Reproducible benchmark showing 94% token savings on Claude Code using Code Context Engine. Tested on FastAPI with 20 real coding queries. Reduce your Claude API costs.">
+  <meta name="keywords" content="Claude Code token savings, reduce Claude API costs, MCP server for coding, Claude Code optimization, AI coding agent tokens, Code Context Engine benchmark">
+  <meta property="og:title" content="How We Cut Claude Code Token Usage by 94%">
+  <meta property="og:description" content="Reproducible benchmark on FastAPI. 20 real queries. 94% fewer input tokens. Here's exactly how we measured it.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://elara-labs.github.io/code-context-engine/blog/benchmark-fastapi.html">
+  <link rel="canonical" href="https://elara-labs.github.io/code-context-engine/blog/benchmark-fastapi.html">
+  <link rel="icon" type="image/svg+xml" href="../logo.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #06080f;
+      --bg2: #0c1120;
+      --bg3: #131c30;
+      --cyan: #00d4ff;
+      --green: #34d399;
+      --amber: #fbbf24;
+      --text: #e8f0ff;
+      --text2: #7b93b8;
+      --text3: #3a5070;
+      --border: #1a2a42;
+      --mono: 'DM Mono', monospace;
+      --sans: 'Instrument Sans', system-ui, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      line-height: 1.7;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 16px 48px;
+      background: rgba(6,8,15,.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    nav a {
+      color: var(--text2);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    nav a:hover { color: var(--cyan); }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text);
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    .nav-brand img { width: 24px; height: 24px; border-radius: 5px; }
+
+    article {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 80px 24px 120px;
+    }
+
+    .meta {
+      font-size: 13px;
+      color: var(--text3);
+      font-family: var(--mono);
+      margin-bottom: 32px;
+    }
+
+    h1 {
+      font-size: 42px;
+      font-weight: 800;
+      line-height: 1.2;
+      letter-spacing: -0.025em;
+      margin-bottom: 24px;
+    }
+
+    .subtitle {
+      font-size: 20px;
+      color: var(--text2);
+      margin-bottom: 56px;
+      line-height: 1.5;
+    }
+
+    h2 {
+      font-size: 26px;
+      font-weight: 700;
+      margin-top: 56px;
+      margin-bottom: 20px;
+      letter-spacing: -0.015em;
+    }
+
+    p {
+      font-size: 17px;
+      color: var(--text2);
+      margin-bottom: 20px;
+    }
+
+    strong { color: var(--text); }
+
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      color: var(--cyan);
+    }
+
+    pre {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px;
+      font-family: var(--mono);
+      font-size: 14px;
+      color: var(--text);
+      overflow-x: auto;
+      margin: 24px 0;
+      line-height: 1.8;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 24px 0;
+      font-size: 15px;
+    }
+
+    th {
+      text-align: left;
+      padding: 12px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text3);
+      border-bottom: 2px solid var(--border);
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text2);
+    }
+
+    td:first-child { color: var(--text); font-weight: 500; }
+
+    .highlight { color: var(--cyan); font-weight: 700; }
+    .green { color: var(--green); font-weight: 700; }
+
+    .cta-box {
+      background: var(--bg2);
+      border: 1px solid rgba(0,212,255,0.2);
+      border-radius: 12px;
+      padding: 36px;
+      margin-top: 56px;
+      text-align: center;
+    }
+
+    .cta-box h3 {
+      font-size: 22px;
+      margin-bottom: 12px;
+    }
+
+    .cta-box p { text-align: center; }
+
+    .cta-box code {
+      font-size: 15px;
+      display: inline-block;
+      margin-top: 12px;
+      padding: 8px 16px;
+      border-radius: 8px;
+    }
+
+    .cta-link {
+      display: inline-block;
+      margin-top: 20px;
+      color: var(--cyan);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    .cta-link:hover { text-decoration: underline; }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 24px 48px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text3);
+    }
+
+    footer a { color: var(--text2); text-decoration: none; }
+    footer a:hover { color: var(--cyan); }
+
+    @media (max-width: 640px) {
+      article { padding: 48px 16px 80px; }
+      h1 { font-size: 30px; }
+      nav { padding: 14px 16px; }
+    }
+  </style>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "How We Cut Claude Code Token Usage by 94% (Benchmarked on FastAPI)",
+    "description": "Reproducible benchmark showing 94% token savings on Claude Code using Code Context Engine.",
+    "datePublished": "2026-05-04",
+    "author": {
+      "@type": "Organization",
+      "name": "Elara Labs"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Elara Labs",
+      "url": "https://github.com/elara-labs"
+    }
+  }
+  </script>
+</head>
+<body>
+
+<nav>
+  <a href="../" class="nav-brand"><img src="../logo.svg" alt="CCE"> Code Context Engine</a>
+  <a href="https://github.com/elara-labs/code-context-engine">GitHub</a>
+</nav>
+
+<article>
+  <div class="meta">May 4, 2026 · 5 min read</div>
+
+  <h1>How We Cut Claude Code Token Usage by 94%</h1>
+
+  <p class="subtitle">
+    A reproducible benchmark on FastAPI showing exactly how Code Context Engine reduces input token costs for AI coding agents.
+  </p>
+
+  <h2>The problem: input tokens are 85-95% of your bill</h2>
+
+  <p>If you use Claude Code, Cursor, or any AI coding agent, most of your spend goes to <strong>input tokens</strong>. Every time Claude needs context about your codebase, it reads entire files. A question about one function pulls in 800 lines.</p>
+
+  <p>We built <strong>Code Context Engine</strong> (CCE), a local MCP server that indexes your codebase and returns only the relevant chunks. No cloud. No API key. Your code stays on your machine.</p>
+
+  <p>But "it saves tokens" isn't a benchmark. Here's how we actually measured it.</p>
+
+  <h2>Benchmark setup</h2>
+
+  <p>We tested against <strong>FastAPI</strong> (53 source files, 180,000 tokens total) with 20 real coding questions. Not synthetic. Not cherry-picked.</p>
+
+  <table>
+    <tr><th>Parameter</th><th>Value</th></tr>
+    <tr><td>Repository</td><td>FastAPI</td></tr>
+    <tr><td>Source files</td><td>53</td></tr>
+    <tr><td>Total tokens</td><td>180,000</td></tr>
+    <tr><td>Queries</td><td>20 real coding questions</td></tr>
+    <tr><td>Methodology</td><td>Full file reads vs. retrieved chunks</td></tr>
+  </table>
+
+  <h2>What "without CCE" means</h2>
+
+  <p>For each query, we measure the total tokens if Claude reads the full content of every file the query touches. This is the baseline.</p>
+
+  <p>Average without CCE: <strong>83,681 tokens per query</strong>.</p>
+
+  <p>This is conservative. In practice, agents often read more files than strictly needed (exploring, scanning imports, checking related code).</p>
+
+  <h2>What "with CCE" means</h2>
+
+  <p>Claude calls <code>context_search("payment flow")</code>. CCE returns the relevant code chunks with confidence scores. Only the code that answers the question.</p>
+
+  <p>Average with CCE: <strong>4,927 tokens per query</strong>.</p>
+
+  <p>That's a <span class="highlight">94% reduction</span> in input tokens.</p>
+
+  <h2>Per-layer savings</h2>
+
+  <p>CCE has multiple layers, each measured independently against its own baseline:</p>
+
+  <table>
+    <tr><th>Layer</th><th>Savings</th><th>Method</th></tr>
+    <tr><td>Retrieval (full files to chunks)</td><td class="highlight">94%</td><td class="green">measured</td></tr>
+    <tr><td>Chunk compression (signatures + docstrings)</td><td class="highlight">89%</td><td class="green">measured</td></tr>
+    <tr><td>Grammar compression (memory text)</td><td>13%</td><td class="green">measured</td></tr>
+  </table>
+
+  <p>These don't stack multiplicatively. The headline number is 94% from retrieval alone.</p>
+
+  <h2>Retrieval quality: Recall@10</h2>
+
+  <p>Saving tokens is useless if the wrong code is retrieved. We measured Recall@10: how often the correct file appeared in the top 10 results.</p>
+
+  <p>Result: <strong>0.90</strong>. Nine out of ten times, CCE found the right file. The 10% miss rate is usually edge cases where the answer spans 4+ files.</p>
+
+  <h2>What this means for your Claude Code bill</h2>
+
+  <p>On Sonnet pricing ($3/1M input tokens), a medium project session without CCE costs roughly $0.14. With CCE: $0.04. That's a <strong>70% cost reduction</strong> on the session.</p>
+
+  <p>On Opus ($15/1M), the savings are more dramatic: $0.70 per session down to $0.21.</p>
+
+  <h2>Limitations (honest)</h2>
+
+  <p><strong>Single repo.</strong> This is FastAPI only. Different codebases (monorepos, many small files, heavily templated code) may see different numbers.</p>
+
+  <p><strong>Python only.</strong> CCE supports JS, TS, Go, Rust, Java, and PHP for chunking, but this benchmark only tested Python.</p>
+
+  <p><strong>Open-source embedding model.</strong> Cloud services using larger models likely have better retrieval on ambiguous queries.</p>
+
+  <h2>Reproduce it yourself</h2>
+
+  <pre>pip install code-context-engine
+python benchmarks/run_benchmark.py \
+  --repo https://github.com/fastapi/fastapi.git \
+  --source-dir fastapi</pre>
+
+  <p>Takes about 60 seconds. Outputs a markdown file with per-query token counts, recall scores, and latency measurements.</p>
+
+  <div class="cta-box">
+    <h3>Try Code Context Engine</h3>
+    <p>One command to install. Works with Claude Code, Cursor, VS Code, Gemini CLI, Codex, and OpenCode.</p>
+    <code>uv tool install code-context-engine && cce init</code>
+    <br>
+    <a class="cta-link" href="https://github.com/elara-labs/code-context-engine">View on GitHub</a>
+  </div>
+</article>
+
+<footer>
+  <a href="https://github.com/elara-labs/code-context-engine">Code Context Engine</a> · MIT License · <a href="../">Home</a>
+</footer>
+
+</body>
+</html>

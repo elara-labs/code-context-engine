@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://elara-labs.github.io/code-context-engine/sitemap.xml
