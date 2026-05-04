@@ -18,6 +18,7 @@ import sqlite3
 import time
 
 from context_engine.memory import db as memory_db
+from context_engine.memory.decision_extractor import extract_decisions
 from context_engine.memory.extractive import extractive_summary, truncation_summary
 from context_engine.memory.grammar import (
     compress as _grammar_compress,
@@ -60,6 +61,7 @@ def compress_turn(
     after expand() on the read side).
     """
     text = _build_turn_text(conn, session_id=session_id, prompt_number=prompt_number)
+    _auto_capture_decisions(conn, text, session_id=session_id, embedder=embedder)
     raw_tokens = _approx_tokens(text)
     summary, tier = _summarise(text, embedder=embedder, top_k=_DEFAULT_TURN_TOP_K)
     extractive_tokens = _approx_tokens(summary)
@@ -222,6 +224,48 @@ def _summarise(text: str, *, embedder, top_k: int) -> tuple[str, str]:
     except Exception:
         log.exception("extractive failed; falling back to truncation")
         return truncation_summary(text), "truncation"
+
+
+def _auto_capture_decisions(
+    conn: sqlite3.Connection,
+    text: str,
+    *,
+    session_id: str,
+    embedder,
+) -> int:
+    """Extract decision patterns from turn text and insert with source='auto'.
+
+    Returns the number of decisions inserted. Skips duplicates silently —
+    the decisions table has no UNIQUE constraint on (decision, session_id)
+    so we guard against re-processing the same turn by checking existing rows.
+    """
+    decisions = extract_decisions(text)
+    if not decisions:
+        return 0
+
+    epoch = int(time.time())
+    ts = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(epoch))
+    count = 0
+    for decision, reason in decisions:
+        try:
+            cur = conn.execute(
+                "INSERT INTO decisions "
+                "(session_id, decision, reason, source, created_at_epoch, created_at) "
+                "VALUES (?, ?, ?, 'auto', ?, ?)",
+                (session_id, decision, reason, epoch, ts),
+            )
+            memory_db.record_decision_vec(
+                conn, embedder,
+                decision_id=cur.lastrowid,
+                decision=decision,
+                reason=reason,
+            )
+            count += 1
+        except Exception:
+            log.debug("auto-capture decision insert failed: %s", decision)
+    if count:
+        log.debug("auto-captured %d decision(s) for session %s", count, session_id)
+    return count
 
 
 def _drain_one_sync(conn: sqlite3.Connection, embedder) -> bool:
