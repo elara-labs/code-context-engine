@@ -372,9 +372,10 @@ async def _run_indexing_locked(
         ))
 
     current_rel_paths: set[str] = set()
-    # Hashes of every chunk content embedded this run — used at the very end
-    # to prune orphans from the embedding cache (full re-index only). Cheap to
-    # accumulate (~64 bytes/hash) compared to keeping every chunk + embedding.
+    # Content hashes for every chunk embedded this run — used at the very end
+    # to prune orphans from the embedding cache (full re-index only). Holding
+    # just the hash strings is far cheaper than holding the chunks plus their
+    # embedding vectors, which is what the pre-streaming pipeline did.
     live_hashes: set[str] = set()
 
     # Lazy-initialised on the first non-empty batch so projects that skip
@@ -411,11 +412,18 @@ async def _run_indexing_locked(
         batch_files_to_replace: list[str],
         *,
         label: str,
+        announce: bool = True,
     ) -> bool:
         """Embed + ingest one batch. Returns True on success, False on failure
-        (caller should bail out — manifest will not be saved)."""
+        (caller should bail out — manifest will not be saved).
+
+        `announce=False` suppresses `phase_fn` for this call so the per-phase
+        callback stays per-phase even when streaming many file-batches; the
+        per-batch progress hooks (`progress_fn`, `embed_progress_fn`) carry
+        liveness for everything after the initial announcement.
+        """
         emb, cch = _ensure_embedder()
-        if phase_fn:
+        if phase_fn and announce:
             phase_fn(f"Embedding {len(batch_chunks):,} chunks{label}…")
         try:
             emb.embed(batch_chunks, progress_fn=embed_progress_fn)
@@ -434,7 +442,7 @@ async def _run_indexing_locked(
                 result.errors.append(msg)
                 log.warning(msg, exc_info=exc)
                 return False
-        if phase_fn:
+        if phase_fn and announce:
             phase_fn(
                 f"Writing {len(batch_chunks):,} chunks to vector + FTS + graph index{label}…"
             )
@@ -446,6 +454,15 @@ async def _run_indexing_locked(
             log.warning(msg, exc_info=exc)
             return False
         return True
+
+    # Tracks whether we've already emitted the per-phase "Embedding…" /
+    # "Writing…" markers. Streaming the embed/ingest per batch could fire
+    # phase_fn hundreds of times on large repos (one pair per batch), which
+    # spams the CLI and resets in-place progress bars. Announce once for the
+    # whole streaming run; subsequent batches rely on progress_fn /
+    # embed_progress_fn for liveness. Git history is announced separately
+    # because it is semantically a different phase.
+    streaming_announced = False
 
     try:
         for batch_idx, batch_start in enumerate(range(0, len(file_iter), _BATCH)):
@@ -563,7 +580,9 @@ async def _run_indexing_locked(
                 ok = await _embed_and_ingest(
                     batch_chunks, batch_nodes, batch_edges, batch_files_to_replace,
                     label=label,
+                    announce=not streaming_announced,
                 )
+                streaming_announced = True
                 if not ok:
                     return result
                 for rel_path, content_hash in batch_manifest_updates:
