@@ -1,0 +1,579 @@
+{
+  "project": "fiber",
+  "timestamp": "2026-05-04T12:48:02.722298+00:00",
+  "project_stats": {
+    "files": 396,
+    "total_tokens": 999439,
+    "indexed_files": 387,
+    "chunks": 4382,
+    "index_time_s": 212.2
+  },
+  "token_savings": {
+    "full_project_tokens": 999439,
+    "avg_full_file_per_query": 51397,
+    "avg_raw_chunks_per_query": 3453,
+    "avg_compressed_per_query": 599,
+    "retrieval_savings_pct": 93.3,
+    "compression_savings_pct": 82.7,
+    "combined_savings_pct": 98.8
+  },
+  "layers": {
+    "retrieval": {
+      "baseline": 1027945,
+      "served": 69054,
+      "savings_pct": 93.3,
+      "method": "measured"
+    },
+    "chunk_compression": {
+      "baseline": 69054,
+      "served": 11980,
+      "savings_pct": 82.7,
+      "method": "measured"
+    },
+    "output_compression": {
+      "savings_pct": 65.0,
+      "method": "estimated"
+    },
+    "grammar": {
+      "baseline": 92,
+      "served": 80,
+      "savings_pct": 13.0,
+      "method": "measured"
+    }
+  },
+  "retrieval_quality": {
+    "num_queries": 20,
+    "avg_precision_at_10": 0.025,
+    "avg_recall_at_10": 0.075
+  },
+  "latency": {
+    "p50_ms": 1.8,
+    "p95_ms": 2.2,
+    "p99_ms": 2.2,
+    "runs_per_query": 5
+  },
+  "queries": [
+    {
+      "query": "How does fiber's App struct initialize and configure the server?",
+      "category": "core",
+      "full_file_tokens": 20763,
+      "raw_chunk_tokens": 2876,
+      "compressed_tokens": 489,
+      "retrieval_savings_pct": 86.1,
+      "compression_savings_pct": 83.0,
+      "combined_savings_pct": 97.6,
+      "result_files": [
+        "app_integration_test.go",
+        "client/README.md",
+        "client/helper_test.go",
+        "middleware/adaptor/adaptor.go",
+        "middleware/cache/config.go",
+        "middleware/csrf/config.go",
+        "middleware/limiter/limiter.go",
+        "middleware/session/session.go",
+        "middleware/static/config.go",
+        "middleware/timeout/config.go"
+      ],
+      "expected_files": [
+        "app.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber implement its Ctx (context) object for request and response?",
+      "category": "context",
+      "full_file_tokens": 59080,
+      "raw_chunk_tokens": 3065,
+      "compressed_tokens": 638,
+      "retrieval_savings_pct": 94.8,
+      "compression_savings_pct": 79.2,
+      "combined_savings_pct": 98.9,
+      "result_files": [
+        "client/README.md",
+        "ctx_interface_gen.go",
+        "helpers_test.go",
+        "middleware/adaptor/adaptor.go",
+        "middleware/csrf/csrf_test.go",
+        "middleware/requestid/requestid.go",
+        "middleware/requestid/requestid_test.go",
+        "router_test.go"
+      ],
+      "expected_files": [
+        "ctx.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber handle route registration with GET, POST, PUT, DELETE?",
+      "category": "routing",
+      "full_file_tokens": 32494,
+      "raw_chunk_tokens": 3266,
+      "compressed_tokens": 577,
+      "retrieval_savings_pct": 89.9,
+      "compression_savings_pct": 82.3,
+      "combined_savings_pct": 98.2,
+      "result_files": [
+        "app.go",
+        "docs/guide/routing.md",
+        "docs/partials/routing/handler.md",
+        "domain.go",
+        "redirect_test.go",
+        "register.go"
+      ],
+      "expected_files": [
+        "app.go",
+        "router.go"
+      ],
+      "hit_files": [
+        "app.go"
+      ],
+      "precision": 0.167,
+      "recall": 0.5
+    },
+    {
+      "query": "How does fiber's router match incoming requests to handlers?",
+      "category": "routing",
+      "full_file_tokens": 50651,
+      "raw_chunk_tokens": 2927,
+      "compressed_tokens": 549,
+      "retrieval_savings_pct": 94.2,
+      "compression_savings_pct": 81.2,
+      "combined_savings_pct": 98.9,
+      "result_files": [
+        "domain.go",
+        "domain_test.go",
+        "middleware/adaptor/adaptor.go",
+        "middleware/limiter/limiter.go",
+        "mount_test.go",
+        "redirect_test.go",
+        "router_test.go"
+      ],
+      "expected_files": [
+        "router.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber implement middleware chaining with Use()?",
+      "category": "middleware",
+      "full_file_tokens": 41434,
+      "raw_chunk_tokens": 5095,
+      "compressed_tokens": 629,
+      "retrieval_savings_pct": 87.7,
+      "compression_savings_pct": 87.7,
+      "combined_savings_pct": 98.5,
+      "result_files": [
+        "client/README.md",
+        "constants.go",
+        "domain_test.go",
+        "extractors/README.md",
+        "middleware/cache/config.go",
+        "middleware/csrf/config.go",
+        "middleware/limiter/limiter.go",
+        "middleware/rewrite/config.go",
+        "middleware/session/middleware.go",
+        "router_test.go"
+      ],
+      "expected_files": [
+        "app.go",
+        "router.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber handle path parameters and query strings?",
+      "category": "routing",
+      "full_file_tokens": 65879,
+      "raw_chunk_tokens": 2190,
+      "compressed_tokens": 514,
+      "retrieval_savings_pct": 96.7,
+      "compression_savings_pct": 76.5,
+      "combined_savings_pct": 99.2,
+      "result_files": [
+        "app_test.go",
+        "binder/README.md",
+        "client/request.go",
+        "middleware/adaptor/adaptor.go",
+        "middleware/logger/logger_test.go",
+        "middleware/requestid/requestid.go",
+        "redirect_test.go",
+        "router_test.go"
+      ],
+      "expected_files": [
+        "ctx.go",
+        "router.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber implement request body parsing and binding?",
+      "category": "binding",
+      "full_file_tokens": 78943,
+      "raw_chunk_tokens": 5313,
+      "compressed_tokens": 650,
+      "retrieval_savings_pct": 93.3,
+      "compression_savings_pct": 87.8,
+      "combined_savings_pct": 99.2,
+      "result_files": [
+        "binder/README.md",
+        "client/README.md",
+        "constants.go",
+        "middleware/adaptor/adaptor.go",
+        "middleware/cache/cache_test.go",
+        "middleware/logger/logger_test.go",
+        "middleware/requestid/requestid.go",
+        "req_interface_gen.go",
+        "router_test.go"
+      ],
+      "expected_files": [
+        "ctx.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber's error handling and ErrorHandler work?",
+      "category": "errors",
+      "full_file_tokens": 46136,
+      "raw_chunk_tokens": 1112,
+      "compressed_tokens": 555,
+      "retrieval_savings_pct": 97.6,
+      "compression_savings_pct": 50.1,
+      "combined_savings_pct": 98.8,
+      "result_files": [
+        "errors_internal.go",
+        "middleware/adaptor/adaptor.go",
+        "middleware/csrf/csrf_test.go",
+        "middleware/sse/config.go",
+        "middleware/timeout/timeout_test.go",
+        "mount_test.go",
+        "router_test.go"
+      ],
+      "expected_files": [
+        "app.go",
+        "utils.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber implement route groups with Group()?",
+      "category": "routing",
+      "full_file_tokens": 56133,
+      "raw_chunk_tokens": 1089,
+      "compressed_tokens": 611,
+      "retrieval_savings_pct": 98.1,
+      "compression_savings_pct": 43.9,
+      "combined_savings_pct": 98.9,
+      "result_files": [
+        "app.go",
+        "domain.go",
+        "domain_test.go",
+        "group.go",
+        "listen_test.go",
+        "router_test.go"
+      ],
+      "expected_files": [
+        "app.go",
+        "group.go"
+      ],
+      "hit_files": [
+        "app.go",
+        "group.go"
+      ],
+      "precision": 0.333,
+      "recall": 1.0
+    },
+    {
+      "query": "How does the fiber Logger middleware log requests?",
+      "category": "middleware",
+      "full_file_tokens": 19620,
+      "raw_chunk_tokens": 4898,
+      "compressed_tokens": 716,
+      "retrieval_savings_pct": 75.0,
+      "compression_savings_pct": 85.4,
+      "combined_savings_pct": 96.4,
+      "result_files": [
+        "client/README.md",
+        "docs/middleware/logger.md",
+        "middleware/cache/config.go",
+        "middleware/logger/config.go",
+        "middleware/logger/format.go",
+        "middleware/logger/logger_test.go",
+        "middleware/timeout/timeout_test.go"
+      ],
+      "expected_files": [
+        "middleware/logger/logger.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber implement static file serving?",
+      "category": "static",
+      "full_file_tokens": 39628,
+      "raw_chunk_tokens": 2448,
+      "compressed_tokens": 541,
+      "retrieval_savings_pct": 93.8,
+      "compression_savings_pct": 77.9,
+      "combined_savings_pct": 98.6,
+      "result_files": [
+        "client/README.md",
+        "middleware/adaptor/adaptor.go",
+        "middleware/limiter/limiter.go",
+        "middleware/static/config.go",
+        "middleware/static/static_test.go",
+        "res.go",
+        "router_test.go"
+      ],
+      "expected_files": [
+        "app.go",
+        "ctx.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber's Recover middleware handle panics?",
+      "category": "middleware",
+      "full_file_tokens": 53773,
+      "raw_chunk_tokens": 3419,
+      "compressed_tokens": 675,
+      "retrieval_savings_pct": 93.6,
+      "compression_savings_pct": 80.3,
+      "combined_savings_pct": 98.7,
+      "result_files": [
+        ".github/SECURITY.md",
+        "addon/retry/README.md",
+        "middleware/cache/cache_test.go",
+        "middleware/encryptcookie/encryptcookie_test.go",
+        "middleware/recover/recover_test.go",
+        "middleware/session/middleware.go",
+        "middleware/timeout/timeout_test.go"
+      ],
+      "expected_files": [
+        "middleware/recover/recover.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber implement WebSocket support?",
+      "category": "websocket",
+      "full_file_tokens": 26279,
+      "raw_chunk_tokens": 4149,
+      "compressed_tokens": 576,
+      "retrieval_savings_pct": 84.2,
+      "compression_savings_pct": 86.1,
+      "combined_savings_pct": 97.8,
+      "result_files": [
+        ".github/CONTRIBUTING.md",
+        ".github/SECURITY.md",
+        "addon/retry/README.md",
+        "client/README.md",
+        "constants.go",
+        "middleware/adaptor/adaptor.go",
+        "middleware/limiter/limiter.go",
+        "middleware/logger/format.go",
+        "router_test.go"
+      ],
+      "expected_files": [
+        "middleware/websocket/websocket.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber's CORS middleware handle cross-origin requests?",
+      "category": "middleware",
+      "full_file_tokens": 52916,
+      "raw_chunk_tokens": 5198,
+      "compressed_tokens": 687,
+      "retrieval_savings_pct": 90.2,
+      "compression_savings_pct": 86.8,
+      "combined_savings_pct": 98.7,
+      "result_files": [
+        "client/README.md",
+        "docs/middleware/adaptor.md",
+        "docs/middleware/cors.md",
+        "docs/middleware/proxy.md",
+        "domain_test.go",
+        "middleware/adaptor/adaptor.go",
+        "middleware/basicauth/basicauth_test.go",
+        "middleware/timeout/timeout_test.go",
+        "router_test.go"
+      ],
+      "expected_files": [
+        "middleware/cors/cors.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber implement rate limiting middleware?",
+      "category": "middleware",
+      "full_file_tokens": 64420,
+      "raw_chunk_tokens": 3575,
+      "compressed_tokens": 692,
+      "retrieval_savings_pct": 94.5,
+      "compression_savings_pct": 80.6,
+      "combined_savings_pct": 98.9,
+      "result_files": [
+        "addon/retry/README.md",
+        "client/README.md",
+        "middleware/cache/cache_test.go",
+        "middleware/limiter/config.go",
+        "middleware/static/config.go",
+        "middleware/timeout/timeout_test.go",
+        "router_test.go"
+      ],
+      "expected_files": [
+        "middleware/limiter/limiter.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber use fasthttp under the hood for HTTP handling?",
+      "category": "internals",
+      "full_file_tokens": 72654,
+      "raw_chunk_tokens": 4621,
+      "compressed_tokens": 637,
+      "retrieval_savings_pct": 93.6,
+      "compression_savings_pct": 86.2,
+      "combined_savings_pct": 99.1,
+      "result_files": [
+        "client/README.md",
+        "constants.go",
+        "middleware/adaptor/adaptor.go",
+        "middleware/basicauth/basicauth_test.go",
+        "middleware/cache/cache_test.go",
+        "middleware/logger/format.go",
+        "res_interface_gen.go",
+        "router_test.go"
+      ],
+      "expected_files": [
+        "app.go",
+        "ctx.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber implement hooks for application lifecycle events?",
+      "category": "lifecycle",
+      "full_file_tokens": 68361,
+      "raw_chunk_tokens": 2407,
+      "compressed_tokens": 558,
+      "retrieval_savings_pct": 96.5,
+      "compression_savings_pct": 76.8,
+      "combined_savings_pct": 99.2,
+      "result_files": [
+        "middleware/adaptor/adaptor.go",
+        "middleware/cache/cache_test.go",
+        "middleware/limiter/limiter.go",
+        "middleware/timeout/timeout_test.go",
+        "mount_test.go",
+        "router_test.go"
+      ],
+      "expected_files": [
+        "hooks.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber's compress middleware handle gzip and deflate?",
+      "category": "middleware",
+      "full_file_tokens": 92985,
+      "raw_chunk_tokens": 3758,
+      "compressed_tokens": 701,
+      "retrieval_savings_pct": 96.0,
+      "compression_savings_pct": 81.3,
+      "combined_savings_pct": 99.2,
+      "result_files": [
+        "ctx_test.go",
+        "middleware/compress/compress_test.go",
+        "middleware/static/config.go",
+        "middleware/static/static_test.go",
+        "res.go"
+      ],
+      "expected_files": [
+        "middleware/compress/compress.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber implement Server-Sent Events?",
+      "category": "streaming",
+      "full_file_tokens": 34036,
+      "raw_chunk_tokens": 3780,
+      "compressed_tokens": 559,
+      "retrieval_savings_pct": 88.9,
+      "compression_savings_pct": 85.2,
+      "combined_savings_pct": 98.4,
+      "result_files": [
+        ".github/SECURITY.md",
+        "client/README.md",
+        "constants.go",
+        "middleware/adaptor/adaptor.go",
+        "middleware/limiter/limiter.go",
+        "middleware/logger/format.go",
+        "middleware/logger/logger_test.go",
+        "router_test.go"
+      ],
+      "expected_files": [
+        "ctx.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does fiber's cache middleware store and retrieve cached responses?",
+      "category": "middleware",
+      "full_file_tokens": 51760,
+      "raw_chunk_tokens": 3868,
+      "compressed_tokens": 426,
+      "retrieval_savings_pct": 92.5,
+      "compression_savings_pct": 89.0,
+      "combined_savings_pct": 99.2,
+      "result_files": [
+        "docs/middleware/cache.md",
+        "docs/middleware/session.md",
+        "middleware/cache/cache_test.go",
+        "middleware/cache/config.go"
+      ],
+      "expected_files": [
+        "middleware/cache/cache.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    }
+  ],
+  "repo_url": "https://github.com/gofiber/fiber.git",
+  "source_dir": "."
+}

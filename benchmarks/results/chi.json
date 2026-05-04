@@ -1,0 +1,564 @@
+{
+  "project": "chi",
+  "timestamp": "2026-05-04T12:38:39.219363+00:00",
+  "project_stats": {
+    "files": 94,
+    "total_tokens": 87817,
+    "indexed_files": 92,
+    "chunks": 429,
+    "index_time_s": 27.2
+  },
+  "token_savings": {
+    "full_project_tokens": 87817,
+    "avg_full_file_per_query": 14761,
+    "avg_raw_chunks_per_query": 3594,
+    "avg_compressed_per_query": 515,
+    "retrieval_savings_pct": 75.7,
+    "compression_savings_pct": 85.7,
+    "combined_savings_pct": 96.5
+  },
+  "layers": {
+    "retrieval": {
+      "baseline": 265703,
+      "served": 64688,
+      "savings_pct": 75.7,
+      "method": "measured"
+    },
+    "chunk_compression": {
+      "baseline": 64688,
+      "served": 9277,
+      "savings_pct": 85.7,
+      "method": "measured"
+    },
+    "output_compression": {
+      "savings_pct": 65.0,
+      "method": "estimated"
+    },
+    "grammar": {
+      "baseline": 92,
+      "served": 80,
+      "savings_pct": 13.0,
+      "method": "measured"
+    }
+  },
+  "retrieval_quality": {
+    "num_queries": 18,
+    "avg_precision_at_10": 0.1,
+    "avg_recall_at_10": 0.667
+  },
+  "latency": {
+    "p50_ms": 0.3,
+    "p95_ms": 0.4,
+    "p99_ms": 0.6,
+    "runs_per_query": 5
+  },
+  "queries": [
+    {
+      "query": "How does chi implement its Router interface?",
+      "category": "routing",
+      "full_file_tokens": 13378,
+      "raw_chunk_tokens": 5330,
+      "compressed_tokens": 694,
+      "retrieval_savings_pct": 60.2,
+      "compression_savings_pct": 87.0,
+      "combined_savings_pct": 94.8,
+      "result_files": [
+        "CONTRIBUTING.md",
+        "README.md",
+        "_examples/README.md",
+        "_examples/fileserver/main.go",
+        "_examples/rest/go.sum",
+        "_examples/rest/routes.json",
+        "_examples/rest/routes.md",
+        "_examples/versions/main.go",
+        "chi.go",
+        "go.mod"
+      ],
+      "expected_files": [
+        "mux.go",
+        "router.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How are URL parameters extracted from a request context?",
+      "category": "routing",
+      "full_file_tokens": 10676,
+      "raw_chunk_tokens": 1686,
+      "compressed_tokens": 286,
+      "retrieval_savings_pct": 84.2,
+      "compression_savings_pct": 83.0,
+      "combined_savings_pct": 97.3,
+      "result_files": [
+        "_examples/custom-handler/main.go",
+        "_examples/rest/main.go",
+        "_examples/rest/routes.json",
+        "chi.go",
+        "context.go",
+        "middleware/logger.go",
+        "middleware/middleware.go"
+      ],
+      "expected_files": [
+        "context.go"
+      ],
+      "hit_files": [
+        "context.go"
+      ],
+      "precision": 0.143,
+      "recall": 1.0
+    },
+    {
+      "query": "How does chi handle subrouters and route mounting?",
+      "category": "routing",
+      "full_file_tokens": 17992,
+      "raw_chunk_tokens": 4963,
+      "compressed_tokens": 544,
+      "retrieval_savings_pct": 72.4,
+      "compression_savings_pct": 89.0,
+      "combined_savings_pct": 97.0,
+      "result_files": [
+        "CONTRIBUTING.md",
+        "README.md",
+        "_examples/README.md",
+        "_examples/rest/routes.json",
+        "_examples/rest/routes.md",
+        "chi.go",
+        "go.mod",
+        "middleware/route_headers.go",
+        "tree.go"
+      ],
+      "expected_files": [
+        "mux.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How is middleware chained and applied to routes?",
+      "category": "middleware",
+      "full_file_tokens": 15981,
+      "raw_chunk_tokens": 2395,
+      "compressed_tokens": 463,
+      "retrieval_savings_pct": 85.0,
+      "compression_savings_pct": 80.7,
+      "combined_savings_pct": 97.1,
+      "result_files": [
+        "_examples/rest/routes.json",
+        "chain.go",
+        "chi.go",
+        "context.go",
+        "middleware/route_headers.go",
+        "mux.go",
+        "tree.go"
+      ],
+      "expected_files": [
+        "chain.go",
+        "mux.go"
+      ],
+      "hit_files": [
+        "chain.go",
+        "mux.go"
+      ],
+      "precision": 0.286,
+      "recall": 1.0
+    },
+    {
+      "query": "How does the middleware.Logger log HTTP requests?",
+      "category": "middleware",
+      "full_file_tokens": 7549,
+      "raw_chunk_tokens": 3451,
+      "compressed_tokens": 431,
+      "retrieval_savings_pct": 54.3,
+      "compression_savings_pct": 87.5,
+      "combined_savings_pct": 94.3,
+      "result_files": [
+        "_examples/README.md",
+        "_examples/rest/routes.json",
+        "_examples/rest/routes.md",
+        "chain.go",
+        "chi.go",
+        "middleware/logger.go",
+        "middleware/logger_test.go"
+      ],
+      "expected_files": [
+        "middleware/logger.go"
+      ],
+      "hit_files": [
+        "middleware/logger.go"
+      ],
+      "precision": 0.143,
+      "recall": 1.0
+    },
+    {
+      "query": "How does chi implement route groups?",
+      "category": "routing",
+      "full_file_tokens": 18164,
+      "raw_chunk_tokens": 5125,
+      "compressed_tokens": 609,
+      "retrieval_savings_pct": 71.8,
+      "compression_savings_pct": 88.1,
+      "combined_savings_pct": 96.6,
+      "result_files": [
+        "CONTRIBUTING.md",
+        "README.md",
+        "_examples/README.md",
+        "_examples/rest/go.sum",
+        "_examples/rest/routes.json",
+        "_examples/rest/routes.md",
+        "chi.go",
+        "go.mod",
+        "middleware/route_headers.go",
+        "tree.go"
+      ],
+      "expected_files": [
+        "mux.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does middleware.Recoverer handle panics?",
+      "category": "middleware",
+      "full_file_tokens": 22700,
+      "raw_chunk_tokens": 3633,
+      "compressed_tokens": 622,
+      "retrieval_savings_pct": 84.0,
+      "compression_savings_pct": 82.9,
+      "combined_savings_pct": 97.3,
+      "result_files": [
+        "_examples/hello-world/main.go",
+        "_examples/limits/main.go",
+        "_examples/rest/routes.json",
+        "_examples/rest/routes.md",
+        "_examples/versions/main.go",
+        "chi.go",
+        "middleware/recoverer.go",
+        "middleware/recoverer_test.go",
+        "mux_test.go"
+      ],
+      "expected_files": [
+        "middleware/recoverer.go"
+      ],
+      "hit_files": [
+        "middleware/recoverer.go"
+      ],
+      "precision": 0.111,
+      "recall": 1.0
+    },
+    {
+      "query": "How does chi match wildcard and parameterized routes?",
+      "category": "routing",
+      "full_file_tokens": 19178,
+      "raw_chunk_tokens": 4955,
+      "compressed_tokens": 593,
+      "retrieval_savings_pct": 74.2,
+      "compression_savings_pct": 88.0,
+      "combined_savings_pct": 96.9,
+      "result_files": [
+        "CONTRIBUTING.md",
+        "README.md",
+        "_examples/README.md",
+        "_examples/rest/routes.json",
+        "_examples/rest/routes.md",
+        "chi.go",
+        "context.go",
+        "middleware/route_headers.go",
+        "tree.go"
+      ],
+      "expected_files": [
+        "mux.go",
+        "tree.go"
+      ],
+      "hit_files": [
+        "tree.go"
+      ],
+      "precision": 0.111,
+      "recall": 0.5
+    },
+    {
+      "query": "How does middleware.RealIP extract client IP from headers?",
+      "category": "middleware",
+      "full_file_tokens": 9488,
+      "raw_chunk_tokens": 1635,
+      "compressed_tokens": 390,
+      "retrieval_savings_pct": 82.8,
+      "compression_savings_pct": 76.1,
+      "combined_savings_pct": 95.9,
+      "result_files": [
+        "_examples/rest/routes.json",
+        "chain.go",
+        "chi.go",
+        "middleware/logger.go",
+        "middleware/realip.go",
+        "middleware/realip_test.go",
+        "middleware/route_headers.go",
+        "middleware/throttle_test.go"
+      ],
+      "expected_files": [
+        "middleware/realip.go"
+      ],
+      "hit_files": [
+        "middleware/realip.go"
+      ],
+      "precision": 0.125,
+      "recall": 1.0
+    },
+    {
+      "query": "How is request context used to pass values between middleware and handlers?",
+      "category": "context",
+      "full_file_tokens": 11949,
+      "raw_chunk_tokens": 2132,
+      "compressed_tokens": 380,
+      "retrieval_savings_pct": 82.2,
+      "compression_savings_pct": 82.2,
+      "combined_savings_pct": 96.8,
+      "result_files": [
+        "_examples/custom-handler/main.go",
+        "_examples/rest/routes.json",
+        "chain.go",
+        "chi.go",
+        "context.go",
+        "middleware/route_headers.go",
+        "tree.go"
+      ],
+      "expected_files": [
+        "context.go",
+        "mux.go"
+      ],
+      "hit_files": [
+        "context.go"
+      ],
+      "precision": 0.143,
+      "recall": 0.5
+    },
+    {
+      "query": "How does chi implement the HTTP method routing (GET, POST, DELETE)?",
+      "category": "routing",
+      "full_file_tokens": 18334,
+      "raw_chunk_tokens": 4992,
+      "compressed_tokens": 573,
+      "retrieval_savings_pct": 72.8,
+      "compression_savings_pct": 88.5,
+      "combined_savings_pct": 96.9,
+      "result_files": [
+        "CONTRIBUTING.md",
+        "README.md",
+        "_examples/README.md",
+        "_examples/rest/routes.json",
+        "_examples/rest/routes.md",
+        "chain.go",
+        "chi.go",
+        "middleware/route_headers.go",
+        "tree.go"
+      ],
+      "expected_files": [
+        "mux.go",
+        "router.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does middleware.Timeout cancel long running requests?",
+      "category": "middleware",
+      "full_file_tokens": 9110,
+      "raw_chunk_tokens": 2409,
+      "compressed_tokens": 507,
+      "retrieval_savings_pct": 73.6,
+      "compression_savings_pct": 79.0,
+      "combined_savings_pct": 94.4,
+      "result_files": [
+        "_examples/limits/main.go",
+        "_examples/rest/routes.json",
+        "chain.go",
+        "chi.go",
+        "middleware/route_headers.go",
+        "middleware/throttle.go",
+        "middleware/throttle_test.go",
+        "middleware/timeout.go"
+      ],
+      "expected_files": [
+        "middleware/timeout.go"
+      ],
+      "hit_files": [
+        "middleware/timeout.go"
+      ],
+      "precision": 0.125,
+      "recall": 1.0
+    },
+    {
+      "query": "How does chi's radix tree store and resolve routes?",
+      "category": "internals",
+      "full_file_tokens": 22238,
+      "raw_chunk_tokens": 4978,
+      "compressed_tokens": 633,
+      "retrieval_savings_pct": 77.6,
+      "compression_savings_pct": 87.3,
+      "combined_savings_pct": 97.2,
+      "result_files": [
+        "README.md",
+        "_examples/README.md",
+        "_examples/rest/go.sum",
+        "_examples/rest/routes.json",
+        "_examples/rest/routes.md",
+        "chi.go",
+        "context.go",
+        "go.mod",
+        "mux.go",
+        "tree.go"
+      ],
+      "expected_files": [
+        "tree.go"
+      ],
+      "hit_files": [
+        "tree.go"
+      ],
+      "precision": 0.1,
+      "recall": 1.0
+    },
+    {
+      "query": "How does middleware.Compress handle gzip response compression?",
+      "category": "middleware",
+      "full_file_tokens": 16728,
+      "raw_chunk_tokens": 5558,
+      "compressed_tokens": 500,
+      "retrieval_savings_pct": 66.8,
+      "compression_savings_pct": 91.0,
+      "combined_savings_pct": 97.0,
+      "result_files": [
+        "README.md",
+        "_examples/rest/routes.json",
+        "_examples/rest/routes.md",
+        "chi.go",
+        "middleware/compress.go",
+        "middleware/compress_test.go",
+        "middleware/content_encoding_test.go",
+        "middleware/route_headers.go"
+      ],
+      "expected_files": [
+        "middleware/compress.go"
+      ],
+      "hit_files": [
+        "middleware/compress.go"
+      ],
+      "precision": 0.125,
+      "recall": 1.0
+    },
+    {
+      "query": "How are 404 and 405 not found and method not allowed handlers set?",
+      "category": "errors",
+      "full_file_tokens": 8595,
+      "raw_chunk_tokens": 1264,
+      "compressed_tokens": 364,
+      "retrieval_savings_pct": 85.3,
+      "compression_savings_pct": 71.2,
+      "combined_savings_pct": 95.8,
+      "result_files": [
+        ".github/workflows/ci.yml",
+        "_examples/README.md",
+        "_examples/custom-handler/main.go",
+        "chain.go",
+        "chi.go",
+        "middleware/route_headers.go",
+        "tree.go"
+      ],
+      "expected_files": [
+        "mux.go"
+      ],
+      "hit_files": [],
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    {
+      "query": "How does middleware.Throttle limit concurrent requests?",
+      "category": "middleware",
+      "full_file_tokens": 11209,
+      "raw_chunk_tokens": 2928,
+      "compressed_tokens": 499,
+      "retrieval_savings_pct": 73.9,
+      "compression_savings_pct": 83.0,
+      "combined_savings_pct": 95.5,
+      "result_files": [
+        "_examples/limits/main.go",
+        "_examples/rest/routes.json",
+        "chain.go",
+        "chi.go",
+        "middleware/route_headers.go",
+        "middleware/throttle.go",
+        "mux.go"
+      ],
+      "expected_files": [
+        "middleware/throttle.go"
+      ],
+      "hit_files": [
+        "middleware/throttle.go"
+      ],
+      "precision": 0.143,
+      "recall": 1.0
+    },
+    {
+      "query": "How does chi handle route walking for introspection?",
+      "category": "internals",
+      "full_file_tokens": 17575,
+      "raw_chunk_tokens": 5186,
+      "compressed_tokens": 685,
+      "retrieval_savings_pct": 70.5,
+      "compression_savings_pct": 86.8,
+      "combined_savings_pct": 96.1,
+      "result_files": [
+        "CHANGELOG.md",
+        "CONTRIBUTING.md",
+        "README.md",
+        "_examples/README.md",
+        "_examples/rest/go.sum",
+        "_examples/rest/routes.md",
+        "_examples/router-walk/main.go",
+        "context.go",
+        "go.mod",
+        "mux.go"
+      ],
+      "expected_files": [
+        "mux.go"
+      ],
+      "hit_files": [
+        "mux.go"
+      ],
+      "precision": 0.1,
+      "recall": 1.0
+    },
+    {
+      "query": "How does middleware.StripSlashes normalize trailing slashes in URLs?",
+      "category": "middleware",
+      "full_file_tokens": 14859,
+      "raw_chunk_tokens": 2068,
+      "compressed_tokens": 504,
+      "retrieval_savings_pct": 86.1,
+      "compression_savings_pct": 75.6,
+      "combined_savings_pct": 96.6,
+      "result_files": [
+        "chain.go",
+        "chi.go",
+        "middleware/route_headers.go",
+        "middleware/strip.go",
+        "middleware/strip_test.go",
+        "mux.go",
+        "tree.go"
+      ],
+      "expected_files": [
+        "middleware/strip.go"
+      ],
+      "hit_files": [
+        "middleware/strip.go"
+      ],
+      "precision": 0.143,
+      "recall": 1.0
+    }
+  ],
+  "repo_url": "https://github.com/go-chi/chi.git",
+  "source_dir": "."
+}
