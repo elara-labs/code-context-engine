@@ -364,6 +364,71 @@ def test_configure_returns_none_when_codex_config_cannot_be_written(fake_home, p
     assert result is None
 
 
+def test_configure_preserves_user_header_comment(fake_home, project_dir):
+    """A user comment at the top of ~/.codex/config.toml must survive both
+    configure and uninstall — earlier code stripped the whole file after
+    removing a section, which silently deleted that header."""
+    (fake_home / ".codex").mkdir()
+    user_config = fake_home / ".codex" / "config.toml"
+    user_config.write_text(
+        "# my hand-written codex config\n"
+        "# do not auto-edit — actually go ahead, just keep this comment\n"
+        "\n"
+        '[mcp_servers.linear]\n'
+        'command = "linear-mcp"\n'
+        'args = []\n'
+    )
+    with patch("context_engine.editors.resolve_cce_binary", return_value="/usr/bin/cce"):
+        configure_mcp(project_dir, "codex")
+        remove_mcp(project_dir, "codex")
+    content = user_config.read_text()
+    assert "# my hand-written codex config" in content
+    assert "actually go ahead, just keep this comment" in content
+    # Linear block is still parseable too.
+    parsed = tomllib.loads(content)
+    assert parsed["mcp_servers"]["linear"]["command"] == "linear-mcp"
+
+
+def test_configure_rewrites_section_when_command_drifts(fake_home, project_dir):
+    """A previous install wrote a section pointing at an old `cce` binary.
+    On the next `cce init` (with the binary now at a new path) we must
+    rewrite the section, not silently report 'already configured' and leave
+    Codex pointed at a stale executable."""
+    (fake_home / ".codex").mkdir()
+    user_config = fake_home / ".codex" / "config.toml"
+    slug = _project_slug(project_dir)
+    user_config.write_text(
+        f"[mcp_servers.cce-{slug}]\n"
+        'command = "/old/path/to/cce"\n'
+        f'args = ["serve", "--project-dir", "{project_dir}"]\n'
+    )
+    with patch("context_engine.editors.resolve_cce_binary", return_value="/new/path/to/cce"):
+        changed = configure_mcp(project_dir, "codex")
+    assert changed is True
+    parsed = tomllib.loads(user_config.read_text())
+    entry = parsed["mcp_servers"][f"cce-{slug}"]
+    assert entry["command"] == "/new/path/to/cce"
+
+
+def test_configure_rewrites_section_when_args_drift(fake_home, project_dir):
+    """User (or older code) hand-edited args to something stale. cce init
+    must restore the canonical args rather than reporting no-change."""
+    (fake_home / ".codex").mkdir()
+    user_config = fake_home / ".codex" / "config.toml"
+    slug = _project_slug(project_dir)
+    user_config.write_text(
+        f"[mcp_servers.cce-{slug}]\n"
+        'command = "/usr/bin/cce"\n'
+        'args = ["serve", "--project-dir", "/some/other/path"]\n'
+    )
+    with patch("context_engine.editors.resolve_cce_binary", return_value="/usr/bin/cce"):
+        changed = configure_mcp(project_dir, "codex")
+    assert changed is True
+    parsed = tomllib.loads(user_config.read_text())
+    entry = parsed["mcp_servers"][f"cce-{slug}"]
+    assert entry["args"] == ["serve", "--project-dir", str(project_dir)]
+
+
 def test_remove_returns_none_when_codex_config_cannot_be_read(fake_home, project_dir):
     (fake_home / ".codex").mkdir()
     user_config = fake_home / ".codex" / "config.toml"

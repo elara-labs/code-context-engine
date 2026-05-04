@@ -371,7 +371,17 @@ def _configure_toml(
         content = _strip_toml_section(content, _LEGACY_CODEX_SECTION)
         dirty = True
 
-    if marker not in content:
+    if marker in content:
+        # The section already exists, but its values may be stale (the cce
+        # binary moved between releases, args drifted, etc.). Parse the TOML
+        # and compare; if the existing block doesn't match what we'd write,
+        # rewrite it in place rather than reporting "already configured" and
+        # leaving Codex pointed at the wrong values.
+        if not _toml_section_matches(content, section, command, project_dir):
+            content = _strip_toml_section(content, section)
+            content = content.rstrip() + "\n\n" + block
+            dirty = True
+    else:
         content = content.rstrip() + "\n\n" + block
         dirty = True
 
@@ -383,6 +393,37 @@ def _configure_toml(
     except OSError:
         return None
     return True
+
+
+def _toml_section_matches(
+    content: str, section: str, command: str, project_dir: str
+) -> bool:
+    """Return True iff `[section]` in `content` already specifies the exact
+    command + serve args we would write. If a previous install left a stale
+    binary path, or the user hand-edited the args, we want to rewrite rather
+    than silently report "already configured" and leave Codex pointed at the
+    wrong values.
+
+    Section is a dotted path like ``mcp_servers.cce-myapp-a3f2``; we walk
+    the parsed dict accordingly."""
+    try:
+        parsed = tomllib.loads(content)
+    except tomllib.TOMLDecodeError:
+        # Unparseable existing TOML — let the caller rewrite to recover.
+        return False
+
+    node: object = parsed
+    for part in section.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return False
+        node = node[part]
+
+    if not isinstance(node, dict):
+        return False
+    return (
+        node.get("command") == command
+        and node.get("args") == ["serve", "--project-dir", project_dir]
+    )
 
 
 def _legacy_codex_section_matches_project(content: str, project_dir: str) -> bool:
@@ -406,9 +447,21 @@ def _legacy_codex_section_matches_project(content: str, project_dir: str) -> boo
 
 def _strip_toml_section(content: str, section: str) -> str:
     """Remove a single `[section]` block (header + body) from TOML text.
-    Body ends at the next `[` header at column zero or end of file."""
+    Body ends at the next `[` header at column zero or end of file.
+
+    User content outside the targeted block — header comments, trailing
+    comments, blank lines between unrelated sections — is preserved verbatim.
+    Only the run of blank lines that surrounded the removed block is
+    collapsed back to a single blank line so we don't leave a multi-line
+    gap. We deliberately do NOT call `.strip()` on the whole file: that
+    would silently delete leading/trailing user content (e.g. a header
+    comment at the top of `~/.codex/config.toml`).
+    """
     pattern = rf"\[{re.escape(section)}\].*?(?=\n\[|\Z)"
-    return re.sub(pattern, "", content, flags=re.DOTALL).strip() + "\n"
+    new_content = re.sub(pattern, "", content, flags=re.DOTALL)
+    # Collapse the gap left where the section used to be: 3+ consecutive
+    # newlines (i.e. 2+ blank lines) → 2 newlines (1 blank line).
+    return re.sub(r"\n{3,}", "\n\n", new_content)
 
 
 def remove_mcp(project_dir: Path, editor_key: str) -> str | None:
@@ -476,10 +529,15 @@ def _remove_toml(config_path: Path, display_path: str, *, section: str) -> str |
     if marker not in content:
         return None
 
-    new_content = _strip_toml_section(content, section).strip()
+    new_content = _strip_toml_section(content, section)
+    # Use a whitespace check for "is the file effectively empty?" without
+    # mutating new_content — preserving any user comments/whitespace that
+    # were in the original file outside the removed section.
     try:
-        if new_content:
-            atomic_write_text(config_path, new_content + "\n")
+        if new_content.strip():
+            if not new_content.endswith("\n"):
+                new_content += "\n"
+            atomic_write_text(config_path, new_content)
             return f"Removed [{section}] from {display_path}"
         else:
             config_path.unlink()

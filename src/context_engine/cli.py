@@ -676,7 +676,7 @@ def init(ctx: click.Context) -> None:
         editor = EDITORS[editor_key]
         changed = configure_mcp(project_dir, editor_key)
         if changed is None:
-            _warn(f"MCP server skipped for {editor['name']} (config file not writable)")
+            _warn(f"MCP server skipped for {editor['name']} (could not read or write config file)")
             continue
         verb = "registered" if changed else "already configured"
         _ok(f"MCP server {verb} for {editor['name']}")
