@@ -2,9 +2,10 @@ import os
 import tempfile
 from pathlib import Path
 
+import pytest
 import yaml
 
-from context_engine.config import Config, load_config
+from context_engine.config import Config, load_config, resolve_ollama_url
 
 
 def test_default_config():
@@ -47,3 +48,43 @@ def test_resource_profile_auto_detect():
     config = Config()
     profile = config.detect_resource_profile()
     assert profile in ("light", "standard", "full")
+
+
+def test_ollama_url_default():
+    assert Config().ollama_url == "http://localhost:11434"
+
+
+def test_ollama_url_yaml_override(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump({
+        "compression": {"ollama_url": "http://nas.local:11434"},
+    }))
+    config = load_config(global_path=config_file)
+    assert config.ollama_url == "http://nas.local:11434"
+
+
+def test_resolve_ollama_url_prefers_env_var(monkeypatch):
+    config = Config(ollama_url="http://nas.local:11434")
+    monkeypatch.setenv("CCE_OLLAMA_URL", "http://other.host:9999")
+    assert resolve_ollama_url(config) == "http://other.host:9999"
+
+
+def test_resolve_ollama_url_falls_back_to_config(monkeypatch):
+    config = Config(ollama_url="http://nas.local:11434")
+    monkeypatch.delenv("CCE_OLLAMA_URL", raising=False)
+    assert resolve_ollama_url(config) == "http://nas.local:11434"
+
+
+def test_resolve_ollama_url_ignores_blank_env_var(monkeypatch):
+    config = Config(ollama_url="http://nas.local:11434")
+    monkeypatch.setenv("CCE_OLLAMA_URL", "   ")
+    assert resolve_ollama_url(config) == "http://nas.local:11434"
+
+
+def test_ollama_url_yaml_type_validation(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump({
+        "compression": {"ollama_url": 12345},
+    }))
+    with pytest.raises(ValueError, match="ollama_url"):
+        load_config(global_path=config_file)

@@ -1,4 +1,5 @@
 """Configuration loading — global + per-project with defaults."""
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -48,6 +49,10 @@ class Config:
     # Compression
     compression_level: str = "standard"
     compression_model: str = "phi3:mini"
+    # Ollama base URL for LLM-backed compression. Defaults to a local
+    # install; point at a remote host (e.g. "http://nas.local:11434")
+    # to share one Ollama across machines. CCE_OLLAMA_URL overrides this.
+    ollama_url: str = "http://localhost:11434"
 
     # Output compression
     output_compression: str = "standard"  # off | lite | standard | max
@@ -112,6 +117,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
 _EXPECTED_TYPES: dict[str, type | tuple[type, ...]] = {
     "compression_level": str,
     "compression_model": str,
+    "ollama_url": str,
     "output_compression": str,
     "embedding_model": str,
     "retrieval_confidence_threshold": (int, float),
@@ -132,6 +138,7 @@ def _apply_dict_to_config(config: Config, data: dict) -> None:
     mapping = {
         ("compression", "level"): "compression_level",
         ("compression", "model"): "compression_model",
+        ("compression", "ollama_url"): "ollama_url",
         ("compression", "output"): "output_compression",
         ("embedding", "model"): "embedding_model",
         ("retrieval", "confidence_threshold"): "retrieval_confidence_threshold",
@@ -193,3 +200,14 @@ def load_config(
     merged = _deep_merge(global_data, project_data)
     _apply_dict_to_config(config, merged)
     return config
+
+
+def resolve_ollama_url(config: Config) -> str:
+    """Return the Ollama base URL with `CCE_OLLAMA_URL` env var overriding config.
+
+    Env-var precedence lets a user point a single CCE install at a different
+    Ollama (e.g. one running on another machine) without editing config files.
+    Falls back to `config.ollama_url` (default `http://localhost:11434`).
+    """
+    env = os.environ.get("CCE_OLLAMA_URL", "").strip()
+    return env or config.ollama_url

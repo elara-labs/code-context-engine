@@ -294,6 +294,7 @@ Zero-config by default. Override what you need in `~/.cce/config.yaml` or `.cont
 compression:
   level: standard          # minimal | standard | full
   output: standard         # off | lite | standard | max
+  ollama_url: http://localhost:11434   # point at a remote Ollama if desired
 
 retrieval:
   top_k: 20
@@ -302,6 +303,8 @@ retrieval:
 pricing:
   model: opus              # opus | sonnet | haiku
 ```
+
+**Remote Ollama:** If you run Ollama on another machine in your network, set `compression.ollama_url` (e.g. `http://nas.local:11434`) or export `CCE_OLLAMA_URL` — the env var wins. CCE probes the endpoint and falls back to truncation-only compression when it's unreachable, so a flaky link won't break indexing.
 
 ---
 

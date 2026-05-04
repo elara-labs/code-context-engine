@@ -8,7 +8,7 @@ from pathlib import Path
 
 import click
 
-from context_engine.config import load_config, PROJECT_CONFIG_NAME
+from context_engine.config import load_config, resolve_ollama_url, PROJECT_CONFIG_NAME
 
 
 def _configure_mcp(project_dir: Path) -> bool:
@@ -2741,7 +2741,11 @@ async def _run_serve(config) -> None:
     backend = LocalBackend(base_path=str(storage_base))
     embedder = Embedder(model_name=config.embedding_model)
     retriever = HybridRetriever(backend=backend, embedder=embedder)
-    compressor = Compressor(model=config.compression_model, cache=backend)
+    compressor = Compressor(
+        model=config.compression_model,
+        ollama_url=resolve_ollama_url(config),
+        cache=backend,
+    )
     mcp = ContextEngineMCP(
         retriever=retriever, backend=backend, compressor=compressor,
         embedder=embedder, config=config,
