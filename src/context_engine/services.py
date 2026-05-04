@@ -72,11 +72,23 @@ def _check_port_open(port: int, host: str = "127.0.0.1") -> bool:
         return s.connect_ex((host, port)) == 0
 
 
-def _ollama_running() -> bool:
-    """Check if Ollama is responding on its default port."""
+def _resolved_ollama_url() -> str:
+    """Resolve the Ollama base URL via config + CCE_OLLAMA_URL, with a safe
+    fallback so a missing/unreadable config never breaks status checks."""
+    try:
+        from context_engine.config import load_config, resolve_ollama_url
+        return resolve_ollama_url(load_config())
+    except Exception as exc:
+        log.debug("Could not resolve Ollama URL from config, using default: %s", exc)
+        return "http://localhost:11434"
+
+
+def _ollama_running(url: str | None = None) -> bool:
+    """Check if Ollama is responding. `url` defaults to the configured base URL."""
+    base = url or _resolved_ollama_url()
     try:
         import httpx
-        resp = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
+        resp = httpx.get(f"{base.rstrip('/')}/api/tags", timeout=2.0)
         return resp.status_code == 200
     except Exception:
         return False
@@ -115,22 +127,39 @@ def _mcp_running() -> bool:
 # ── Public status API ─────────────────────────────────────────────────────────
 
 def get_ollama_status() -> dict:
-    running = _ollama_running()
+    url = _resolved_ollama_url()
+    running = _ollama_running(url)
     managed_pid = _read_pid("ollama")
     managed = managed_pid is not None and _process_alive(managed_pid)
 
+    # Strip scheme for compact display ("nas.local:11434" reads better than
+    # "http://nas.local:11434/" in a status table).
+    display = url.replace("https://", "").replace("http://", "").rstrip("/")
     detail = ""
     if running:
-        detail = "localhost:11434"
+        detail = display
         if not managed:
             detail += " (external)"
+    elif _is_remote_url(url):
+        # Make it obvious why CCE isn't going to start one for them.
+        detail = f"{display} (remote, unreachable)"
 
     return {
         "name": "ollama",
         "running": running,
         "managed": managed,
+        "url": url,
         "detail": detail,
     }
+
+
+def _is_remote_url(url: str) -> bool:
+    """Treat anything that doesn't point at the local machine as remote."""
+    lower = url.lower()
+    for marker in ("//localhost", "//127.0.0.1", "//[::1]", "//0.0.0.0"):
+        if marker in lower:
+            return False
+    return True
 
 
 def get_dashboard_status() -> dict:
@@ -176,7 +205,16 @@ def get_mcp_status() -> dict:
 
 def start_ollama() -> tuple[bool, str]:
     """Start ollama serve in the background. Returns (success, message)."""
-    if _ollama_running():
+    url = _resolved_ollama_url()
+    if _is_remote_url(url):
+        # Spawning a local `ollama serve` would do nothing useful when the
+        # user has configured a remote endpoint — it'd run on a port nothing
+        # in CCE talks to. Bail loudly instead of silently misbehaving.
+        return False, (
+            f"Ollama is configured to use a remote endpoint ({url}); "
+            "CCE will not start a local server. Ensure the remote is reachable."
+        )
+    if _ollama_running(url):
         return False, "Ollama is already running."
     try:
         proc = subprocess.Popen(

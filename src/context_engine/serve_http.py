@@ -10,7 +10,7 @@ import hmac
 import os
 from pathlib import Path
 
-from context_engine.config import load_config, PROJECT_CONFIG_NAME
+from context_engine.config import load_config, resolve_ollama_url, PROJECT_CONFIG_NAME
 from context_engine.storage.local_backend import LocalBackend
 from context_engine.indexer.embedder import Embedder
 from context_engine.compression.compressor import Compressor
@@ -192,7 +192,11 @@ def run_http_server(config=None, host: str = "127.0.0.1", port: int = 8765) -> N
 
     backend = LocalBackend(base_path=str(storage_base))
     embedder = Embedder(model_name=config.embedding_model)
-    compressor = Compressor(model=config.compression_model, cache=backend)
+    compressor = Compressor(
+        model=config.compression_model,
+        ollama_url=resolve_ollama_url(config),
+        cache=backend,
+    )
 
     api_token = os.environ.get("CCE_API_TOKEN") or None
     if host not in _LOOPBACK_HOSTS and not api_token:

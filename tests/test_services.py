@@ -11,7 +11,10 @@ from context_engine.services import (
     _remove_pid,
     _process_alive,
     _check_port_open,
+    _is_remote_url,
     get_dashboard_status,
+    get_ollama_status,
+    start_ollama,
 )
 
 
@@ -67,3 +70,46 @@ def test_get_dashboard_status_stopped(tmp_path, monkeypatch):
     status = get_dashboard_status()
     assert status["running"] is False
     assert status["name"] == "dashboard"
+
+
+# ── Remote-URL classification + Ollama wiring ────────────────────────────────
+
+@pytest.mark.parametrize("url", [
+    "http://localhost:11434",
+    "http://127.0.0.1:11434",
+    "http://[::1]:11434",
+    "http://0.0.0.0:11434",
+    "https://localhost:11434",
+])
+def test_is_remote_url_local(url):
+    assert _is_remote_url(url) is False
+
+
+@pytest.mark.parametrize("url", [
+    "http://nas.local:11434",
+    "http://192.168.1.50:11434",
+    "https://ollama.example.com",
+])
+def test_is_remote_url_remote(url):
+    assert _is_remote_url(url) is True
+
+
+def test_get_ollama_status_reports_configured_url(tmp_path, monkeypatch):
+    monkeypatch.setattr("context_engine.services._pid_dir", lambda: tmp_path)
+    monkeypatch.setenv("CCE_OLLAMA_URL", "http://nas.local:11434")
+    status = get_ollama_status()
+    assert status["url"] == "http://nas.local:11434"
+    # Hostname must not be silently rewritten back to localhost in the
+    # human-readable detail string.
+    assert "nas.local" in status["detail"] or status["detail"] == ""
+
+
+def test_start_ollama_refuses_when_remote_configured(tmp_path, monkeypatch):
+    """Spawning a local `ollama serve` is wrong when the user has pointed
+    CCE at a remote endpoint — would run a server nothing in CCE talks to."""
+    monkeypatch.setattr("context_engine.services._pid_dir", lambda: tmp_path)
+    monkeypatch.setenv("CCE_OLLAMA_URL", "http://nas.local:11434")
+    ok, msg = start_ollama()
+    assert ok is False
+    assert "remote" in msg.lower()
+    assert "nas.local" in msg
