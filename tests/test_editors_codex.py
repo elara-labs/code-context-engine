@@ -87,10 +87,11 @@ def test_slug_resolves_symlinks(tmp_path):
 def test_slug_sanitizes_basename(tmp_path):
     """Spaces and unicode characters are not valid in TOML bare keys —
     if the slug isn't sanitized, the rendered section header is invalid TOML."""
-    weird = tmp_path / "my project (v2)"
+    weird = tmp_path / "my café project (v2)"
     weird.mkdir()
     slug = _project_slug(weird)
-    assert all(c.isalnum() or c in "-_" for c in slug)
+    assert all(c.isascii() and (c.isalnum() or c in "-_") for c in slug)
+    assert "é" not in slug
 
 
 def test_slug_falls_back_when_basename_empty(tmp_path):
@@ -251,7 +252,24 @@ def test_configure_preserves_unrelated_user_config(fake_home, project_dir):
 def test_legacy_section_is_migrated_to_per_project(fake_home, project_dir):
     """Old code wrote [mcp_servers.context-engine] (hardcoded section). On
     first run after the fix, that legacy block should be retired in favor
-    of the per-project section — keeping both would leave a stale entry."""
+    of the per-project section when it points at the same project."""
+    (fake_home / ".codex").mkdir()
+    user_config = fake_home / ".codex" / "config.toml"
+    user_config.write_text(
+        '[mcp_servers.context-engine]\n'
+        'command = "/old/cce"\n'
+        f'args = ["serve", "--project-dir", "{project_dir}"]\n'
+    )
+    with patch("context_engine.editors.resolve_cce_binary", return_value="/usr/bin/cce"):
+        configure_mcp(project_dir, "codex")
+    content = user_config.read_text()
+    assert "[mcp_servers.context-engine]" not in content
+    assert f"[mcp_servers.cce-{_project_slug(project_dir)}]" in content
+
+
+def test_legacy_section_for_different_project_is_preserved(fake_home, project_dir):
+    """A user-managed legacy section for some other project should not be
+    removed just because this project is being configured."""
     (fake_home / ".codex").mkdir()
     user_config = fake_home / ".codex" / "config.toml"
     user_config.write_text(
@@ -262,7 +280,7 @@ def test_legacy_section_is_migrated_to_per_project(fake_home, project_dir):
     with patch("context_engine.editors.resolve_cce_binary", return_value="/usr/bin/cce"):
         configure_mcp(project_dir, "codex")
     content = user_config.read_text()
-    assert "[mcp_servers.context-engine]" not in content
+    assert "[mcp_servers.context-engine]" in content
     assert f"[mcp_servers.cce-{_project_slug(project_dir)}]" in content
 
 
@@ -328,9 +346,28 @@ def test_remove_deletes_file_when_last_section_removed(fake_home, project_dir):
 
 def test_configure_does_not_crash_when_codex_path_is_a_file(fake_home, project_dir):
     """If ~/.codex exists as a regular file (antivirus quarantine, user
-    weirdness), configure_mcp must return False rather than blowing up
+    weirdness), configure_mcp must return None rather than blowing up
     the entire `cce init`."""
     (fake_home / ".codex").write_text("not a directory")
     with patch("context_engine.editors.resolve_cce_binary", return_value="/usr/bin/cce"):
         result = configure_mcp(project_dir, "codex")
-    assert result is False
+    assert result is None
+
+
+def test_configure_returns_none_when_codex_config_cannot_be_written(fake_home, project_dir):
+    (fake_home / ".codex").mkdir()
+    with (
+        patch("context_engine.editors.resolve_cce_binary", return_value="/usr/bin/cce"),
+        patch("context_engine.editors.atomic_write_text", side_effect=OSError),
+    ):
+        result = configure_mcp(project_dir, "codex")
+    assert result is None
+
+
+def test_remove_returns_none_when_codex_config_cannot_be_read(fake_home, project_dir):
+    (fake_home / ".codex").mkdir()
+    user_config = fake_home / ".codex" / "config.toml"
+    user_config.write_text('[mcp_servers.linear]\ncommand = "x"\nargs = []\n')
+    with patch("pathlib.Path.read_text", side_effect=OSError):
+        result = remove_mcp(project_dir, "codex")
+    assert result is None

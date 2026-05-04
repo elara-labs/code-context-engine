@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import tomllib
 from pathlib import Path
 
 from context_engine.utils import atomic_write_text, resolve_cce_binary
@@ -143,7 +144,7 @@ def _resolved_config_path(editor: dict, project_dir: Path) -> Path:
 
 def _project_slug(project_dir: Path) -> str:
     """Stable per-directory slug used as the section name for user-scoped
-    editor configs. `cce-<basename>-<6-hex>` so two projects sharing a
+    editor configs. `<basename>-<6-hex>` so two projects sharing a
     basename ("api", "web", "frontend") get distinct sections instead of
     silently overwriting each other in ~/.codex/config.toml.
 
@@ -153,13 +154,17 @@ def _project_slug(project_dir: Path) -> str:
     resolved = project_dir.resolve()
     abs_path = str(resolved)
     h = hashlib.sha256(abs_path.encode()).hexdigest()[:6]
-    # TOML bare-key chars are A-Za-z0-9_- ; replace anything else (spaces,
-    # unicode, punctuation) with `-` so the rendered section is always a
-    # syntactically valid bare key. Empty basename (root dir or trailing
-    # slash) falls back to "project" so the slug is never just "-a3f2".
+    # TOML bare-key chars here are restricted to ASCII A-Za-z0-9_-; replace
+    # anything else (spaces, unicode, punctuation) with `-` so the rendered
+    # section is always a syntactically valid bare key. Empty basename (root
+    # dir or trailing slash) falls back to "project" so the slug is never
+    # just "-a3f2".
     # Use the resolved basename so symlink-vs-real-path produces the same
     # slug — otherwise the hash would match but the basename would differ.
-    safe = "".join(c if c.isalnum() or c in "-_" else "-" for c in resolved.name)
+    safe = "".join(
+        c if (c.isascii() and (c.isalnum() or c in "-_")) else "-"
+        for c in resolved.name
+    )
     return f"{safe or 'project'}-{h}"
 
 
@@ -217,8 +222,11 @@ def _codex_toml_block(command: str, project_dir: str, *, section: str) -> str:
     return f'[{section}]\ncommand = "{cmd}"\nargs = [{args_toml}]\n'
 
 
-def configure_mcp(project_dir: Path, editor_key: str) -> bool:
-    """Write MCP config for a specific editor. Returns True if changed.
+def configure_mcp(project_dir: Path, editor_key: str) -> bool | None:
+    """Write MCP config for a specific editor.
+
+    Returns True if changed, False if already configured, or None if the
+    config was skipped because the target file could not be read or written.
 
     Scope-aware: user-scoped editors (Codex) write to a single user-global
     file with a per-project section name; project-scoped editors keep their
@@ -237,7 +245,7 @@ def configure_mcp(project_dir: Path, editor_key: str) -> bool:
         # PermissionError can also fire for read-only homes. None of these
         # should bring down the whole `cce init`; treat the editor as not
         # configurable and move on.
-        return False
+        return None
 
     if editor.get("format") == "toml":
         section = _editor_section(editor, project_dir)
@@ -327,8 +335,11 @@ def _configure_toml(
     project_dir: str,
     *,
     section: str,
-) -> bool:
-    """Add a per-project CCE block to a TOML config file. Returns True if changed.
+) -> bool | None:
+    """Add a per-project CCE block to a TOML config file.
+
+    Returns True if changed, False if already configured, or None if the
+    config could not be read or written.
 
     Idempotent: if a block with the same section already exists, returns
     False without rewriting. If the legacy single-block form (the
@@ -341,19 +352,22 @@ def _configure_toml(
     marker = f"[{section}]"
     legacy_marker = f"[{_LEGACY_CODEX_SECTION}]"
 
-    if not config_path.exists():
-        atomic_write_text(config_path, block)
-        return True
+    try:
+        if not config_path.exists():
+            atomic_write_text(config_path, block)
+            return True
 
-    original = config_path.read_text()
+        original = config_path.read_text()
+    except OSError:
+        return None
+
     content = original
     dirty = False
 
     # Legacy migration: drop the old hardcoded `[mcp_servers.context-engine]`
-    # block if present. The per-project section replaces it — keeping both
-    # would leave a stale entry pointing at whatever project last ran the
-    # broken pre-fix code path.
-    if legacy_marker in content:
+    # block only when it points at this project. Preserve unrelated or
+    # user-managed legacy sections rather than guessing ownership.
+    if legacy_marker in content and _legacy_codex_section_matches_project(content, project_dir):
         content = _strip_toml_section(content, _LEGACY_CODEX_SECTION)
         dirty = True
 
@@ -364,8 +378,30 @@ def _configure_toml(
     if not dirty:
         return False
 
-    atomic_write_text(config_path, content if content.endswith("\n") else content + "\n")
+    try:
+        atomic_write_text(config_path, content if content.endswith("\n") else content + "\n")
+    except OSError:
+        return None
     return True
+
+
+def _legacy_codex_section_matches_project(content: str, project_dir: str) -> bool:
+    """Return True when the legacy Codex block targets this project."""
+    try:
+        parsed = tomllib.loads(content)
+    except tomllib.TOMLDecodeError:
+        return False
+
+    legacy = parsed.get("mcp_servers", {}).get("context-engine")
+    if not isinstance(legacy, dict):
+        return False
+
+    args = legacy.get("args")
+    return (
+        isinstance(args, list)
+        and len(args) >= 3
+        and args[-2:] == ["--project-dir", project_dir]
+    )
 
 
 def _strip_toml_section(content: str, section: str) -> str:
@@ -431,18 +467,25 @@ def _remove_toml(config_path: Path, display_path: str, *, section: str) -> str |
     and unrelated user content are preserved. Section name is regex-escaped
     so it can never accidentally match a longer section that shares a prefix
     (e.g. removing `cce-api` won't touch `cce-api-staging`)."""
-    content = config_path.read_text()
+    try:
+        content = config_path.read_text()
+    except OSError:
+        return None
+
     marker = f"[{section}]"
     if marker not in content:
         return None
 
     new_content = _strip_toml_section(content, section).strip()
-    if new_content:
-        atomic_write_text(config_path, new_content + "\n")
-        return f"Removed [{section}] from {display_path}"
-    else:
-        config_path.unlink()
-        return f"Removed {display_path}"
+    try:
+        if new_content:
+            atomic_write_text(config_path, new_content + "\n")
+            return f"Removed [{section}] from {display_path}"
+        else:
+            config_path.unlink()
+            return f"Removed {display_path}"
+    except OSError:
+        return None
 
 
 def write_instruction_file(project_dir: Path, file_key: str) -> bool:
