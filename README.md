@@ -76,10 +76,12 @@ Restart your editor. Done. Every question now hits the index instead of re-readi
 | VS Code / Copilot | `.vscode/mcp.json` | |
 | Cursor | `.cursor/mcp.json` | `.cursorrules` |
 | Gemini CLI | `.gemini/settings.json` | `GEMINI.md` |
-| OpenAI Codex | `.codex/config.toml` | |
+| OpenAI Codex | `~/.codex/config.toml` (user-global, per-project section) | |
 | OpenCode | `opencode.json` | |
 
 Multiple editors in the same project? All get configured in one command.
+
+**Codex note:** Codex CLI reads MCP servers from `~/.codex/config.toml` only — it has no per-project config. `cce init` adds one `[mcp_servers.cce-<project>-<hash>]` section per project so multiple projects coexist; `cce uninstall` removes only the section for the current project.
 
 ```
   my-project · 38 queries
