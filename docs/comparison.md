@@ -24,7 +24,10 @@ This page explains ours.
 **Where Cursor wins:**
 Zero setup. It just works. Open a project, start coding, context is there.
 Cursor's indexing is deeply integrated into the editor and invisible to the user.
-For Cursor-only users who don't mind cloud indexing, there's no reason to add CCE.
+Their proprietary embeddings are trained specifically for code retrieval and likely
+outperform open-source embedding models (like the one CCE uses) on retrieval quality.
+They also have access to editor state (open tabs, cursor position, recent edits) which
+CCE cannot see. For Cursor-only users who don't mind cloud indexing, there's no reason to add CCE.
 
 **Where CCE wins:**
 Editor independence. If you switch between Claude Code and Cursor (or use VS Code,
@@ -35,9 +38,11 @@ measurable token savings with per-query tracking.
 ### vs Aider's repo-map
 
 **Where Aider wins:**
-Lighter weight. Aider's repo-map uses tree-sitter to extract function/class signatures
-and builds a concise map without any embedding model. No 60 MB model download, no
-ONNX runtime. It's elegant and fast for what it does.
+Lighter weight and battle-tested. Aider's repo-map uses tree-sitter to extract
+function/class signatures and builds a concise map without any embedding model. No
+60 MB model download, no ONNX runtime, no SQLite indices. It's elegant, fast, and
+has been refined over thousands of real-world coding sessions. Aider also optimizes
+the map dynamically per conversation turn, which CCE does not do.
 
 **Where CCE wins:**
 Deeper retrieval. Aider's repo-map gives the LLM a structural overview but sends
@@ -49,9 +54,11 @@ cost reduction.
 ### vs Continue.dev
 
 **Where Continue wins:**
-Deep IDE integration. Continue lives in your editor and has native access to open
-files, terminal output, and editor state. Its context system understands what you're
-looking at right now, not just what's in the repo.
+Deep IDE integration and real-time awareness. Continue lives in your editor with
+native access to open files, terminal output, diagnostics, and editor state. Its
+context system understands what you're looking at right now, not just what's in the
+repo. It also supports multiple LLM providers with a unified interface, and has a
+larger community and contributor base than CCE.
 
 **Where CCE wins:**
 Continue's context is session-scoped. Close the editor and it's gone. CCE's
@@ -62,10 +69,12 @@ Gemini CLI, Codex, OpenCode).
 ### vs Greptile
 
 **Where Greptile wins:**
-Scale. Greptile is a cloud service built for large teams and monorepos. It handles
-indexing at a scale that a local tool can't match, and it integrates into PR review
-workflows. For organizations with thousands of repos, Greptile solves a different
-problem.
+Scale and integration. Greptile is a cloud service built for large teams and monorepos.
+It handles cross-repo indexing at a scale that a local tool can't match, integrates
+into PR review workflows, and provides team-wide code understanding out of the box.
+Their retrieval likely benefits from larger, more expensive embedding models that would
+be impractical to run locally. For organizations with thousands of repos and dedicated
+budgets, Greptile solves a fundamentally different problem than CCE.
 
 **Where CCE wins:**
 Privacy and cost. CCE is free, open source, and your code never leaves your machine.
@@ -91,3 +100,11 @@ CCE is the right choice when:
 - **IDE-centric, real-time context:** Continue.dev's editor integration is deeper.
 
 We'd rather you pick the right tool than pick ours for the wrong reasons.
+
+## CCE's honest limitations
+
+- **Single-repo benchmark.** Our 94% number comes from FastAPI only. Different codebases (monorepos, many small files, heavily templated code) may see different results. We're adding more benchmarks.
+- **Open-source embedding model.** We use a local model (~60 MB) that runs on CPU. Cloud tools using larger models (e.g., OpenAI text-embedding-3-large) likely have better retrieval quality on ambiguous queries.
+- **No editor state awareness.** CCE can't see your open tabs, cursor position, or recent edits. Tools integrated into editors (Cursor, Continue) have richer real-time context.
+- **Setup required.** It's one command, but it's not zero. Built-in tools win on frictionlessness.
+- **Young project.** CCE has fewer contributors, fewer battle-tested edge cases, and less production mileage than established tools like Aider or Cursor.
