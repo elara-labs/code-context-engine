@@ -137,6 +137,48 @@ Files matching `.gitignore` are also skipped automatically.
 
 ---
 
+## Custom File Extensions
+
+By default the indexer recognises common source file extensions (`.py`, `.ts`, `.go`, `.html`, `.css`, …) and routes each to the right tree-sitter parser when one is available. If your project uses an extension CCE doesn't know about — a template language, a rebranded JS extension, a config DSL — register it under `indexer.extensions`:
+
+```yaml
+indexer:
+  extensions:
+    .tpl: html         # alias to an existing parser
+    .mjs: javascript
+    .cts: typescript
+    .liquid: ""        # index as plaintext (no AST chunking)
+    .erb: ""
+```
+
+**Rules:**
+
+- **Keys** must start with `.` and are matched case-insensitively against file suffixes (`.HTML` and `.html` resolve the same way).
+- **Values** are language strings — anything in the built-in `_LANGUAGE_MAP` works (`html`, `javascript`, `typescript`, `python`, `go`, `rust`, `java`, `php`, etc.). Unknown values are accepted and fall back to plaintext at chunk time.
+- **Empty string or `null`** indexes the file as a single plaintext chunk. Useful when you want the file searchable but know there's no parser for it.
+- **User entries override built-ins.** For example, force `.h` to be parsed as C++ instead of C:
+
+  ```yaml
+  indexer:
+    extensions:
+      .h: cpp
+  ```
+
+**Where to put it:**
+
+- Global default: `~/.cce/config.yaml`
+- Project-specific: `.context-engine.yaml` in the project root (overrides the global entry per-extension)
+
+**After editing**, re-run indexing so existing files get re-chunked under the new mapping:
+
+```bash
+cce index --full
+```
+
+**Parsers with full AST chunking** (semantic chunks for functions, classes, blocks): Python, JavaScript, TypeScript/TSX, PHP, Go, Rust, Java, HTML. Other languages (`css`, `markdown`, `json`, `yaml`, …) are mapped for metadata but indexed as a single plaintext chunk per file.
+
+---
+
 ## Changing the Embedding Model
 
 ```yaml
