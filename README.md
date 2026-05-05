@@ -397,12 +397,14 @@ No GPU required. Embedding model runs on CPU via ONNX Runtime.
 
 | Page | Content |
 |------|---------|
+| [What is CCE? (Complete Guide)](https://elara-labs.github.io/code-context-engine/blog/what-is-code-context-engine.html) | Setup, tools, how it works, FAQ |
+| [How to Save Claude Code Tokens](https://elara-labs.github.io/code-context-engine/blog/save-claude-code-tokens.html) | Cost breakdown and savings guide |
+| [Benchmark Deep Dive](https://elara-labs.github.io/code-context-engine/blog/benchmark-fastapi.html) | Full FastAPI benchmark methodology |
+| [Comparison with Alternatives](https://elara-labs.github.io/code-context-engine/comparison.html) | CCE vs Cursor, Aider, Continue, Greptile |
 | [Examples](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/Examples.md) | Real conversations with Claude |
 | [How It Works](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/How-It-Works.md) | Full 9-stage pipeline |
 | [CLI Reference](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/CLI-Reference.md) | Every command with output |
 | [Configuration](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/Configuration.md) | All config options |
-| [Project Commands](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/Project-Commands.md) | Rules and preferences for Claude |
-| [Tech Stack](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/Tech-Stack.md) | Every library and why |
 
 ---
 
