@@ -57,7 +57,8 @@ def _split_sentences(text: str) -> list[str]:
 
 
 def _clean(text: str) -> str:
-    return re.sub(r'[\s.,;:]+$', '', text.strip())[:_MAX_FRAGMENT]
+    text = re.sub(r'\s+', ' ', text.strip())  # normalize internal whitespace
+    return re.sub(r'[\s.,;:]+$', '', text)[:_MAX_FRAGMENT]
 
 
 def extract_decisions(text: str) -> list[tuple[str, str]]:
