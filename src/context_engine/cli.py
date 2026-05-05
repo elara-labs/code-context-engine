@@ -1926,13 +1926,14 @@ def uninstall(yes: bool) -> None:
     gitignore = project_dir / ".gitignore"
     if gitignore.exists():
         content = gitignore.read_text()
-        if ".cce" in content or "context-engine" in content.lower() or "cce" in content.lower():
+        if ".cce" in content or "context-engine" in content.lower() or "cce" in content.lower() or ".claude/settings.local.json" in content:
+            # These are the exact entries CCE adds (see project_commands._GITIGNORE_ENTRIES)
+            cce_lines = {".cce/", ".claude/settings.local.json"}
             new_lines = [
                 line for line in content.splitlines()
-                if ".cce" not in line
+                if line.strip() not in cce_lines
                 and "context-engine" not in line.lower()
-                and not (line.startswith("#") and "cce" in line.lower())
-                and "claude code local settings" not in line.lower()
+                and not (line.startswith("#") and ("cce" in line.lower() or "claude code local settings" in line.lower()))
             ]
             new_content = "\n".join(new_lines).strip()
             if new_content:
