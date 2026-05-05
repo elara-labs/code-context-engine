@@ -6,7 +6,6 @@ and expected response structure. Runs fast with mocked storage.
 import json
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 from context_engine.config import Config

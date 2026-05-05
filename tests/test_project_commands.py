@@ -1,7 +1,6 @@
 """Tests for project commands, rules, preferences, workspace merge, and gitignore."""
 import pytest
 import yaml
-from pathlib import Path
 
 from context_engine.project_commands import (
     load_commands,
@@ -16,9 +15,7 @@ from context_engine.project_commands import (
     remove_preference,
     format_for_prompt,
     ensure_gitignore,
-    _find_workspace_dir,
     _merge_configs,
-    VALID_HOOKS,
 )
 
 

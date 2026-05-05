@@ -1,5 +1,4 @@
 import pytest
-from pathlib import Path
 
 @pytest.fixture
 def project_dir(tmp_path):

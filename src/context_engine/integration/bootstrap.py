@@ -1,7 +1,7 @@
 """Bootstrap context builder — generates compressed project context for session start."""
 from importlib.metadata import version as pkg_version
 
-from context_engine.models import Chunk, ConfidenceLevel
+from context_engine.models import ConfidenceLevel
 
 _CHARS_PER_TOKEN = 4
 

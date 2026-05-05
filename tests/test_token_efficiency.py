@@ -1,6 +1,5 @@
 """Tests for token efficiency features: overflow references and graph expansion."""
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from context_engine.models import Chunk, ChunkType
 

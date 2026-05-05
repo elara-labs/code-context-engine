@@ -1,5 +1,4 @@
 import pytest
-from pathlib import Path
 from context_engine.indexer.manifest import Manifest
 
 @pytest.fixture

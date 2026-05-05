@@ -1,7 +1,5 @@
 # tests/indexer/test_watcher.py
 import asyncio
-import time
-from pathlib import Path
 import pytest
 from context_engine.indexer.watcher import FileWatcher
 

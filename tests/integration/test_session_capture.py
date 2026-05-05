@@ -1,4 +1,3 @@
-import json
 import pytest
 from pathlib import Path
 from context_engine.integration.session_capture import SessionCapture

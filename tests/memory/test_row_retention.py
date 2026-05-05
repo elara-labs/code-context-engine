@@ -9,9 +9,7 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 
-import pytest
 
 from context_engine.memory import db as memory_db
 

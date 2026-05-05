@@ -1,5 +1,4 @@
 """Simple async event bus for inter-module communication."""
-import asyncio
 from collections import defaultdict
 from typing import Any, Callable, Coroutine
 

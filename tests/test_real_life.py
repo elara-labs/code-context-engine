@@ -8,16 +8,12 @@ These tests reproduce the exact scenarios that caused production bugs:
 - Empty project handling
 - Large file handling
 """
-import asyncio
 import json
 import os
-import shutil
 import subprocess
 import pytest
-from pathlib import Path
 
 from context_engine.config import load_config
-from context_engine.indexer.chunker import Chunker
 from context_engine.indexer.embedder import Embedder
 from context_engine.indexer.pipeline import run_indexing
 from context_engine.storage.local_backend import LocalBackend

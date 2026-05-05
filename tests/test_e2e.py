@@ -2,7 +2,6 @@
 import pytest
 from pathlib import Path
 
-from context_engine.config import Config
 from context_engine.indexer.chunker import Chunker
 from context_engine.indexer.embedder import Embedder
 from context_engine.indexer.manifest import Manifest
@@ -58,7 +57,7 @@ async def test_full_pipeline(sample_project, tmp_path):
     chunker = Chunker()
     embedder = Embedder()
     backend = LocalBackend(base_path=str(storage_dir))
-    manifest = Manifest(manifest_path=storage_dir / "manifest.json")
+    _manifest = Manifest(manifest_path=storage_dir / "manifest.json")
 
     all_chunks = []
     all_nodes = []

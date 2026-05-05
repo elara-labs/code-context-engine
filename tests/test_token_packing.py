@@ -1,4 +1,3 @@
-import pytest
 from context_engine.models import Chunk, ChunkType
 
 

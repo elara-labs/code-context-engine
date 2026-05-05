@@ -1,7 +1,7 @@
 # tests/retrieval/test_retriever.py
 import pytest
 import pytest_asyncio
-from context_engine.models import Chunk, ChunkType, GraphNode, GraphEdge, NodeType, EdgeType, ConfidenceLevel
+from context_engine.models import Chunk, ChunkType, GraphNode, GraphEdge, NodeType, EdgeType
 from context_engine.storage.local_backend import LocalBackend
 from context_engine.indexer.embedder import Embedder
 from context_engine.retrieval.retriever import HybridRetriever

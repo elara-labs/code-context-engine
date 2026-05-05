@@ -7,6 +7,25 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    # Static analysis gate — fails the PR if ruff finds any issues. Runs on
+    # a single Python version (lint output is OS/version-independent) so it's
+    # cheap and finishes well before the test matrix.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install "ruff>=0.13"
+
+      - name: Ruff check
+        run: ruff check src/ tests/
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:

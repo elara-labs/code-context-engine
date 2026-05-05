@@ -1,5 +1,4 @@
 """Git hook installer and handler for triggering re-indexing."""
-import os
 import shutil
 import stat
 import sys

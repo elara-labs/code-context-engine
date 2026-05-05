@@ -1,0 +1,8 @@
+# Code owners for this repo. Combined with branch protection's "Require
+# review from Code Owners" rule, every PR to main needs at least one
+# approval from one of the owners listed here before it can be merged.
+#
+# Syntax: <pattern> <owner> [<owner> ...]  — last matching pattern wins.
+# Docs: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-customization/customizing-your-repository/about-code-owners
+
+* @fazleelahhee @rajkumarsakthivel

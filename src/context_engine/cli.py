@@ -216,7 +216,7 @@ def _install_memory_hooks(project_dir: Path) -> None:
     summary = install_settings(project_dir)
     if summary["added"]:
         _ok(
-            f"Memory hooks installed  "
+            "Memory hooks installed  "
             + _dim(f"({len(summary['added'])} hooks: {', '.join(summary['added'])})")
         )
     elif summary["skipped"]:
@@ -279,7 +279,7 @@ def _check_memory_capture_reachable(config, project_dir: Path) -> None:
             )
         )
         return
-    _ok(f"Memory capture active  " + _dim(f"(127.0.0.1:{port} reachable)"))
+    _ok("Memory capture active  " + _dim(f"(127.0.0.1:{port} reachable)"))
 
 
 def _ensure_session_hook(project_dir: Path) -> None:
@@ -685,7 +685,7 @@ def init(ctx: click.Context) -> None:
     if is_git_repo:
         installed = install_hooks(str(project_dir))
         if installed:
-            _ok(f"Git hooks installed  " + _dim(f"({len(installed)} hooks, auto-updates on commit)"))
+            _ok("Git hooks installed  " + _dim(f"({len(installed)} hooks, auto-updates on commit)"))
     else:
         _warn("Not a git repository — git hook skipped")
         click.echo(_dim("    Run `cce index` manually after making changes."))
@@ -822,8 +822,8 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
         return
 
     from context_engine.cli_style import (
-        header, label, value, dim, success, warn, magenta, section, animate,
-        CHECK, DOT, CROSS, BULLET, BULLET_OFF,
+        dim, warn, magenta, section, animate,
+        CHECK, DOT, BULLET, BULLET_OFF,
     )
 
     lines: list[str] = []
@@ -929,7 +929,7 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
 @main.command("list")
 def list_commands() -> None:
     """Show all available CCE commands with usage examples."""
-    from context_engine.cli_style import header, dim, value, label, section, animate, ARROW
+    from context_engine.cli_style import dim, section, animate
 
     groups = [
         ("Setup", [
@@ -1020,7 +1020,7 @@ def commands():
 def commands_add(hook: str, command: str) -> None:
     """Add a command to a hook. Example: cce commands add before_push 'composer test'"""
     from context_engine.project_commands import load_project_only, add_command
-    from context_engine.cli_style import success, warn, CHECK, DOT
+    from context_engine.cli_style import warn, CHECK, DOT
     existing = load_project_only(str(_safe_cwd())).get(hook, [])
     if command in existing:
         click.echo(f"  {DOT} {warn('Already exists')} in {hook}: {command}")
@@ -1035,7 +1035,7 @@ def commands_add(hook: str, command: str) -> None:
 def commands_add_custom(name: str, command: str) -> None:
     """Add a named custom command. Example: cce commands add-custom deploy 'kubectl apply -f k8s/'"""
     from context_engine.project_commands import add_custom_command
-    from context_engine.cli_style import success, CHECK
+    from context_engine.cli_style import CHECK
     add_custom_command(str(_safe_cwd()), name, command)
     click.echo(f"  {CHECK} {success('Added')} custom command '{name}': {command}")
 
@@ -1046,7 +1046,7 @@ def commands_add_custom(name: str, command: str) -> None:
 def commands_remove(hook: str, command: str) -> None:
     """Remove a command from a hook."""
     from context_engine.project_commands import remove_command
-    from context_engine.cli_style import success, warn, CHECK, DOT
+    from context_engine.cli_style import warn, CHECK, DOT
     if remove_command(str(_safe_cwd()), hook, command):
         click.echo(f"  {CHECK} {success('Removed')} from {hook}: {command}")
     else:
@@ -1059,7 +1059,7 @@ def commands_add_rule(rule: str) -> None:
     """Add a project rule. Example: cce commands add-rule 'Never use down() in migrations'"""
     from context_engine.project_commands import load_project_only, add_rule
     existing = load_project_only(str(_safe_cwd())).get("rules", [])
-    from context_engine.cli_style import success, warn, CHECK, DOT
+    from context_engine.cli_style import warn, CHECK, DOT
     if rule in existing:
         click.echo(f"  {DOT} {warn('Already exists')}: {rule}")
         return
@@ -1072,7 +1072,7 @@ def commands_add_rule(rule: str) -> None:
 def commands_remove_rule(rule: str) -> None:
     """Remove a project rule."""
     from context_engine.project_commands import remove_rule
-    from context_engine.cli_style import success, warn, CHECK, DOT
+    from context_engine.cli_style import warn, CHECK, DOT
     if remove_rule(str(_safe_cwd()), rule):
         click.echo(f"  {CHECK} {success('Rule removed')}: {rule}")
     else:
@@ -1085,7 +1085,7 @@ def commands_remove_rule(rule: str) -> None:
 def commands_set_pref(key: str, value: str) -> None:
     """Set a preference. Example: cce commands set-pref database PostgreSQL"""
     from context_engine.project_commands import set_preference
-    from context_engine.cli_style import success, CHECK
+    from context_engine.cli_style import CHECK
     set_preference(str(_safe_cwd()), key, value)
     click.echo(f"  {CHECK} {success('Preference set')}: {key} = {value}")
 
@@ -1095,7 +1095,7 @@ def commands_set_pref(key: str, value: str) -> None:
 def commands_remove_pref(key: str) -> None:
     """Remove a preference."""
     from context_engine.project_commands import remove_preference
-    from context_engine.cli_style import success, warn, CHECK, DOT
+    from context_engine.cli_style import warn, CHECK, DOT
     if remove_preference(str(_safe_cwd()), key):
         click.echo(f"  {CHECK} {success('Preference removed')}: {key}")
     else:
@@ -1106,7 +1106,7 @@ def commands_remove_pref(key: str) -> None:
 def commands_list() -> None:
     """Show all project commands, rules, and preferences (merged with workspace)."""
     from context_engine.project_commands import load_commands
-    from context_engine.cli_style import header, label, dim, value, section, animate, DOT, ARROW, BULLET
+    from context_engine.cli_style import dim, section, animate, DOT, BULLET
 
     cmds = load_commands(str(_safe_cwd()))
     lines: list[str] = [""]
@@ -1223,7 +1223,7 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
 
         return empty, {}
 
-    from context_engine.cli_style import header, label, value, dim, success, bold
+    from context_engine.cli_style import dim, bold
     from context_engine.pricing import get_model_pricing
 
     _all_pricing = get_model_pricing()
@@ -1596,7 +1596,7 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
 def clear(ctx: click.Context, yes: bool) -> None:
     """Clear all index data for the current project (vectors, FTS, graph, manifest)."""
     from context_engine.storage.local_backend import LocalBackend
-    from context_engine.cli_style import warn, success, dim, value, section, animate, CHECK, DOT
+    from context_engine.cli_style import warn, dim, section, animate, CHECK, DOT
 
     config = ctx.obj["config"]
     project_name = _safe_cwd().name
@@ -1636,7 +1636,7 @@ def clear(ctx: click.Context, yes: bool) -> None:
 def prune(ctx: click.Context, dry_run: bool) -> None:
     """Remove index data for projects whose directories no longer exist."""
     import shutil
-    from context_engine.cli_style import success, warn, dim, value, section, animate, CHECK, CROSS, DOT
+    from context_engine.cli_style import warn, dim, section, animate, CHECK, CROSS, DOT
 
     config = ctx.obj["config"]
     storage_root = Path(config.storage_path)
@@ -1699,7 +1699,7 @@ def prune(ctx: click.Context, dry_run: bool) -> None:
 @click.pass_context
 def search(ctx: click.Context, query: str, top_k: int) -> None:
     """Run a test search query and show results (also updates savings stats)."""
-    from context_engine.cli_style import section, animate, value, dim, label, success, CHECK, DOT
+    from context_engine.cli_style import section, animate, dim, CHECK, DOT
 
     config = ctx.obj["config"]
     project_dir = str(_safe_cwd())
@@ -1784,7 +1784,7 @@ def search(ctx: click.Context, query: str, top_k: int) -> None:
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
 def uninstall(yes: bool) -> None:
     """Remove CCE from the current project (hooks, .mcp.json entry, CLAUDE.md block)."""
-    from context_engine.cli_style import section, animate, value, dim, success, warn, CHECK, CROSS, DOT
+    from context_engine.cli_style import section, animate, dim, warn, CROSS, DOT
 
     project_dir = _safe_cwd()
     project_name = project_dir.name
@@ -2178,7 +2178,7 @@ def dashboard(ctx: click.Context, port: int, no_browser: bool) -> None:
     # 401 — most users would assume the dashboard was broken, so we surface
     # the URL with the token already attached.
     token = (_os.environ.get("CCE_DASHBOARD_TOKEN") or "").strip()
-    from context_engine.cli_style import header, value, dim
+    from context_engine.cli_style import dim
     base_url = f"http://localhost:{port}"
     url = f"{base_url}?token={token}" if token else base_url
     click.echo(f"  {header('CCE Dashboard')} at {value(url)}")
@@ -2207,7 +2207,7 @@ def services(ctx: click.Context) -> None:
 def services_status() -> None:
     """Show status of all CCE services."""
     from context_engine.services import get_ollama_status, get_dashboard_status, get_mcp_status
-    from context_engine.cli_style import header, dim, section, animate, value, success, warn, BULLET, BULLET_OFF
+    from context_engine.cli_style import dim, section, animate, warn, BULLET, BULLET_OFF
 
     rows = [
         get_ollama_status(),
@@ -2320,7 +2320,7 @@ def sessions_status(ctx: click.Context) -> None:
             parts = ", ".join(f"{r['status']}={r['n']}" for r in sess_rows)
             click.echo(f"  sessions:  {parts}")
         else:
-            click.echo(f"  sessions:  none recorded yet")
+            click.echo("  sessions:  none recorded yet")
 
         # Decisions by source — biggest signal of "is capture working?"
         dec_rows = list(conn.execute(
@@ -2350,7 +2350,7 @@ def sessions_status(ctx: click.Context) -> None:
             )
             click.echo(f"  queue:     {queue['n']} pending{attn}")
         else:
-            click.echo(f"  queue:     drained")
+            click.echo("  queue:     drained")
 
         # Vec coverage — backfill check.
         if has_vec:
@@ -2378,7 +2378,7 @@ def sessions_status(ctx: click.Context) -> None:
                 f"(~{mb} MB raw; `cce sessions prune` ages out >30d)"
             )
         else:
-            click.echo(f"  payloads:  none retained")
+            click.echo("  payloads:  none retained")
     finally:
         conn.close()
 
@@ -2663,7 +2663,7 @@ async def _run_index(
     from context_engine.indexer.pipeline import run_indexing
 
     log_fn = (lambda msg: click.echo(msg)) if verbose else None
-    from context_engine.cli_style import success, warn, dim, value, CHECK, CROSS
+    from context_engine.cli_style import warn, dim, CHECK, CROSS
 
     _showed_progress = False
     _showed_embed_progress = False

@@ -18,7 +18,6 @@ from context_engine.indexer.embedder import Embedder
 from context_engine.indexer.manifest import Manifest
 from context_engine.storage.local_backend import LocalBackend
 from context_engine.retrieval.retriever import HybridRetriever
-from context_engine.compression.compressor import Compressor
 from context_engine.models import GraphNode, GraphEdge, NodeType, EdgeType
 
 
@@ -112,7 +111,7 @@ def indexed_project(tmp_path):
     chunker = Chunker()
     embedder = Embedder()
     backend = LocalBackend(base_path=str(storage_dir))
-    manifest = Manifest(manifest_path=storage_dir / "manifest.json")
+    _manifest = Manifest(manifest_path=storage_dir / "manifest.json")
 
     all_chunks = []
     all_nodes = []

@@ -1,10 +1,9 @@
 """Tests for the heuristic decision extractor."""
 from __future__ import annotations
 
-import pytest
 from context_engine.memory.decision_extractor import extract_decisions
 from context_engine.memory import db as memory_db
-from context_engine.memory.compressor import compress_turn, _auto_capture_decisions
+from context_engine.memory.compressor import _auto_capture_decisions
 
 
 def _decisions(text):
