@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CCE vs Cursor Built-in Indexing: Which Saves More Tokens?</title>
+  <meta name="description" content="Compare Code Context Engine vs Cursor's built-in code indexing. CCE is local, works across editors, and saves 94% on tokens. Cursor's indexing is cloud-based and editor-locked. See the honest comparison.">
+  <meta name="keywords" content="CCE vs Cursor, Cursor indexing alternative, reduce Cursor costs, Cursor token savings, Code Context Engine vs Cursor, best code indexing tool">
+  <meta property="og:title" content="CCE vs Cursor Indexing: Honest Comparison">
+  <meta property="og:description" content="Local vs cloud indexing. One editor vs all editors. 94% savings benchmarked.">
+  <meta property="og:type" content="article">
+  <link rel="canonical" href="https://elara-labs.github.io/code-context-engine/blog/cce-vs-cursor-indexing.html">
+  <link rel="icon" type="image/svg+xml" href="../logo.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg:#06080f; --bg2:#0c1120; --bg3:#131c30; --cyan:#00d4ff; --green:#34d399; --text:#e8f0ff; --text2:#7b93b8; --text3:#3a5070; --border:#1a2a42; --mono:'DM Mono',monospace; --sans:'Instrument Sans',system-ui,sans-serif; }
+    body { background:var(--bg); color:var(--text); font-family:var(--sans); line-height:1.7; }
+    nav { position:sticky; top:0; z-index:100; padding:16px 48px; background:rgba(6,8,15,.85); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+    nav a { color:var(--text2); text-decoration:none; font-size:14px; font-weight:500; }
+    nav a:hover { color:var(--cyan); }
+    .nav-brand { display:flex; align-items:center; gap:10px; color:var(--text); font-weight:700; font-size:15px; }
+    .nav-brand img { width:24px; height:24px; border-radius:5px; }
+    article { max-width:720px; margin:0 auto; padding:80px 24px 120px; }
+    .meta { font-size:13px; color:var(--text3); font-family:var(--mono); margin-bottom:32px; }
+    h1 { font-size:40px; font-weight:800; line-height:1.2; letter-spacing:-0.025em; margin-bottom:24px; }
+    .subtitle { font-size:20px; color:var(--text2); margin-bottom:56px; line-height:1.5; }
+    h2 { font-size:26px; font-weight:700; margin-top:56px; margin-bottom:20px; }
+    p { font-size:17px; color:var(--text2); margin-bottom:20px; }
+    strong { color:var(--text); }
+    code { font-family:var(--mono); font-size:.88em; background:var(--bg3); border:1px solid var(--border); border-radius:4px; padding:2px 6px; color:var(--cyan); }
+    pre { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:24px; font-family:var(--mono); font-size:14px; color:var(--text); overflow-x:auto; margin:24px 0; line-height:1.8; }
+    table { width:100%; border-collapse:collapse; margin:24px 0; font-size:15px; }
+    th { text-align:left; padding:12px 16px; font-size:12px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--text3); border-bottom:2px solid var(--border); }
+    td { padding:12px 16px; border-bottom:1px solid var(--border); color:var(--text2); }
+    td:first-child { color:var(--text); font-weight:500; }
+    .highlight { color:var(--cyan); font-weight:700; }
+    .cta-box { background:var(--bg2); border:1px solid rgba(0,212,255,0.2); border-radius:12px; padding:36px; margin-top:56px; text-align:center; }
+    .cta-box h3 { font-size:22px; margin-bottom:12px; }
+    .cta-box p { text-align:center; }
+    .cta-link { display:inline-block; margin-top:20px; color:var(--cyan); text-decoration:none; font-weight:600; font-size:16px; }
+    .cta-link:hover { text-decoration:underline; }
+    .tags { margin-top:56px; padding-top:24px; border-top:1px solid var(--border); display:flex; flex-wrap:wrap; gap:8px; }
+    .tag { font-family:var(--mono); font-size:12px; padding:4px 12px; background:var(--bg3); border:1px solid var(--border); border-radius:20px; color:var(--text3); }
+    footer { border-top:1px solid var(--border); padding:24px 48px; text-align:center; font-size:13px; color:var(--text3); }
+    footer a { color:var(--text2); text-decoration:none; }
+    footer a:hover { color:var(--cyan); }
+    @media (max-width:640px) { article { padding:48px 16px 80px; } h1 { font-size:28px; } nav { padding:14px 16px; } }
+  </style>
+  <script type="application/ld+json">
+  { "@context":"https://schema.org", "@type":"Article", "headline":"CCE vs Cursor Built-in Indexing: Which Saves More Tokens?", "datePublished":"2026-05-05", "author":{"@type":"Organization","name":"Elara Labs"} }
+  </script>
+</head>
+<body>
+<nav>
+  <a href="../" class="nav-brand"><img src="../logo.svg" alt="CCE"> Code Context Engine</a>
+  <a href="https://github.com/elara-labs/code-context-engine">GitHub</a>
+</nav>
+<article>
+  <div class="meta">May 5, 2026 · 4 min read</div>
+  <h1>CCE vs Cursor Built-in Indexing</h1>
+  <p class="subtitle">Both index your code for AI context. Different tradeoffs. Here's an honest comparison.</p>
+
+  <table>
+    <tr><th></th><th>CCE</th><th>Cursor</th></tr>
+    <tr><td>Privacy</td><td class="highlight">Fully local</td><td>Cloud-indexed</td></tr>
+    <tr><td>Editors supported</td><td class="highlight">6 editors</td><td>Cursor only</td></tr>
+    <tr><td>Setup</td><td>One command</td><td class="highlight">Zero (built in)</td></tr>
+    <tr><td>Token savings</td><td class="highlight">94% (benchmarked)</td><td>Unknown (proprietary)</td></tr>
+    <tr><td>Savings tracking</td><td class="highlight">Per-query, with dollars</td><td>None</td></tr>
+    <tr><td>Cross-session memory</td><td class="highlight">Yes</td><td>No</td></tr>
+    <tr><td>Editor state awareness</td><td>No</td><td class="highlight">Yes (tabs, cursor)</td></tr>
+    <tr><td>Embedding quality</td><td>Open-source model</td><td class="highlight">Proprietary (likely better)</td></tr>
+    <tr><td>Cost</td><td class="highlight">Free, MIT</td><td>$20/mo+ (Pro)</td></tr>
+  </table>
+
+  <h2>Where Cursor wins</h2>
+  <p><strong>Zero setup.</strong> Open a project, start coding. Cursor's indexing is invisible and deeply integrated. It also sees your open tabs, cursor position, and recent edits, giving it richer real-time context than CCE can provide.</p>
+  <p>Their proprietary embeddings are trained specifically for code retrieval and likely outperform open-source models on ambiguous queries.</p>
+  <p><strong>If you only use Cursor and don't mind cloud indexing, there's no reason to add CCE.</strong></p>
+
+  <h2>Where CCE wins</h2>
+  <p><strong>Editor independence.</strong> If you switch between Claude Code and Cursor, or use VS Code, Gemini CLI, Codex, or OpenCode, Cursor's index doesn't follow you. CCE works across all of them with a single index.</p>
+  <p><strong>Privacy.</strong> Your code never leaves your machine. No cloud processing, no API keys, no data retention.</p>
+  <p><strong>Measurable savings.</strong> Run <code>cce savings</code> and see exactly how many tokens and dollars CCE saved. Cursor doesn't expose this data.</p>
+  <p><strong>Cross-session memory.</strong> Decisions and architectural context persist across sessions. Cursor starts fresh every time.</p>
+
+  <h2>Can you use both?</h2>
+  <p>Yes. They don't conflict. CCE registers as an MCP server in Cursor's config. Cursor's native indexing still works alongside it. You get both Cursor's real-time context and CCE's semantic search with savings tracking.</p>
+
+  <div class="cta-box">
+    <h3>Try CCE alongside Cursor</h3>
+    <p>Free, local, no conflict with Cursor's built-in indexing.</p>
+    <pre>uv tool install code-context-engine && cce init</pre>
+    <a class="cta-link" href="https://github.com/elara-labs/code-context-engine">View on GitHub</a>
+  </div>
+
+  <div class="tags">
+    <span class="tag">#CCEvsCursor</span>
+    <span class="tag">#CursorAlternative</span>
+    <span class="tag">#CodeIndexing</span>
+    <span class="tag">#SaveTokens</span>
+    <span class="tag">#ClaudeCode</span>
+    <span class="tag">#AICoding</span>
+    <span class="tag">#MCPServer</span>
+    <span class="tag">#OpenSource</span>
+  </div>
+</article>
+<footer>
+  <a href="https://github.com/elara-labs/code-context-engine">Code Context Engine</a> · MIT License · <a href="../">Home</a>
+</footer>
+</body>
+</html>
