@@ -1882,9 +1882,11 @@ def uninstall(yes: bool) -> None:
         project_config.unlink()
         lines.append(f"    {CROSS} {warn('Removed')} .context-engine.yaml")
 
-    # Remove CCE hooks from .claude/settings.local.json
-    settings_path = project_dir / ".claude" / "settings.local.json"
-    if settings_path.exists():
+    # Remove CCE hooks from .claude/settings.local.json AND .claude/settings.json
+    for settings_name in ("settings.local.json", "settings.json"):
+        settings_path = project_dir / ".claude" / settings_name
+        if not settings_path.exists():
+            continue
         try:
             data = json.loads(settings_path.read_text())
             hooks = data.get("hooks", {})
@@ -1912,21 +1914,25 @@ def uninstall(yes: bool) -> None:
                     settings_path.write_text(json.dumps(data, indent=2) + "\n")
                 else:
                     settings_path.unlink()
-                lines.append(f"    {CROSS} {warn('Removed')} CCE hooks from .claude/settings.local.json")
+                # Remove empty .claude directory
+                claude_dir = project_dir / ".claude"
+                if claude_dir.exists() and not any(claude_dir.iterdir()):
+                    claude_dir.rmdir()
+                lines.append(f"    {CROSS} {warn('Removed')} CCE hooks from .claude/{settings_name}")
         except (json.JSONDecodeError, OSError):
             pass
 
-    # Remove CCE entries from .gitignore
+    # Remove CCE entries from .gitignore (including comment lines)
     gitignore = project_dir / ".gitignore"
     if gitignore.exists():
         content = gitignore.read_text()
-        if ".cce/" in content or "context-engine" in content.lower():
-            # Remove lines containing CCE entries
+        if ".cce" in content or "context-engine" in content.lower() or "cce" in content.lower():
             new_lines = [
                 line for line in content.splitlines()
-                if ".cce/" not in line
-                and ".cce" not in line
+                if ".cce" not in line
                 and "context-engine" not in line.lower()
+                and not (line.startswith("#") and "cce" in line.lower())
+                and "claude code local settings" not in line.lower()
             ]
             new_content = "\n".join(new_lines).strip()
             if new_content:
