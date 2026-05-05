@@ -50,16 +50,26 @@ def atomic_write_text(path: Path, data: str) -> None:
 def resolve_cce_binary() -> str:
     """Find the globally installed cce binary path.
 
-    Checks user-local then system install paths across both Linux and macOS
-    (Homebrew on Apple Silicon installs to /opt/homebrew/bin), then PATH,
-    then sys.argv[0] if it looks like cce, then a bare "cce" fallback.
+    Checks user-local then system install paths across Linux, macOS, and
+    Windows, then PATH, then sys.argv[0] if it looks like cce, then a bare
+    "cce" fallback.
     """
-    candidates = [
-        Path.home() / ".local" / "bin" / "cce",   # pipx / uv tool default (Linux + macOS)
-        Path("/opt/homebrew/bin/cce"),            # macOS Homebrew on Apple Silicon
-        Path("/usr/local/bin/cce"),               # macOS Homebrew on Intel + Linux /usr/local
-        Path("/opt/local/bin/cce"),               # MacPorts
-    ]
+    if sys.platform.startswith("win"):
+        local_data = Path(os.environ.get("LOCALAPPDATA", ""))
+        app_data = Path(os.environ.get("APPDATA", ""))
+        candidates = [
+            Path.home() / ".local" / "bin" / "cce.exe",          # uv tool (Windows)
+            app_data / "uv" / "tools" / "code-context-engine" / "Scripts" / "cce.exe",
+            local_data / "uv" / "tools" / "code-context-engine" / "Scripts" / "cce.exe",
+            app_data / "Python" / "Scripts" / "cce.exe",          # pipx (Windows)
+        ]
+    else:
+        candidates = [
+            Path.home() / ".local" / "bin" / "cce",   # pipx / uv tool default (Linux + macOS)
+            Path("/opt/homebrew/bin/cce"),            # macOS Homebrew on Apple Silicon
+            Path("/usr/local/bin/cce"),               # macOS Homebrew on Intel + Linux /usr/local
+            Path("/opt/local/bin/cce"),               # MacPorts
+        ]
     for candidate in candidates:
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate)
@@ -67,6 +77,6 @@ def resolve_cce_binary() -> str:
     if found:
         return found
     arg0 = Path(sys.argv[0]).resolve()
-    if arg0.name in ("cce", "code-context-engine"):
+    if arg0.name in ("cce", "cce.exe", "code-context-engine", "code-context-engine.exe"):
         return str(arg0)
     return "cce"

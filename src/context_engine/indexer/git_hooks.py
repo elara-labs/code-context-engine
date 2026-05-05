@@ -15,10 +15,15 @@ def _resolve_cce_binary() -> str:
     runs `git commit` from a shell that doesn't pick up the same PATH as the one
     used to install the engine (e.g. different login shell, GUI git client).
     """
-    candidate = Path(sys.executable).parent / "cce"
+    # On Windows the launcher is cce.exe; on POSIX it has no extension.
+    exe_suffix = ".exe" if sys.platform.startswith("win") else ""
+    candidate = Path(sys.executable).parent / f"cce{exe_suffix}"
     if candidate.exists():
         return str(candidate)
-    which = shutil.which("cce") or shutil.which("code-context-engine")
+    which = (
+        shutil.which("cce") or shutil.which("code-context-engine")
+        or shutil.which("cce.exe")  # Windows fallback
+    )
     if which:
         return which
     # Last-resort: rely on PATH at hook-run time.

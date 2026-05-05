@@ -8,6 +8,16 @@ from pathlib import Path
 
 import click
 
+# Windows consoles default to cp1252 which can't encode the Unicode box-drawing
+# and symbol characters used in CCE's output. Reconfigure to UTF-8 early so
+# output doesn't crash on first run. errors='replace' is a safety net in case
+# the terminal still can't render a character.
+if sys.platform.startswith("win"):
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from context_engine.config import load_config, resolve_ollama_url, PROJECT_CONFIG_NAME
 
 
