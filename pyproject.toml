@@ -33,6 +33,7 @@ dependencies = [
     "tree-sitter-go>=0.23",
     "tree-sitter-rust>=0.23",
     "tree-sitter-java>=0.23",
+    "tree-sitter-html>=0.20",
     "watchdog>=4.0",
     "mcp>=1.0",
     "httpx>=0.27",

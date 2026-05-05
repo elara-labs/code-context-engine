@@ -165,6 +165,19 @@ _LANGUAGE_MAP = {
 }
 
 
+def _resolve_language(suffix: str, custom: dict[str, str]) -> str:
+    """Pick a language string for a file suffix.
+
+    User-supplied `custom` mappings (from config.indexer_extensions) override
+    `_LANGUAGE_MAP`. An empty value means plaintext indexing — useful when the
+    user wants the file included but knows there is no parser for it.
+    """
+    key = suffix.lower()
+    if key in custom:
+        return custom[key] or "plaintext"
+    return _LANGUAGE_MAP.get(key, "plaintext")
+
+
 @dataclass
 class IndexResult:
     indexed_files: list[str] = field(default_factory=list)
@@ -341,6 +354,7 @@ async def _run_indexing_locked(
     chunker = Chunker()
     manifest = Manifest(manifest_path=storage_base / "manifest.json")
     ignore_set = set(config.indexer_ignore)
+    custom_extensions: dict[str, str] = dict(getattr(config, "indexer_extensions", {}) or {})
     # Load .cceignore once per indexing run. Patterns are evaluated against
     # paths relative to project_dir; see indexer/ignorefile.py.
     from context_engine.indexer.ignorefile import load_ignore_patterns
@@ -498,7 +512,7 @@ async def _run_indexing_locked(
                         log_fn(f"  [skip] {rel_path} (unchanged)")
                     continue
 
-                language = _LANGUAGE_MAP.get(file_path.suffix, "plaintext")
+                language = _resolve_language(file_path.suffix, custom_extensions)
                 to_chunk.append((file_path, rel_path, content, content_hash, language))
 
             batch_chunks: list = []

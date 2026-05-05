@@ -8,6 +8,7 @@ import tree_sitter_php as tsphp
 import tree_sitter_go as tsgo
 import tree_sitter_rust as tsrust
 import tree_sitter_java as tsjava
+import tree_sitter_html as tshtml
 from tree_sitter import Language, Parser
 
 from context_engine.models import Chunk, ChunkType
@@ -28,6 +29,13 @@ _IMPORT_TYPES = {
     "import_declaration",                          # TypeScript, Go, Java
     "use_declaration",                             # PHP, Rust
 }
+# HTML chunks at <script> and <style> boundaries — the only nodes that
+# reliably represent a self-contained unit worth retrieving on its own.
+# Pages without either fall through to the whole-file plaintext chunk.
+_HTML_BLOCK_TYPES = {
+    "script_element",
+    "style_element",
+}
 
 _LANGUAGES = {
     "python": Language(tspython.language()),
@@ -38,6 +46,7 @@ _LANGUAGES = {
     "go": Language(tsgo.language()),
     "rust": Language(tsrust.language()),
     "java": Language(tsjava.language()),
+    "html": Language(tshtml.language()),
 }
 
 
@@ -69,6 +78,8 @@ class Chunker:
             chunks.append(self._node_to_chunk(node, source, file_path, language, ChunkType.FUNCTION))
         elif node.type in _CLASS_TYPES:
             chunks.append(self._node_to_chunk(node, source, file_path, language, ChunkType.CLASS))
+        elif node.type in _HTML_BLOCK_TYPES:
+            chunks.append(self._node_to_chunk(node, source, file_path, language, ChunkType.MODULE))
         for child in node.children:
             self._walk(child, source, file_path, language, chunks)
 

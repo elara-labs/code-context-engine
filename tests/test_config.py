@@ -85,3 +85,55 @@ def test_ollama_url_yaml_type_validation(tmp_path):
     }))
     with pytest.raises(ValueError, match="ollama_url"):
         load_config(global_path=config_file)
+
+
+def test_indexer_extensions_default_empty():
+    assert Config().indexer_extensions == {}
+
+
+def test_indexer_extensions_loads_and_normalizes(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump({
+        "indexer": {"extensions": {".tpl": "html", ".MJS": "javascript", ".liquid": "", ".erb": None}},
+    }))
+    config = load_config(global_path=config_file)
+    # Keys lowercased, null coerced to empty string.
+    assert config.indexer_extensions == {
+        ".tpl": "html",
+        ".mjs": "javascript",
+        ".liquid": "",
+        ".erb": "",
+    }
+
+
+def test_indexer_extensions_rejects_key_without_dot(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump({
+        "indexer": {"extensions": {"tpl": "html"}},
+    }))
+    with pytest.raises(ValueError, match="must be a string starting with"):
+        load_config(global_path=config_file)
+
+
+def test_indexer_extensions_rejects_non_string_value(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump({
+        "indexer": {"extensions": {".tpl": 123}},
+    }))
+    with pytest.raises(ValueError, match="must be a string or null"):
+        load_config(global_path=config_file)
+
+
+def test_indexer_extensions_project_overrides_global(tmp_path):
+    global_file = tmp_path / "config.yaml"
+    global_file.write_text(yaml.dump({
+        "indexer": {"extensions": {".tpl": "html"}},
+    }))
+    project_file = tmp_path / ".context-engine.yaml"
+    project_file.write_text(yaml.dump({
+        "indexer": {"extensions": {".tpl": "javascript", ".vue": "vue"}},
+    }))
+    config = load_config(global_path=global_file, project_path=project_file)
+    # Project entry wins for .tpl; .vue inherited because deep_merge merges dicts.
+    assert config.indexer_extensions[".tpl"] == "javascript"
+    assert config.indexer_extensions[".vue"] == "vue"

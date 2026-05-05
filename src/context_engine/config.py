@@ -75,6 +75,14 @@ class Config:
     # index. See indexer/secrets.py for the full pattern list. Default
     # True; users on non-sensitive corpora can opt out.
     indexer_redact_secrets: bool = True
+    # Extra extension → language mappings layered over the indexer's built-in
+    # _LANGUAGE_MAP. Keys must start with "." and are matched case-insensitively
+    # against file suffixes; values are language strings (e.g. "html",
+    # "javascript") that pick the tree-sitter parser, or "" for plaintext.
+    # Unknown language strings are accepted and fall back to plaintext at
+    # chunk time — same behavior as built-in entries without a parser (md,
+    # css, json, …).
+    indexer_extensions: dict[str, str] = field(default_factory=dict)
     # When True, memory.db writes (decisions, code_areas, turn_summaries,
     # session rollups) get PII scrubbed before storage: emails, IPs,
     # credit cards (Luhn-validated), SSNs, phone numbers. Free-form
@@ -127,6 +135,7 @@ _EXPECTED_TYPES: dict[str, type | tuple[type, ...]] = {
     "indexer_debounce_ms": int,
     "indexer_ignore": list,
     "indexer_redact_secrets": bool,
+    "indexer_extensions": dict,
     "memory_redact_pii": bool,
     "audit_log_enabled": bool,
     "storage_path": str,
@@ -148,6 +157,7 @@ def _apply_dict_to_config(config: Config, data: dict) -> None:
         ("indexer", "debounce_ms"): "indexer_debounce_ms",
         ("indexer", "ignore"): "indexer_ignore",
         ("indexer", "redact_secrets"): "indexer_redact_secrets",
+        ("indexer", "extensions"): "indexer_extensions",
         ("memory", "redact_pii"): "memory_redact_pii",
         ("audit", "enabled"): "audit_log_enabled",
         ("storage", "path"): "storage_path",
@@ -176,6 +186,23 @@ def _apply_dict_to_config(config: Config, data: dict) -> None:
                     if item not in merged:
                         merged.append(item)
                 setattr(config, attr, merged)
+            elif attr == "indexer_extensions" and isinstance(value, dict):
+                normalized: dict[str, str] = {}
+                for ext, lang in value.items():
+                    if not isinstance(ext, str) or not ext.startswith("."):
+                        raise ValueError(
+                            f"Config indexer.extensions: key {ext!r} must be a "
+                            "string starting with '.' (e.g. '.tpl')"
+                        )
+                    if lang is None:
+                        lang = ""
+                    if not isinstance(lang, str):
+                        raise ValueError(
+                            f"Config indexer.extensions[{ext!r}]: language must "
+                            f"be a string or null, got {type(lang).__name__}"
+                        )
+                    normalized[ext.lower()] = lang
+                setattr(config, attr, normalized)
             else:
                 setattr(config, attr, value)
 

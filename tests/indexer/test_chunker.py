@@ -88,3 +88,41 @@ def test_chunk_still_works_without_imports():
     chunker = Chunker()
     chunks = chunker.chunk(source, file_path="hello.py", language="python")
     assert len(chunks) == 1
+
+
+HTML_WITH_BLOCKS = """<!DOCTYPE html>
+<html>
+<head><title>Page</title></head>
+<body>
+<h1>Hello</h1>
+<script>
+  console.log("a");
+</script>
+<style>
+  body { color: red; }
+</style>
+</body>
+</html>
+"""
+
+HTML_PLAIN = """<!DOCTYPE html>
+<html><body><h1>Just text</h1><p>no script or style here</p></body></html>
+"""
+
+
+def test_chunk_html_extracts_script_and_style(chunker):
+    chunks = chunker.chunk(HTML_WITH_BLOCKS, file_path="page.html", language="html")
+    types = [c.chunk_type for c in chunks]
+    # script and style become MODULE chunks
+    assert types.count(ChunkType.MODULE) >= 2
+    contents = [c.content for c in chunks if c.chunk_type == ChunkType.MODULE]
+    assert any("console.log" in c for c in contents)
+    assert any("color: red" in c for c in contents)
+
+
+def test_chunk_html_without_blocks_falls_back_to_whole_file(chunker):
+    chunks = chunker.chunk(HTML_PLAIN, file_path="plain.html", language="html")
+    # No script/style → fallback path returns single MODULE chunk for the file
+    assert len(chunks) == 1
+    assert chunks[0].chunk_type == ChunkType.MODULE
+    assert "Just text" in chunks[0].content
