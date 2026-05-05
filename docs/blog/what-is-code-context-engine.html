@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>What is Code Context Engine? A Complete Guide for AI Coding Agents</title>
+  <meta name="description" content="Code Context Engine (CCE) is a free, local MCP server that indexes your codebase so AI coding agents like Claude Code, Cursor, and Copilot search instead of reading entire files. Save 94% on tokens. Here's how it works and how to set it up.">
+  <meta name="keywords" content="what is Code Context Engine, CCE tutorial, how to use CCE, MCP server explained, Claude Code MCP server, AI coding agent setup, code indexing tool, reduce AI coding costs, Code Context Engine guide, CCE getting started">
+  <meta property="og:title" content="What is Code Context Engine? Complete Guide">
+  <meta property="og:description" content="Free local tool that saves 94% on AI coding tokens. Here's what it is, how it works, and how to set it up in 60 seconds.">
+  <meta property="og:type" content="article">
+  <link rel="canonical" href="https://elara-labs.github.io/code-context-engine/blog/what-is-code-context-engine.html">
+  <link rel="icon" type="image/svg+xml" href="../logo.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg:#06080f; --bg2:#0c1120; --bg3:#131c30; --cyan:#00d4ff; --green:#34d399; --amber:#fbbf24; --text:#e8f0ff; --text2:#7b93b8; --text3:#3a5070; --border:#1a2a42; --mono:'DM Mono',monospace; --sans:'Instrument Sans',system-ui,sans-serif; }
+    body { background:var(--bg); color:var(--text); font-family:var(--sans); line-height:1.7; }
+    nav { position:sticky; top:0; z-index:100; padding:16px 48px; background:rgba(6,8,15,.85); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+    nav a { color:var(--text2); text-decoration:none; font-size:14px; font-weight:500; }
+    nav a:hover { color:var(--cyan); }
+    .nav-brand { display:flex; align-items:center; gap:10px; color:var(--text); font-weight:700; font-size:15px; }
+    .nav-brand img { width:24px; height:24px; border-radius:5px; }
+    article { max-width:720px; margin:0 auto; padding:80px 24px 120px; }
+    .meta { font-size:13px; color:var(--text3); font-family:var(--mono); margin-bottom:32px; }
+    h1 { font-size:42px; font-weight:800; line-height:1.2; letter-spacing:-0.025em; margin-bottom:24px; }
+    .subtitle { font-size:20px; color:var(--text2); margin-bottom:56px; line-height:1.5; }
+    h2 { font-size:26px; font-weight:700; margin-top:56px; margin-bottom:20px; }
+    h3 { font-size:20px; font-weight:700; margin-top:36px; margin-bottom:14px; }
+    p { font-size:17px; color:var(--text2); margin-bottom:20px; }
+    strong { color:var(--text); }
+    ul, ol { margin:0 0 20px 24px; color:var(--text2); font-size:17px; }
+    li { margin-bottom:8px; }
+    code { font-family:var(--mono); font-size:.88em; background:var(--bg3); border:1px solid var(--border); border-radius:4px; padding:2px 6px; color:var(--cyan); }
+    pre { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:24px; font-family:var(--mono); font-size:14px; color:var(--text); overflow-x:auto; margin:24px 0; line-height:1.8; }
+    .callout { background:var(--bg2); border-left:3px solid var(--cyan); border-radius:0 10px 10px 0; padding:20px 24px; margin:24px 0; }
+    .callout p { margin-bottom:0; }
+    table { width:100%; border-collapse:collapse; margin:24px 0; font-size:15px; }
+    th { text-align:left; padding:12px 16px; font-size:12px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--text3); border-bottom:2px solid var(--border); }
+    td { padding:12px 16px; border-bottom:1px solid var(--border); color:var(--text2); }
+    td:first-child { color:var(--text); font-weight:500; }
+    .highlight { color:var(--cyan); font-weight:700; }
+    .step { display:flex; gap:20px; margin:24px 0; align-items:flex-start; }
+    .step-num { width:36px; height:36px; border-radius:50%; background:var(--bg3); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:14px; font-weight:700; color:var(--cyan); flex-shrink:0; }
+    .step-content { flex:1; }
+    .step-content p { margin-bottom:8px; }
+    .cta-box { background:var(--bg2); border:1px solid rgba(0,212,255,0.2); border-radius:12px; padding:36px; margin-top:56px; text-align:center; }
+    .cta-box h3 { font-size:22px; margin-bottom:12px; margin-top:0; }
+    .cta-box p { text-align:center; }
+    .cta-box code { font-size:15px; display:inline-block; margin-top:12px; padding:8px 16px; border-radius:8px; }
+    .cta-link { display:inline-block; margin-top:20px; color:var(--cyan); text-decoration:none; font-weight:600; font-size:16px; }
+    .cta-link:hover { text-decoration:underline; }
+    .tags { margin-top:56px; padding-top:24px; border-top:1px solid var(--border); display:flex; flex-wrap:wrap; gap:8px; }
+    .tag { font-family:var(--mono); font-size:12px; padding:4px 12px; background:var(--bg3); border:1px solid var(--border); border-radius:20px; color:var(--text3); }
+    footer { border-top:1px solid var(--border); padding:24px 48px; text-align:center; font-size:13px; color:var(--text3); }
+    footer a { color:var(--text2); text-decoration:none; }
+    footer a:hover { color:var(--cyan); }
+    @media (max-width:640px) { article { padding:48px 16px 80px; } h1 { font-size:30px; } nav { padding:14px 16px; } .step { flex-direction:column; gap:12px; } }
+  </style>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "What is Code Context Engine? A Complete Guide for AI Coding Agents",
+    "description": "Code Context Engine (CCE) indexes your codebase so AI coding agents search instead of reading entire files. Save 94% on tokens.",
+    "datePublished": "2026-05-05",
+    "author": { "@type": "Organization", "name": "Elara Labs" },
+    "about": { "@type": "SoftwareApplication", "name": "Code Context Engine" }
+  }
+  </script>
+</head>
+<body>
+
+<nav>
+  <a href="../" class="nav-brand"><img src="../logo.svg" alt="CCE"> Code Context Engine</a>
+  <a href="https://github.com/elara-labs/code-context-engine">GitHub</a>
+</nav>
+
+<article>
+  <div class="meta">May 5, 2026 · 8 min read</div>
+
+  <h1>What is Code Context Engine?</h1>
+
+  <p class="subtitle">
+    A complete guide to understanding and using CCE. What it does, why you need it, how to set it up, and what happens under the hood.
+  </p>
+
+  <h2>The problem CCE solves</h2>
+
+  <p>When you use an AI coding agent (Claude Code, Cursor, Copilot, Gemini), it needs to understand your codebase to answer questions and write code. The way it does this today is by <strong>reading entire files</strong>.</p>
+
+  <p>Ask "how does the payment flow work?" and the agent reads <code>payments.py</code> (800 lines), <code>shipping.py</code> (600 lines), and <code>orders.py</code> (400 lines). That's 45,000 tokens of input. You pay for every one of them.</p>
+
+  <p>The problem: <strong>most of those tokens are irrelevant</strong>. The answer was in 3 functions totaling 40 lines. The other 1,760 lines were wasted context.</p>
+
+  <div class="callout">
+    <p><strong>Input tokens are 85-95% of your AI coding bill.</strong> Output tokens (the AI's responses) are cheap. The expensive part is feeding your code into the model.</p>
+  </div>
+
+  <h2>What CCE does</h2>
+
+  <p><strong>Code Context Engine</strong> (CCE) is a local tool that indexes your codebase and lets AI agents <strong>search</strong> instead of <strong>read</strong>.</p>
+
+  <p>Instead of reading 3 entire files (45,000 tokens), the AI calls <code>context_search("payment flow")</code> and gets back the 3 relevant functions (800 tokens). Same answer. 94% fewer tokens.</p>
+
+  <table>
+    <tr><th></th><th>Without CCE</th><th>With CCE</th></tr>
+    <tr><td>How the AI gets context</td><td>Reads entire files</td><td>Searches the index</td></tr>
+    <tr><td>Tokens per query</td><td>83,681</td><td class="highlight">4,927</td></tr>
+    <tr><td>What the AI sees</td><td>Everything in the file</td><td>Only the relevant code</td></tr>
+    <tr><td>Your cost (Sonnet)</td><td>$0.14/session</td><td class="highlight">$0.04/session</td></tr>
+  </table>
+
+  <h2>How to set it up (60 seconds)</h2>
+
+  <div class="step">
+    <span class="step-num">1</span>
+    <div class="step-content">
+      <p><strong>Install CCE</strong></p>
+      <pre>uv tool install code-context-engine</pre>
+      <p>Or use <code>pipx install code-context-engine</code> if you don't have uv. Requires Python 3.11+.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="step-num">2</span>
+    <div class="step-content">
+      <p><strong>Initialize your project</strong></p>
+      <pre>cd /path/to/your/project
+cce init</pre>
+      <p>This does everything automatically:</p>
+      <ul>
+        <li>Indexes your codebase (parses code into semantic chunks)</li>
+        <li>Registers the MCP server with your editor</li>
+        <li>Installs git hooks so the index stays current</li>
+        <li>Creates a CLAUDE.md with instructions for the AI</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="step-num">3</span>
+    <div class="step-content">
+      <p><strong>Restart your editor</strong></p>
+      <p>That's it. Your AI agent now searches the index instead of reading files. No configuration needed.</p>
+    </div>
+  </div>
+
+  <h2>Which editors work with CCE?</h2>
+
+  <p><code>cce init</code> auto-detects your editor and writes the right config:</p>
+
+  <table>
+    <tr><th>Editor</th><th>How it connects</th></tr>
+    <tr><td>Claude Code</td><td>MCP via <code>.mcp.json</code></td></tr>
+    <tr><td>Cursor</td><td>MCP via <code>.cursor/mcp.json</code></td></tr>
+    <tr><td>VS Code / Copilot</td><td>MCP via <code>.vscode/mcp.json</code></td></tr>
+    <tr><td>Gemini CLI</td><td>MCP via <code>.gemini/settings.json</code></td></tr>
+    <tr><td>Codex CLI</td><td>MCP via <code>~/.codex/config.toml</code></td></tr>
+    <tr><td>OpenCode</td><td>MCP via <code>opencode.json</code></td></tr>
+  </table>
+
+  <p>Multiple editors in the same project? All get configured in one command.</p>
+
+  <h2>What is MCP?</h2>
+
+  <p><strong>Model Context Protocol</strong> (MCP) is an open standard that lets AI agents use external tools. CCE is an MCP server. When Claude Code needs to understand your code, it calls CCE's tools through MCP instead of reading files directly.</p>
+
+  <p>You don't need to understand MCP to use CCE. <code>cce init</code> handles the wiring.</p>
+
+  <h2>How it works under the hood</h2>
+
+  <h3>1. Indexing</h3>
+  <p>CCE uses <strong>tree-sitter</strong> (the same parser used by GitHub, Neovim, and Zed) to parse your code into semantic chunks: functions, classes, modules. Each chunk gets a vector embedding stored locally in SQLite.</p>
+
+  <h3>2. Searching</h3>
+  <p>When the AI calls <code>context_search("payment flow")</code>, CCE runs a <strong>hybrid search</strong>: vector similarity (finds conceptually related code) combined with BM25 keyword matching (finds exact terms). Results are ranked by a confidence scorer that blends similarity, keyword match, and recency.</p>
+
+  <h3>3. Graph expansion</h3>
+  <p>If <code>payments.py</code> is a hit, CCE checks the code graph and automatically pulls in files it imports or calls. You get the dependency chain without asking for it.</p>
+
+  <h3>4. Compression</h3>
+  <p>Retrieved chunks are compressed to signatures and docstrings. A 200-line function becomes its signature + first docstring paragraph. The AI gets the shape of the code without every implementation detail.</p>
+
+  <h3>5. Memory</h3>
+  <p>CCE remembers decisions across sessions. Call <code>record_decision("use JWT for auth")</code> and next session, <code>session_recall("auth")</code> brings it back. No re-explaining your architecture.</p>
+
+  <h2>What tools does CCE give the AI?</h2>
+
+  <table>
+    <tr><th>Tool</th><th>What it does</th></tr>
+    <tr><td><code>context_search</code></td><td>Search for relevant code by description</td></tr>
+    <tr><td><code>expand_chunk</code></td><td>Get the full source of a compressed result</td></tr>
+    <tr><td><code>related_context</code></td><td>Find code connected via imports/calls</td></tr>
+    <tr><td><code>session_recall</code></td><td>Recall decisions from past sessions</td></tr>
+    <tr><td><code>record_decision</code></td><td>Save a decision for future sessions</td></tr>
+    <tr><td><code>record_code_area</code></td><td>Note which files were worked on</td></tr>
+    <tr><td><code>reindex</code></td><td>Re-index a file or the full project</td></tr>
+    <tr><td><code>index_status</code></td><td>Check index health</td></tr>
+    <tr><td><code>set_output_compression</code></td><td>Adjust how verbose Claude's replies are</td></tr>
+  </table>
+
+  <p>The AI uses these tools automatically. You don't need to call them yourself.</p>
+
+  <h2>Does the index stay current?</h2>
+
+  <p>Yes. Git hooks reindex on every commit, checkout, and merge. CCE uses content hashing (SHA-256 per file), so only changed files get re-processed. Typical reindex after editing a few files: <strong>under 1 second</strong>.</p>
+
+  <h2>Is my code sent to the cloud?</h2>
+
+  <p><strong>No.</strong> Everything runs locally. The index is stored in <code>~/.cce/projects/</code>. Embeddings are computed on your CPU using a local ONNX model. No API keys, no cloud services, no data leaves your machine.</p>
+
+  <h2>How do I see my savings?</h2>
+
+  <pre>cce savings</pre>
+
+  <p>Shows tokens saved, dollar amounts (from live Anthropic pricing), and per-layer breakdown. Run <code>cce savings --all</code> to see savings across all your projects.</p>
+
+  <h2>How do I remove it?</h2>
+
+  <pre>cce uninstall</pre>
+
+  <p>Removes everything: hooks, config files, index data, editor settings. Clean removal, nothing left behind.</p>
+
+  <h2>Supported languages</h2>
+
+  <p><strong>AST-aware chunking</strong> (tree-sitter parsed): Python, JavaScript, TypeScript, JSX, TSX, PHP, Go, Rust, Java.</p>
+
+  <p><strong>Fallback chunking</strong> (line-based): Markdown, YAML, JSON, config files, and all other text files.</p>
+
+  <h2>FAQ</h2>
+
+  <h3>Does it work on large codebases?</h3>
+  <p>Tested on repos up to 400+ files (1M tokens). Indexing takes 30-60 seconds on first run, under 1 second for incremental updates.</p>
+
+  <h3>What if the search returns wrong code?</h3>
+  <p>Recall@10 = 0.90 (tested on FastAPI). 9/10 times it finds the right file. The 10% miss is usually cross-cutting queries spanning many files. The AI falls back to reading files normally when search doesn't help.</p>
+
+  <h3>Can I use it alongside Cursor's built-in indexing?</h3>
+  <p>Yes. They don't conflict. CCE provides an additional MCP-based search. Cursor's native indexing still works.</p>
+
+  <h3>Is it free?</h3>
+  <p>Yes. MIT licensed. Free forever. No paid tier, no usage limits.</p>
+
+  <div class="cta-box">
+    <h3>Try it now</h3>
+    <p>Three commands. 60 seconds. See your savings immediately.</p>
+    <code>uv tool install code-context-engine && cd your-project && cce init</code>
+    <br>
+    <a class="cta-link" href="https://github.com/elara-labs/code-context-engine">View on GitHub</a>
+  </div>
+
+  <div class="tags">
+    <span class="tag">#CodeContextEngine</span>
+    <span class="tag">#ClaudeCode</span>
+    <span class="tag">#SaveTokens</span>
+    <span class="tag">#AICoding</span>
+    <span class="tag">#MCPServer</span>
+    <span class="tag">#OpenSource</span>
+    <span class="tag">#DeveloperTools</span>
+    <span class="tag">#Cursor</span>
+    <span class="tag">#VSCode</span>
+    <span class="tag">#GeminiCLI</span>
+    <span class="tag">#ReduceAICosts</span>
+    <span class="tag">#TokenSavings</span>
+    <span class="tag">#LLMTools</span>
+    <span class="tag">#CodingAgent</span>
+    <span class="tag">#CodeIndexing</span>
+  </div>
+</article>
+
+<footer>
+  <a href="https://github.com/elara-labs/code-context-engine">Code Context Engine</a> · MIT License · <a href="../">Home</a> · <a href="save-claude-code-tokens.html">Save Tokens</a> · <a href="benchmark-fastapi.html">Benchmark</a>
+</footer>
+
+</body>
+</html>

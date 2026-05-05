@@ -7,6 +7,12 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://elara-labs.github.io/code-context-engine/blog/what-is-code-context-engine.html</loc>
+    <lastmod>2026-05-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://elara-labs.github.io/code-context-engine/blog/save-claude-code-tokens.html</loc>
     <lastmod>2026-05-05</lastmod>
     <changefreq>monthly</changefreq>
