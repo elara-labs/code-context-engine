@@ -110,7 +110,7 @@ class _FakeEmbedder:
         self._dim = dim
 
     def embed_query(self, query: str):
-        import hashlib, struct
+        import hashlib
         words = query.lower().split() or [query.lower()]
         acc = [0.0] * self._dim
         for w in words:

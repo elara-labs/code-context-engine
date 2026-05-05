@@ -6,7 +6,7 @@ with mocked storage so CI catches regressions without a real index.
 """
 import json
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
@@ -245,7 +245,7 @@ def test_clear_no_data(runner, tmp_path):
 
 def test_pricing_fetch_and_fallback():
     """get_model_pricing returns a dict with opus/sonnet/haiku keys."""
-    from context_engine.pricing import get_model_pricing, _FALLBACK
+    from context_engine.pricing import get_model_pricing
     pricing = get_model_pricing()
     assert isinstance(pricing, dict)
     assert len(pricing) >= 1

@@ -181,7 +181,6 @@ def test_uninstall_removes_gitignore_cce_entries(runner, tmp_path):
 
 def test_uninstall_removes_index_data(runner, tmp_path):
     """Index data in ~/.cce/projects/<name> is deleted."""
-    import json
     from unittest.mock import patch as mock_patch
     from context_engine.config import Config
 

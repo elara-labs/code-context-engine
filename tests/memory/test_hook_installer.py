@@ -2,12 +2,10 @@
 from __future__ import annotations
 
 import json
-import os
 import stat
 import sys
 from pathlib import Path
 
-import pytest
 
 from context_engine.memory import hook_installer as hi
 

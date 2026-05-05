@@ -26,7 +26,6 @@ from context_engine.integration.git_context import (
 )
 from context_engine.integration.session_capture import SessionCapture
 from context_engine.memory import db as memory_db
-from context_engine.memory.extractive import extractive_summary
 from context_engine.memory.grammar import (
     compress as _grammar_compress,
     compress_with_counts as _grammar_compress_counted,

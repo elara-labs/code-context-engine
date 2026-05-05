@@ -1,4 +1,3 @@
-import pytest
 from context_engine.retrieval.query_parser import QueryParser, QueryIntent
 
 

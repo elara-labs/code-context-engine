@@ -1,7 +1,6 @@
 import os
 import stat
 import pytest
-from pathlib import Path
 from context_engine.indexer.git_hooks import install_hooks
 
 

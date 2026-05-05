@@ -1,7 +1,7 @@
 """Storage backend protocol — implemented by local and remote backends."""
 from typing import Protocol, runtime_checkable
 
-from context_engine.models import Chunk, GraphNode, GraphEdge, NodeType, EdgeType
+from context_engine.models import Chunk, GraphNode, GraphEdge, EdgeType
 
 
 @runtime_checkable

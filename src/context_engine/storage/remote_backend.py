@@ -1,7 +1,7 @@
 """Remote storage backend — proxies DB + LLM operations to a remote server via SSH/HTTP."""
 import asyncio
 import httpx
-from context_engine.models import Chunk, ChunkType, GraphNode, GraphEdge, NodeType, EdgeType
+from context_engine.models import Chunk, ChunkType, GraphNode, NodeType
 
 
 class RemoteBackend:

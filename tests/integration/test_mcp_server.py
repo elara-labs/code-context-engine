@@ -1,4 +1,3 @@
-import json
 import pytest
 from unittest.mock import MagicMock
 from context_engine.integration.mcp_server import ContextEngineMCP

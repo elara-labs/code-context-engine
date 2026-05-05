@@ -1,5 +1,5 @@
 import pytest
-from context_engine.models import Chunk, ChunkType, ConfidenceLevel
+from context_engine.models import Chunk, ChunkType
 from context_engine.integration.bootstrap import BootstrapBuilder
 
 

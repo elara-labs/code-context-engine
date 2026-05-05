@@ -85,7 +85,7 @@ def test_compress_turn_falls_back_to_truncation_without_embedder(conn):
     _seed_turn(conn, "s1", 1, "Some text that is fairly long and would be summarised normally.")
     conn.commit()
 
-    summary = memory_compressor.compress_turn(
+    memory_compressor.compress_turn(
         conn, session_id="s1", prompt_number=1, embedder=None,
     )
     conn.commit()

@@ -1,11 +1,9 @@
 """Tests for services.py — PID utilities and status checks."""
 import os
-from pathlib import Path
 
 import pytest
 
 from context_engine.services import (
-    _pid_dir,
     _read_pid,
     _write_pid,
     _remove_pid,

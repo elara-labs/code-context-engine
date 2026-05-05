@@ -10,7 +10,6 @@ This file verifies the wiring through the actual pipeline:
 """
 from __future__ import annotations
 
-from pathlib import Path
 
 import pytest
 

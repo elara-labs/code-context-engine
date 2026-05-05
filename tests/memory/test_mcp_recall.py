@@ -6,14 +6,12 @@ by calling the private _handle_* methods on a constructed ContextEngineMCP.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from context_engine.config import Config
 from context_engine.integration.mcp_server import ContextEngineMCP
-from context_engine.memory import db as memory_db
 
 
 @pytest.fixture
