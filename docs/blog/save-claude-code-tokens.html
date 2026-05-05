@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How to Save Claude Code Tokens (94% Reduction, Benchmarked)</title>
+  <meta name="description" content="Reduce Claude Code token usage by 94% with Code Context Engine. Index your codebase locally, AI searches instead of reading entire files. Save money on Claude API costs.">
+  <meta name="keywords" content="save Claude Code tokens, reduce Claude tokens, Claude Code expensive, Claude API costs, Claude token reduction, save tokens AI coding">
+  <meta property="og:title" content="How to Save Claude Code Tokens">
+  <meta property="og:description" content="94% fewer input tokens on Claude Code. Benchmarked, reproducible, free.">
+  <meta property="og:type" content="article">
+  <link rel="canonical" href="https://elara-labs.github.io/code-context-engine/blog/save-claude-code-tokens.html">
+  <link rel="icon" type="image/svg+xml" href="../logo.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg:#06080f; --bg2:#0c1120; --bg3:#131c30; --cyan:#00d4ff; --green:#34d399; --text:#e8f0ff; --text2:#7b93b8; --text3:#3a5070; --border:#1a2a42; --mono:'DM Mono',monospace; --sans:'Instrument Sans',system-ui,sans-serif; }
+    body { background:var(--bg); color:var(--text); font-family:var(--sans); line-height:1.7; }
+    nav { position:sticky; top:0; z-index:100; padding:16px 48px; background:rgba(6,8,15,.85); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+    nav a { color:var(--text2); text-decoration:none; font-size:14px; font-weight:500; }
+    nav a:hover { color:var(--cyan); }
+    .nav-brand { display:flex; align-items:center; gap:10px; color:var(--text); font-weight:700; font-size:15px; }
+    .nav-brand img { width:24px; height:24px; border-radius:5px; }
+    article { max-width:720px; margin:0 auto; padding:80px 24px 120px; }
+    .meta { font-size:13px; color:var(--text3); font-family:var(--mono); margin-bottom:32px; }
+    h1 { font-size:42px; font-weight:800; line-height:1.2; letter-spacing:-0.025em; margin-bottom:24px; }
+    .subtitle { font-size:20px; color:var(--text2); margin-bottom:56px; line-height:1.5; }
+    h2 { font-size:26px; font-weight:700; margin-top:56px; margin-bottom:20px; }
+    p { font-size:17px; color:var(--text2); margin-bottom:20px; }
+    strong { color:var(--text); }
+    code { font-family:var(--mono); font-size:.88em; background:var(--bg3); border:1px solid var(--border); border-radius:4px; padding:2px 6px; color:var(--cyan); }
+    pre { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:24px; font-family:var(--mono); font-size:14px; color:var(--text); overflow-x:auto; margin:24px 0; line-height:1.8; }
+    table { width:100%; border-collapse:collapse; margin:24px 0; font-size:15px; }
+    th { text-align:left; padding:12px 16px; font-size:12px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--text3); border-bottom:2px solid var(--border); }
+    td { padding:12px 16px; border-bottom:1px solid var(--border); color:var(--text2); }
+    td:first-child { color:var(--text); font-weight:500; }
+    .highlight { color:var(--cyan); font-weight:700; }
+    .cta-box { background:var(--bg2); border:1px solid rgba(0,212,255,0.2); border-radius:12px; padding:36px; margin-top:56px; text-align:center; }
+    .cta-box h3 { font-size:22px; margin-bottom:12px; }
+    .cta-box p { text-align:center; }
+    .cta-box code { font-size:15px; display:inline-block; margin-top:12px; padding:8px 16px; border-radius:8px; }
+    .cta-link { display:inline-block; margin-top:20px; color:var(--cyan); text-decoration:none; font-weight:600; font-size:16px; }
+    .cta-link:hover { text-decoration:underline; }
+    footer { border-top:1px solid var(--border); padding:24px 48px; text-align:center; font-size:13px; color:var(--text3); }
+    footer a { color:var(--text2); text-decoration:none; }
+    footer a:hover { color:var(--cyan); }
+    @media (max-width:640px) { article { padding:48px 16px 80px; } h1 { font-size:30px; } nav { padding:14px 16px; } }
+  </style>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "How to Save Claude Code Tokens (94% Reduction)",
+    "description": "Step-by-step guide to reducing Claude Code token usage by 94% using Code Context Engine.",
+    "datePublished": "2026-05-05",
+    "author": { "@type": "Organization", "name": "Elara Labs" }
+  }
+  </script>
+</head>
+<body>
+
+<nav>
+  <a href="../" class="nav-brand"><img src="../logo.svg" alt="CCE"> Code Context Engine</a>
+  <a href="https://github.com/elara-labs/code-context-engine">GitHub</a>
+</nav>
+
+<article>
+  <div class="meta">May 5, 2026 · 4 min read</div>
+
+  <h1>How to Save Claude Code Tokens</h1>
+
+  <p class="subtitle">
+    Claude Code is powerful but expensive. Input tokens are 85-95% of your bill. Here's how to cut them by 94%.
+  </p>
+
+  <h2>Why Claude Code costs so much</h2>
+
+  <p>Every time Claude Code needs context about your codebase, it reads entire files. Ask about one function? It reads the whole 800-line file. Ask about a payment flow? It reads every file that might be relevant.</p>
+
+  <p>A typical session on a medium project costs <strong>$0.14 on Sonnet</strong> or <strong>$0.70 on Opus</strong>. Most of that is input tokens, and most input tokens are wasted on code Claude didn't need.</p>
+
+  <h2>The fix: index your codebase</h2>
+
+  <p><strong>Code Context Engine</strong> (CCE) indexes your codebase locally using tree-sitter AST parsing and vector embeddings. When Claude needs context, it searches the index and gets only the relevant functions, not entire files.</p>
+
+  <pre>uv tool install code-context-engine
+cd /path/to/your/project
+cce init</pre>
+
+  <p>That's it. Three commands. Claude now searches instead of reading. Everything stays local on your machine.</p>
+
+  <h2>How much does it save?</h2>
+
+  <table>
+    <tr><th>Metric</th><th>Without CCE</th><th>With CCE</th></tr>
+    <tr><td>Tokens per query</td><td>83,681</td><td class="highlight">4,927</td></tr>
+    <tr><td>Cost per session (Sonnet)</td><td>$0.14</td><td class="highlight">$0.04</td></tr>
+    <tr><td>Cost per session (Opus)</td><td>$0.70</td><td class="highlight">$0.21</td></tr>
+  </table>
+
+  <p>Benchmarked on FastAPI (53 files, 180K tokens, 20 real queries). <strong>94% fewer input tokens.</strong> Reproducible in 2 commands.</p>
+
+  <h2>Works with more than Claude Code</h2>
+
+  <p>CCE works with any MCP-compatible editor:</p>
+
+  <table>
+    <tr><th>Editor</th><th>Setup</th></tr>
+    <tr><td>Claude Code</td><td>Auto-detected by <code>cce init</code></td></tr>
+    <tr><td>Cursor</td><td>Auto-detected</td></tr>
+    <tr><td>VS Code / Copilot</td><td>Auto-detected</td></tr>
+    <tr><td>Gemini CLI</td><td>Auto-detected</td></tr>
+    <tr><td>Codex CLI</td><td>Auto-detected</td></tr>
+    <tr><td>OpenCode</td><td>Auto-detected</td></tr>
+  </table>
+
+  <p>One index. All editors. Same savings.</p>
+
+  <h2>What about quality?</h2>
+
+  <p>Recall@10 = 0.90 on FastAPI. Nine out of ten times, CCE finds the right code. When it doesn't, Claude falls back to reading the full file normally. You lose nothing on the 10% miss rate, you save 94% on the 90% hit rate.</p>
+
+  <h2>Track your actual savings</h2>
+
+  <p>Run <code>cce savings</code> to see exactly how many tokens and dollars CCE saved you. Not estimates. Actual numbers, per query, with dollar amounts from live Anthropic pricing.</p>
+
+  <div class="cta-box">
+    <h3>Start saving tokens now</h3>
+    <p>Free, open source, MIT licensed. Your code never leaves your machine.</p>
+    <code>uv tool install code-context-engine && cce init</code>
+    <br>
+    <a class="cta-link" href="https://github.com/elara-labs/code-context-engine">View on GitHub</a>
+  </div>
+</article>
+
+<footer>
+  <a href="https://github.com/elara-labs/code-context-engine">Code Context Engine</a> · MIT License · <a href="../">Home</a>
+</footer>
+
+</body>
+</html>
