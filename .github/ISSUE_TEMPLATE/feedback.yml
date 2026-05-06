@@ -1,0 +1,47 @@
+name: Feedback / First Experience
+description: Tried CCE? Tell us how it went — good or bad.
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        You don't need a polished bug report to share feedback. If you tried CCE and formed an opinion, we want to hear it.
+
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Did it work for you?
+      options:
+        - "Yes — worked out of the box"
+        - "Mostly — with some friction"
+        - "No — couldn't get it running"
+        - "Haven't tried yet — sharing a thought"
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: What were you trying to do?
+      placeholder: "e.g. Use CCE with Claude on a TypeScript monorepo to reduce token usage."
+    validations:
+      required: true
+
+  - type: textarea
+    id: friction
+    attributes:
+      label: What was confusing or painful?
+      description: Setup, docs, config, output quality — anything. Honest feedback is more useful than polite feedback.
+      placeholder: "e.g. Took me 20 mins to figure out the MCP config format. The error message wasn't helpful."
+
+  - type: textarea
+    id: liked
+    attributes:
+      label: What worked well?
+      placeholder: "e.g. Token savings were immediately obvious. The hybrid search quality was better than I expected."
+
+  - type: input
+    id: stack
+    attributes:
+      label: Your stack (optional)
+      placeholder: "e.g. Python 3.12, VS Code, Claude Sonnet 4.5, macOS"
