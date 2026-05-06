@@ -320,6 +320,94 @@ async def test_missing_session_id_returns_400(hook_app, aiohttp_client):
         assert resp.status == 400, f"{endpoint} should require session_id"
 
 
+async def test_user_prompt_submit_without_prior_session_start_backfills_session(
+    hook_app, aiohttp_client,
+):
+    """Regression for issue #49: when `cce serve` starts mid-Claude-Code session
+    or Claude Code resumes an old session_id, UserPromptSubmit can fire without
+    a preceding SessionStart. The handler must backfill the parent session row
+    instead of crashing on the FK to sessions(id)."""
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    # Note: NO SessionStart call.
+    resp = await client.post(
+        "/hooks/UserPromptSubmit",
+        json={"session_id": "orphan", "prompt_text": "hi"},
+    )
+    assert resp.status == 200, f"backfill failed: {await resp.text()}"
+    assert (await resp.json())["prompt_number"] == 1
+    # Session row was created with project=demo (from app["project_name"]) and
+    # status=active, so subsequent SessionEnd / dashboard listings still work.
+    sess = conn.execute(
+        "SELECT id, project, status FROM sessions WHERE id = ?", ("orphan",),
+    ).fetchone()
+    assert sess is not None
+    assert sess["project"] == "demo"
+    assert sess["status"] == "active"
+    # Prompt was inserted normally.
+    prompts = list(conn.execute(
+        "SELECT prompt_number, prompt_text FROM prompts WHERE session_id = ?",
+        ("orphan",),
+    ))
+    assert prompts == [{"prompt_number": 1, "prompt_text": "hi"}] \
+        if isinstance(prompts[0], dict) else len(prompts) == 1
+
+
+async def test_post_tool_use_without_prior_session_start_backfills_session(
+    hook_app, aiohttp_client,
+):
+    """Same regression as above for PostToolUse — different table, same FK."""
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    resp = await client.post(
+        "/hooks/PostToolUse",
+        json={
+            "session_id": "orphan",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/tmp/x.py"},
+            "tool_output": "x = 1\n",
+        },
+    )
+    assert resp.status == 200, f"backfill failed: {await resp.text()}"
+    sess = conn.execute(
+        "SELECT id FROM sessions WHERE id = ?", ("orphan",),
+    ).fetchone()
+    assert sess is not None
+    events = list(conn.execute(
+        "SELECT tool_name FROM tool_events WHERE session_id = ?", ("orphan",),
+    ))
+    assert len(events) == 1
+
+
+async def test_real_session_start_after_backfill_does_not_clobber(
+    hook_app, aiohttp_client,
+):
+    """If SessionStart arrives after the session was backfilled (e.g. the
+    SessionStart POST was retried by Claude Code), INSERT OR IGNORE keeps the
+    original placeholder row and doesn't reset its started_at to the later
+    timestamp. The session keeps its real first-seen time."""
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    # Backfill via UserPromptSubmit first.
+    await client.post(
+        "/hooks/UserPromptSubmit",
+        json={"session_id": "late-start", "prompt_text": "hi"},
+    )
+    placeholder_epoch = conn.execute(
+        "SELECT started_at_epoch FROM sessions WHERE id = ?", ("late-start",),
+    ).fetchone()["started_at_epoch"]
+
+    # Real SessionStart arrives later with a different timestamp.
+    await client.post(
+        "/hooks/SessionStart",
+        json={"session_id": "late-start", "project": "demo", "started_at": 1700000000},
+    )
+    after = conn.execute(
+        "SELECT started_at_epoch FROM sessions WHERE id = ?", ("late-start",),
+    ).fetchone()["started_at_epoch"]
+    assert after == placeholder_epoch, "INSERT OR IGNORE should not overwrite"
+
+
 async def test_compression_queue_dedupes(hook_app, aiohttp_client):
     """Stop and the next UserPromptSubmit can both enqueue the same turn."""
     app, conn = hook_app

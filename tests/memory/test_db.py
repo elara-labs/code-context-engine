@@ -57,6 +57,20 @@ def test_foreign_keys_enabled(tmp_path: Path):
         conn.close()
 
 
+def test_busy_timeout_set(tmp_path: Path):
+    """Without busy_timeout, the auto-prune background task and the hot
+    insert path can both throw `sqlite3.OperationalError: database is locked`
+    on contention (issue #49). Pin that connect() configures a non-zero
+    timeout so a single contended write retries instead of crashing."""
+    db_path = tmp_path / "memory.db"
+    conn = memory_db.connect(db_path)
+    try:
+        timeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+        assert timeout >= 1000, f"busy_timeout too low: {timeout}ms"
+    finally:
+        conn.close()
+
+
 def test_decisions_fts_search(tmp_path: Path):
     """A decision inserted into the parent table is searchable via fts."""
     db_path = tmp_path / "memory.db"

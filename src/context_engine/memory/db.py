@@ -301,6 +301,12 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
     # WAL gives concurrent readers (the dashboard) decent isolation while the
     # MCP server writes; no impact on single-process use.
     conn.execute("PRAGMA journal_mode = WAL")
+    # Without busy_timeout, any contention (auto-prune vs hot-path inserts,
+    # dashboard reads vs writes) returns SQLITE_BUSY immediately. 5 seconds
+    # is well past any expected single-statement contention and short enough
+    # that a stuck writer surfaces as a real error rather than silently
+    # waiting forever.
+    conn.execute("PRAGMA busy_timeout = 5000")
     has_vec = _try_load_vec(conn)
     _ensure_schema(conn, has_vec=has_vec)
     return conn

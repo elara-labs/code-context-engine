@@ -43,6 +43,34 @@ def _conn(request: web.Request) -> sqlite3.Connection:
     return request.app["memory_db"]
 
 
+def _ensure_session(
+    conn: sqlite3.Connection,
+    request: web.Request,
+    session_id: str,
+) -> None:
+    """Backfill a `sessions` row for `session_id` if it doesn't already exist.
+
+    The lifecycle invariant — \"SessionStart fires before UserPromptSubmit /
+    PostToolUse for the same session\" — breaks when `cce serve` was started
+    after Claude Code, when Claude Code resumes a prior session_id without
+    re-firing SessionStart, or when the SessionStart POST itself failed to
+    reach the hook server. The downstream INSERTs into `prompts` and
+    `tool_events` would then trip the FK on `sessions(id)` and crash the
+    handler. Inserting a placeholder session row here lets the rest of the
+    handler proceed; the row will be reconciled if a real SessionStart
+    arrives later (INSERT OR IGNORE), and the session_id remains queryable
+    in the meantime.
+    """
+    project = request.app.get("project_name", "")
+    epoch = _now_epoch()
+    conn.execute(
+        "INSERT OR IGNORE INTO sessions "
+        "(id, project, started_at_epoch, started_at, status) "
+        "VALUES (?, ?, ?, ?, 'active')",
+        (session_id, project, epoch, _now_iso(epoch)),
+    )
+
+
 _RESUME_RECENT_DECISIONS = 5
 _RESUME_DECISION_REASON_CHARS = 200
 
@@ -213,6 +241,7 @@ async def handle_user_prompt_submit(request: web.Request) -> web.Response:
 
     conn = _conn(request)
     try:
+        _ensure_session(conn, request, session_id)
         if prompt_number is None:
             row = conn.execute(
                 "SELECT COALESCE(MAX(prompt_number), 0) + 1 AS next "
@@ -264,6 +293,7 @@ async def handle_post_tool_use(request: web.Request) -> web.Response:
 
     conn = _conn(request)
     try:
+        _ensure_session(conn, request, session_id)
         if prompt_number is None:
             row = conn.execute(
                 "SELECT COALESCE(MAX(prompt_number), 0) AS cur FROM prompts "
@@ -301,6 +331,7 @@ async def handle_stop(request: web.Request) -> web.Response:
 
     conn = _conn(request)
     try:
+        _ensure_session(conn, request, session_id)
         if prompt_number is None:
             row = conn.execute(
                 "SELECT COALESCE(MAX(prompt_number), 0) AS cur FROM prompts "
@@ -329,6 +360,7 @@ async def handle_session_end(request: web.Request) -> web.Response:
 
     conn = _conn(request)
     try:
+        _ensure_session(conn, request, session_id)
         epoch = _now_epoch()
         conn.execute(
             "UPDATE sessions SET status = 'completed', exit_reason = ?, "
