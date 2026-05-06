@@ -1809,17 +1809,9 @@ def uninstall(yes: bool) -> None:
     lines.append(section(f"Uninstall · {project_name}"))
     lines.append("")
 
-    # Remove git hooks
-    hooks_dir = project_dir / ".git" / "hooks"
-    removed_hooks = 0
-    if hooks_dir.exists():
-        for hook_name in ["post-commit", "post-checkout", "post-merge"]:
-            hook_file = hooks_dir / hook_name
-            if hook_file.exists():
-                content = hook_file.read_text()
-                if "cce" in content.lower() or "context-engine" in content.lower():
-                    hook_file.unlink()
-                    removed_hooks += 1
+    # Remove git hooks (worktree-aware via git rev-parse --git-path).
+    from context_engine.indexer.git_hooks import uninstall_hooks
+    removed_hooks = uninstall_hooks(str(project_dir))
     if removed_hooks:
         lines.append(f"    {CROSS} {warn('Removed')} {removed_hooks} git hooks")
     else:
