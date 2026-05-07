@@ -162,23 +162,23 @@ class GraphStore:
         with self._lock:
             cur = self._conn.cursor()
             # Collect node IDs in batches to respect SQLite param limits.
-            # Safe: ph is only "?" chars; values are parameterized.  noqa: S608
+            # Safe: ph is only "?" chars; values are parameterized.
             node_ids: list[str] = []
             for batch in batched_params(file_paths):
                 ph = ",".join("?" * len(batch))
-                cur.execute(
-                    f"SELECT id FROM nodes WHERE file_path IN ({ph})", batch  # noqa: S608
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query
+                    f"SELECT id FROM nodes WHERE file_path IN ({ph})", batch
                 )
                 node_ids.extend(row[0] for row in cur.fetchall())
             # Delete edges and nodes in batches.
             for batch in batched_params(node_ids):
                 ph = ",".join("?" * len(batch))
-                cur.execute(
-                    f"DELETE FROM edges WHERE source_id IN ({ph}) "  # noqa: S608
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query
+                    f"DELETE FROM edges WHERE source_id IN ({ph}) "
                     f"OR target_id IN ({ph})",
                     batch + batch,
                 )
-                cur.execute(f"DELETE FROM nodes WHERE id IN ({ph})", batch)  # noqa: S608
+                cur.execute(f"DELETE FROM nodes WHERE id IN ({ph})", batch)  # nosemgrep: sqlalchemy-execute-raw-query
             self._conn.commit()
 
     # ------------------------------------------------------------------
