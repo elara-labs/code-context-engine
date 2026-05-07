@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How to Use CCE with Cursor: Complete Setup Guide (2026)</title>
+  <meta name="description" content="Step-by-step guide to setting up Code Context Engine with Cursor. Reduce token costs, get faster responses, and keep cross-session memory. Works alongside Cursor's built-in indexing.">
+  <meta name="keywords" content="Cursor setup guide, CCE Cursor, Cursor reduce costs, Cursor MCP server, Cursor token savings, Cursor code indexing, Code Context Engine Cursor, Cursor AI optimization">
+  <meta property="og:title" content="How to Use CCE with Cursor: Complete Setup Guide">
+  <meta property="og:description" content="Save tokens and get cross-session memory in Cursor. One command setup, works alongside built-in indexing.">
+  <meta property="og:type" content="article">
+  <link rel="canonical" href="https://elara-labs.github.io/code-context-engine/blog/cce-cursor-setup-guide.html">
+  <link rel="icon" type="image/svg+xml" href="../logo.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg:#06080f; --bg2:#0c1120; --bg3:#131c30; --cyan:#00d4ff; --green:#34d399; --amber:#fbbf24; --text:#e8f0ff; --text2:#7b93b8; --text3:#3a5070; --border:#1a2a42; --mono:'DM Mono',monospace; --sans:'Instrument Sans',system-ui,sans-serif; }
+    body { background:var(--bg); color:var(--text); font-family:var(--sans); line-height:1.7; }
+    nav { position:sticky; top:0; z-index:100; padding:16px 48px; background:rgba(6,8,15,.85); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+    nav a { color:var(--text2); text-decoration:none; font-size:14px; font-weight:500; }
+    nav a:hover { color:var(--cyan); }
+    .nav-brand { display:flex; align-items:center; gap:10px; color:var(--text); font-weight:700; font-size:15px; }
+    .nav-brand img { width:24px; height:24px; border-radius:5px; }
+    article { max-width:720px; margin:0 auto; padding:80px 24px 120px; }
+    .meta { font-size:13px; color:var(--text3); font-family:var(--mono); margin-bottom:32px; }
+    h1 { font-size:40px; font-weight:800; line-height:1.2; letter-spacing:-0.025em; margin-bottom:24px; }
+    .subtitle { font-size:20px; color:var(--text2); margin-bottom:56px; line-height:1.5; }
+    h2 { font-size:26px; font-weight:700; margin-top:56px; margin-bottom:20px; }
+    h3 { font-size:20px; font-weight:700; margin-top:36px; margin-bottom:14px; }
+    p { font-size:17px; color:var(--text2); margin-bottom:20px; }
+    strong { color:var(--text); }
+    ul, ol { margin:0 0 20px 24px; color:var(--text2); font-size:17px; }
+    li { margin-bottom:8px; }
+    code { font-family:var(--mono); font-size:.88em; background:var(--bg3); border:1px solid var(--border); border-radius:4px; padding:2px 6px; color:var(--cyan); }
+    pre { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:24px; font-family:var(--mono); font-size:14px; color:var(--text); overflow-x:auto; margin:24px 0; line-height:1.8; }
+    .callout { background:var(--bg2); border-left:3px solid var(--cyan); border-radius:0 10px 10px 0; padding:20px 24px; margin:24px 0; }
+    .callout p { margin-bottom:0; }
+    .step { display:flex; gap:20px; margin:24px 0; align-items:flex-start; }
+    .step-num { width:36px; height:36px; border-radius:50%; background:var(--bg3); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:14px; font-weight:700; color:var(--cyan); flex-shrink:0; }
+    .step-content { flex:1; }
+    .step-content p { margin-bottom:8px; }
+    table { width:100%; border-collapse:collapse; margin:24px 0; font-size:15px; }
+    th { text-align:left; padding:12px 16px; font-size:12px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--text3); border-bottom:2px solid var(--border); }
+    td { padding:12px 16px; border-bottom:1px solid var(--border); color:var(--text2); }
+    td:first-child { color:var(--text); font-weight:500; }
+    .highlight { color:var(--cyan); font-weight:700; }
+    .cta-box { background:var(--bg2); border:1px solid rgba(0,212,255,0.2); border-radius:12px; padding:36px; margin-top:56px; text-align:center; }
+    .cta-box h3 { font-size:22px; margin-bottom:12px; margin-top:0; }
+    .cta-box p { text-align:center; }
+    .cta-link { display:inline-block; margin-top:20px; color:var(--cyan); text-decoration:none; font-weight:600; font-size:16px; }
+    .cta-link:hover { text-decoration:underline; }
+    .tags { margin-top:56px; padding-top:24px; border-top:1px solid var(--border); display:flex; flex-wrap:wrap; gap:8px; }
+    .tag { font-family:var(--mono); font-size:12px; padding:4px 12px; background:var(--bg3); border:1px solid var(--border); border-radius:20px; color:var(--text3); }
+    footer { border-top:1px solid var(--border); padding:24px 48px; text-align:center; font-size:13px; color:var(--text3); }
+    footer a { color:var(--text2); text-decoration:none; }
+    footer a:hover { color:var(--cyan); }
+    @media (max-width:640px) { article { padding:48px 16px 80px; } h1 { font-size:28px; } nav { padding:14px 16px; } .step { flex-direction:column; gap:12px; } }
+  </style>
+  <script type="application/ld+json">
+  { "@context":"https://schema.org", "@type":"Article", "headline":"How to Use CCE with Cursor: Complete Setup Guide", "datePublished":"2026-05-07", "author":{"@type":"Organization","name":"Elara Labs"} }
+  </script>
+</head>
+<body>
+<nav>
+  <a href="../" class="nav-brand"><img src="../logo.svg" alt="CCE"> Code Context Engine</a>
+  <a href="https://github.com/elara-labs/code-context-engine">GitHub</a>
+</nav>
+<article>
+  <div class="meta">May 7, 2026 · 5 min read</div>
+  <h1>How to Use CCE with Cursor</h1>
+  <p class="subtitle">Set up Code Context Engine in Cursor. Works alongside built-in indexing. One command, no conflicts.</p>
+
+  <h2>Why add CCE to Cursor?</h2>
+  <p>Cursor has built-in code indexing. So why add CCE? Three reasons:</p>
+  <ul>
+    <li><strong>Cross-session memory.</strong> Cursor starts fresh every session. CCE remembers decisions, architectural context, and code areas across sessions.</li>
+    <li><strong>Token savings tracking.</strong> Cursor doesn't tell you how many tokens it used. CCE tracks every query with dollar amounts.</li>
+    <li><strong>Multi-editor portability.</strong> If you also use Claude Code, VS Code, or Gemini CLI, CCE's index follows you. Cursor's doesn't.</li>
+  </ul>
+
+  <div class="callout">
+    <p><strong>CCE does not replace Cursor's indexing.</strong> They run side by side. Cursor's built-in features (tab completion, inline edits, apply) still use its own index. CCE adds MCP-based semantic search on top.</p>
+  </div>
+
+  <h2>Setup (2 minutes)</h2>
+
+  <div class="step">
+    <span class="step-num">1</span>
+    <div class="step-content">
+      <p><strong>Install CCE</strong></p>
+      <pre>uv tool install code-context-engine</pre>
+      <p>Or <code>pipx install code-context-engine</code>. Requires Python 3.11+.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="step-num">2</span>
+    <div class="step-content">
+      <p><strong>Initialize in your project</strong></p>
+      <pre>cd /path/to/your/project
+cce init</pre>
+      <p>CCE auto-detects Cursor and writes <code>.cursor/mcp.json</code> plus <code>.cursorrules</code> with search instructions.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <span class="step-num">3</span>
+    <div class="step-content">
+      <p><strong>Restart Cursor</strong></p>
+      <p>That's it. Cursor now has access to CCE's 9 MCP tools. The AI will use <code>context_search</code> automatically when exploring your code.</p>
+    </div>
+  </div>
+
+  <h2>What gets created</h2>
+  <table>
+    <tr><th>File</th><th>Purpose</th></tr>
+    <tr><td><code>.cursor/mcp.json</code></td><td>Registers CCE as an MCP server</td></tr>
+    <tr><td><code>.cursorrules</code></td><td>Tells Cursor's AI to use context_search instead of reading files</td></tr>
+    <tr><td><code>.gitignore</code></td><td>CCE entries added (local cache, settings)</td></tr>
+  </table>
+
+  <h2>Verify it works</h2>
+  <pre>cce search "your feature name"</pre>
+  <p>If results come back with token counts, CCE is working. In Cursor, ask the AI any question about your codebase. It should call <code>context_search</code> instead of reading entire files.</p>
+
+  <h2>Check your savings</h2>
+  <pre>cce savings</pre>
+  <p>Shows tokens saved, dollar amounts, and per-layer breakdown. Run after a few Cursor sessions to see the impact.</p>
+
+  <h2>What CCE gives Cursor's AI</h2>
+  <table>
+    <tr><th>Tool</th><th>What it does</th></tr>
+    <tr><td><code>context_search</code></td><td>Semantic search across your codebase</td></tr>
+    <tr><td><code>expand_chunk</code></td><td>Get full source for a compressed result</td></tr>
+    <tr><td><code>related_context</code></td><td>Find imports, callers, dependencies</td></tr>
+    <tr><td><code>session_recall</code></td><td>Recall past decisions</td></tr>
+    <tr><td><code>record_decision</code></td><td>Save decisions for next session</td></tr>
+  </table>
+
+  <h2>CCE vs Cursor indexing: what handles what</h2>
+  <table>
+    <tr><th>Feature</th><th>Cursor built-in</th><th>CCE</th></tr>
+    <tr><td>Tab completion</td><td class="highlight">Yes</td><td>No</td></tr>
+    <tr><td>Inline edits</td><td class="highlight">Yes</td><td>No</td></tr>
+    <tr><td>Semantic code search</td><td>Yes</td><td class="highlight">Yes (MCP)</td></tr>
+    <tr><td>Cross-session memory</td><td>No</td><td class="highlight">Yes</td></tr>
+    <tr><td>Token savings tracking</td><td>No</td><td class="highlight">Yes</td></tr>
+    <tr><td>Works in other editors</td><td>No</td><td class="highlight">Yes (6 editors)</td></tr>
+    <tr><td>Code stays local</td><td>No (cloud)</td><td class="highlight">Yes</td></tr>
+  </table>
+
+  <h2>Troubleshooting</h2>
+
+  <h3>Cursor doesn't use context_search</h3>
+  <p>Check that <code>.cursor/mcp.json</code> exists and Cursor was restarted after <code>cce init</code>. Cursor needs a restart to pick up new MCP servers.</p>
+
+  <h3>Index seems stale</h3>
+  <p>Git hooks reindex on every commit. If you haven't committed, run <code>cce index</code> manually. Or run <code>cce watch</code> in a separate terminal for real-time updates.</p>
+
+  <h3>Want to remove CCE</h3>
+  <pre>cce uninstall</pre>
+  <p>Removes all CCE files, config, hooks, and index data. Cursor's built-in indexing is unaffected.</p>
+
+  <div class="cta-box">
+    <h3>Try it now</h3>
+    <p>One command. Works alongside Cursor's built-in indexing. No conflicts.</p>
+    <pre>uv tool install code-context-engine && cce init</pre>
+    <a class="cta-link" href="https://github.com/elara-labs/code-context-engine">View on GitHub</a>
+  </div>
+
+  <div class="tags">
+    <span class="tag">#Cursor</span>
+    <span class="tag">#CursorAI</span>
+    <span class="tag">#MCPServer</span>
+    <span class="tag">#CodeContextEngine</span>
+    <span class="tag">#SaveTokens</span>
+    <span class="tag">#AICoding</span>
+    <span class="tag">#DeveloperTools</span>
+    <span class="tag">#CursorSetup</span>
+  </div>
+</article>
+<footer>
+  <a href="https://github.com/elara-labs/code-context-engine">Code Context Engine</a> · MIT License · <a href="../">Home</a>
+</footer>
+</body>
+</html>
