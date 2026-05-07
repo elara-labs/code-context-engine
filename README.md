@@ -151,7 +151,9 @@ With CCE:       context_search "payment flow"            =    800 tokens
 
 We benchmarked CCE against [FastAPI](https://github.com/fastapi/fastapi) (53 source files, 180K tokens) with 20 real coding questions. No cherry-picking, no synthetic queries.
 
-**Methodology:** For each query, "without CCE" means reading the full content of every file the query touches. "With CCE" means the relevant chunks after compression. This is conservative (agents often read more files than needed).
+**Methodology:** For each query, "without CCE" means reading the full content of every file the query touches. "With CCE" means the relevant chunks after compression.
+
+**Important baseline note:** The 94% number is measured against full-file reads, not against what Claude Code actually does. In practice, Claude Code already uses grep, partial file reads, and targeted tools, so the real-world savings compared to normal Claude Code behavior will be lower than 94%. We use full-file as the baseline because it's reproducible and deterministic (no agent behavior variability). The benchmark measures CCE's retrieval efficiency, not a head-to-head comparison with Claude Code's built-in exploration.
 
 | Metric | Result |
 |--------|--------|
