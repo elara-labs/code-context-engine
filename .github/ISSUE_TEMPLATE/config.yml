@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/elara-labs/code-context-engine/discussions
+    about: Not a bug and not feedback? Ask a question or start a discussion here.
