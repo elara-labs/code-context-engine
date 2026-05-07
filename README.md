@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/elara-labs-code-context-engine-badge.png)](https://mseep.ai/app/elara-labs-code-context-engine)
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/elara-labs/code-context-engine/main/docs/logo.svg" alt="Code Context Engine" width="140">
 </p>
