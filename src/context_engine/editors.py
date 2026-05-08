@@ -2,7 +2,7 @@
 
 Detects installed editors and writes MCP server config in each editor's
 format. Supports Claude Code, VS Code/Copilot, Cursor, Gemini CLI,
-OpenAI Codex CLI, and OpenCode.
+OpenAI Codex CLI, OpenCode, and Tabnine.
 
 Two scopes exist for an editor's config:
   - "project" (default): config_path / detect markers resolve under the
@@ -80,6 +80,13 @@ EDITORS: dict[str, dict] = {
         "format": "opencode",
         "detect": ["opencode.json", "opencode.jsonc"],
     },
+    "tabnine": {
+        "name": "Tabnine",
+        "config_path": ".tabnine/agent/settings.json",
+        "servers_key": "mcpServers",
+        "format": "json",
+        "detect": [".tabnine"],
+    },
 }
 
 # ── Instruction file definitions ──────────────────────────────────────
@@ -125,6 +132,11 @@ INSTRUCTION_FILES: dict[str, dict] = {
         "name": "GEMINI.md",
         "path": "GEMINI.md",
         "detect": [".gemini", "GEMINI.md"],
+    },
+    "tabnine": {
+        "name": "TABNINE.md",
+        "path": "TABNINE.md",
+        "detect": [".tabnine", "TABNINE.md"],
     },
 }
 

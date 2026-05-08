@@ -35,7 +35,8 @@
   <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Cursor-000?style=for-the-badge" alt="Cursor"></a>&nbsp;
   <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Gemini_CLI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Gemini CLI"></a>&nbsp;
   <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Codex_CLI-412991?style=for-the-badge" alt="Codex CLI"></a>&nbsp;
-  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/OpenCode-22C55E?style=for-the-badge&logo=gnometerminal&logoColor=white" alt="OpenCode"></a>
+  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/OpenCode-22C55E?style=for-the-badge&logo=gnometerminal&logoColor=white" alt="OpenCode"></a>&nbsp;
+  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Tabnine-4B32C3?style=for-the-badge&logo=tabnine&logoColor=white" alt="Tabnine"></a>
 </p>
 
 <p align="center">
@@ -109,6 +110,7 @@ Restart your editor. Done. Every question now hits the index instead of re-readi
 | Gemini CLI | `.gemini/settings.json` | `GEMINI.md` |
 | OpenAI Codex | `~/.codex/config.toml` (user-global, per-project section) | |
 | OpenCode | `opencode.json` | |
+| Tabnine | `.tabnine/agent/settings.json` | `TABNINE.md` |
 
 Multiple editors in the same project? All get configured in one command.
 

@@ -711,7 +711,7 @@ def init(ctx: click.Context) -> None:
     else:
         _ok("MCP server already configured in " + click.style(".mcp.json", fg="cyan"))
 
-    # Configure MCP for other detected editors (Cursor, VS Code, Gemini, Codex)
+    # Configure MCP for other detected editors (Cursor, VS Code, Gemini, Codex, Tabnine)
     from context_engine.editors import _editor_section  # noqa: SLF001
     detected = detect_editors(project_dir)
     for editor_key in detected:
