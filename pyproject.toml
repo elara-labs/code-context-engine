@@ -1,6 +1,6 @@
 [project]
 name = "code-context-engine"
-version = "0.4.18"
+version = "0.4.19"
 description = "Save 94% on Claude Code tokens. Index your codebase locally, AI agents search instead of reading files. Reduce Claude API costs, save tokens on Cursor, VS Code, Gemini CLI. Free, open source MCP server."
 readme = {file = "README.md", content-type = "text/markdown"}
 license = "MIT"
