@@ -137,7 +137,8 @@ class EmbeddingCache:
             for i in range(0, len(orphan_list), 500):
                 batch = orphan_list[i : i + 500]
                 placeholders = ",".join("?" * len(batch))
-                self._conn.execute(
+                # Safe: placeholders is only "?" chars; values are parameterized.
+                self._conn.execute(  # nosemgrep: sqlalchemy-execute-raw-query
                     f"DELETE FROM embedding_cache WHERE content_hash IN ({placeholders})",
                     batch,
                 )

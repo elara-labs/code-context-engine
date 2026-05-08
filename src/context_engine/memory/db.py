@@ -403,9 +403,10 @@ def _write_vec_row(conn, table: str, rowid: int, vec) -> None:
     doesn't break inserts on the source table — the failed row simply won't
     be semantically searchable until the vec tables are rebuilt.
     """
+    # Safe: table name is an internal constant, never from user input.
     try:
-        conn.execute(f"DELETE FROM {table} WHERE rowid = ?", (rowid,))
-        conn.execute(
+        conn.execute(f"DELETE FROM {table} WHERE rowid = ?", (rowid,))  # nosemgrep: sqlalchemy-execute-raw-query
+        conn.execute(  # nosemgrep: sqlalchemy-execute-raw-query
             f"INSERT INTO {table}(rowid, embedding) VALUES (?, ?)",
             (rowid, _serialize_vec(vec)),
         )
@@ -786,9 +787,10 @@ def prune_old_rows(
 
     archived: dict[str, list[dict]] = {}
 
+    # Safe: table and col_list are internal constants, never from user input.
     def _harvest_and_delete(table: str, columns: list[str], cutoff: int) -> int:
         col_list = ", ".join(columns)
-        rows = conn.execute(
+        rows = conn.execute(  # nosemgrep: sqlalchemy-execute-raw-query
             f"SELECT {col_list} FROM {table} WHERE created_at_epoch < ?",
             (cutoff,),
         ).fetchall()
@@ -796,7 +798,7 @@ def prune_old_rows(
             return 0
         if archive:
             archived[table] = [dict(r) for r in rows]
-        conn.execute(
+        conn.execute(  # nosemgrep: sqlalchemy-execute-raw-query
             f"DELETE FROM {table} WHERE created_at_epoch < ?",
             (cutoff,),
         )
