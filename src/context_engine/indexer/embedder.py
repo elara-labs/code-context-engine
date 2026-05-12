@@ -25,11 +25,11 @@ _DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 def _resolve_cache_dir() -> Path:
     """Pick a persistent fastembed cache location.
 
-    Precedence:
-      1. ``FASTEMBED_CACHE_PATH`` (the env var fastembed itself recognises)
-      2. ``CCE_FASTEMBED_CACHE_PATH`` (CCE-specific override, takes
-         priority over fastembed's own var so users with multiple tools
-         using fastembed can isolate CCE's cache)
+    Precedence (highest first):
+      1. ``CCE_FASTEMBED_CACHE_PATH`` (CCE-specific override; takes
+         priority over fastembed's own var so users running multiple
+         tools that share fastembed can isolate CCE's cache)
+      2. ``FASTEMBED_CACHE_PATH`` (the env var fastembed itself recognises)
       3. ``$XDG_CACHE_HOME/fastembed`` if XDG_CACHE_HOME is set
       4. ``~/.cache/fastembed``
 
@@ -137,8 +137,8 @@ class Embedder:
                 f"Failed to load embedding model '{model_name}'. "
                 f"Ensure fastembed is installed and the model name is valid. "
                 f"Cache dir: {cache_dir}. "
-                f"If a previous download was interrupted, removing the cache "
-                f"and retrying may help: rm -rf {cache_dir}. "
+                f"If a previous download was interrupted, deleting the cache "
+                f"directory and retrying may help. "
                 f"Supported models: TextEmbedding.list_supported_models(). "
                 f"Original error: {exc}"
             ) from exc

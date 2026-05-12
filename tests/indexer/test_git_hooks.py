@@ -63,3 +63,32 @@ def test_post_commit_hook_does_not_use_removed_flag(git_repo):
         )
         # Sanity: the hook still triggers an index.
         assert " index " in content or "index>" in content
+
+
+def test_post_commit_hook_quotes_bin_path_with_spaces(tmp_path, monkeypatch):
+    """A resolved cce binary path with spaces (e.g. Alice Smith) must be
+    shell-quoted in the generated hook so it isn't tokenised by sh
+    (Copilot review on #70)."""
+    from context_engine.indexer import git_hooks
+
+    spaced = tmp_path / "Alice Smith" / "bin" / "cce"
+    spaced.parent.mkdir(parents=True)
+    spaced.write_text("#!/bin/sh\necho cce\n")
+    monkeypatch.setattr(
+        git_hooks, "_resolve_cce_binary", lambda: str(spaced),
+    )
+
+    git_repo = tmp_path / "repo"
+    (git_repo / ".git" / "hooks").mkdir(parents=True)
+    git_hooks.install_hooks(project_dir=str(git_repo))
+
+    body = (git_repo / ".git" / "hooks" / "post-commit").read_text()
+    # The path must be quoted as one shell token. shlex.quote single-
+    # quotes anything containing whitespace, so the literal `Alice Smith`
+    # must live inside `'...'`. Confirm a `'` appears before any space
+    # in the path.
+    assert "'" in body, f"bin_path should be shell-quoted: {body!r}"
+    assert "Alice Smith" in body
+    quoted_idx = body.index("'")
+    space_in_path = body.index("Alice Smith") + len("Alice")
+    assert quoted_idx < space_in_path

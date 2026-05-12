@@ -91,6 +91,35 @@ def test_windows_hook_has_tcp_liveness_probe(monkeypatch):
     assert probe_pos < curl_pos
 
 
+# ─── Copilot review: PORT must be validated before shell interpolation ─
+
+
+def test_posix_hook_rejects_non_numeric_port(monkeypatch):
+    """Corrupted/hostile serve.port (containing $() or backticks) must
+    not be interpolated into the bash -c command (Copilot security
+    review on #70)."""
+    monkeypatch.setattr(hi, "_is_windows", lambda: False)
+    body = hi._hook_script_body()
+    assert "*[!0-9]*" in body, "POSIX script must reject non-digit PORT"
+    assert "-le 65535" in body, "POSIX script must cap PORT at 65535"
+    validation_pos = body.index("*[!0-9]*")
+    probe_pos = body.index("/dev/tcp/127.0.0.1")
+    curl_pos = body.index("curl -sf")
+    assert validation_pos < probe_pos < curl_pos
+
+
+def test_windows_hook_rejects_non_numeric_port(monkeypatch):
+    monkeypatch.setattr(hi, "_is_windows", lambda: True)
+    body = hi._hook_script_body()
+    assert "findstr /R" in body
+    assert "LSS 1" in body
+    assert "GTR 65535" in body
+    validation_pos = body.index("findstr /R")
+    probe_pos = body.index("TcpClient")
+    curl_pos = body.index("curl -sf")
+    assert validation_pos < probe_pos < curl_pos
+
+
 def test_install_settings_uses_cmd_quoting_on_windows(tmp_path: Path, monkeypatch):
     """On Windows, the hook command must use cmd.exe-style double quotes
     around the path. POSIX single-quotes (shlex.quote) would not dequote

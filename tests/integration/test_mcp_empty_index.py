@@ -7,6 +7,7 @@ spawns the reindex as a background task instead.
 """
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import MagicMock
 
 import pytest
@@ -61,6 +62,14 @@ async def test_context_search_returns_status_when_index_empty(
     # is empty and what to do.
     assert "empty" in text.lower()
     assert "cce index" in text.lower() or "indexing" in text.lower()
+    # Background indexing must have been scheduled. Yielding once lets
+    # the create_task'd coroutine run (Copilot review: the previous
+    # version of the test recorded `indexing_called` but never
+    # asserted on it).
+    await asyncio.sleep(0)
+    assert indexing_called == [True], (
+        "Background indexing should have been scheduled exactly once"
+    )
 
 
 @pytest.mark.asyncio

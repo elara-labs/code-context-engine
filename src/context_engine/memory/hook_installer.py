@@ -77,6 +77,14 @@ PORT_FILE="${HOME}/.cce/projects/$(basename "${PWD}")/serve.port"
 [ -r "${PORT_FILE}" ] || exit 0
 PORT="$(cat "${PORT_FILE}" 2>/dev/null)"
 [ -n "${PORT}" ] || exit 0
+# PORT is interpolated into a `bash -c` command and a curl URL below.
+# A corrupted (or hostile) port file containing $(...) / backticks /
+# newlines would otherwise be evaluated by the shell. Refuse anything
+# that isn't a plain integer in the valid TCP range (Copilot review).
+case "${PORT}" in
+    ''|*[!0-9]*) exit 0 ;;
+esac
+[ "${PORT}" -ge 1 ] 2>/dev/null && [ "${PORT}" -le 65535 ] 2>/dev/null || exit 0
 
 # Quick TCP liveness probe via bash's /dev/tcp — if nothing is listening on
 # the port (i.e. cce serve died but left its serve.port behind), bail out
@@ -125,6 +133,15 @@ if not exist "%PORT_FILE%" exit /b 0
 
 set /p PORT=<"%PORT_FILE%"
 if "%PORT%"=="" exit /b 0
+REM PORT is interpolated into the PowerShell -Command string and the
+REM curl URL below. A corrupted (or hostile) port file containing
+REM ');something(' would otherwise terminate the intended expression
+REM and inject. Refuse anything that isn't a positive integer in the
+REM valid TCP range (Copilot review).
+echo %PORT%|findstr /R "^[1-9][0-9]*$" >nul 2>&1
+if errorlevel 1 exit /b 0
+if %PORT% LSS 1 exit /b 0
+if %PORT% GTR 65535 exit /b 0
 
 REM Liveness probe before spending curl's full timeout. PowerShell's
 REM TcpClient is universally available on supported Windows targets and
