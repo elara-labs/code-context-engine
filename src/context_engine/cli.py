@@ -755,12 +755,101 @@ def init(ctx: click.Context) -> None:
         "  " + click.style("Indexing project", fg="cyan", bold=True) + "..."
     )
     asyncio.run(_run_index(config, str(project_dir), full=True))
+
+    # 7. Project summary — extractive, no LLM dep. Runs after indexing
+    # so the tech-stack scan sees the freshly-populated vector store,
+    # and is the data SessionStart will inject on every Claude/Codex
+    # boot from here on.
+    try:
+        _refresh_project_summary(config, project_dir)
+        _ok("Project summary captured  " + _dim("(injected on every Claude Code session)"))
+    except Exception as exc:  # pragma: no cover — best effort
+        _warn(f"Project summary skipped: {exc}")
+
     click.echo("")
     click.echo(
         click.style("  Done!", fg="green", bold=True) +
         click.style("  Restart Claude Code to activate CCE.", fg="white")
     )
     click.echo("")
+
+
+def _refresh_project_summary(config, project_dir: Path) -> dict:
+    """Rebuild the project_summary row for `project_dir` if missing or stale.
+
+    Returns the (possibly-just-regenerated) summary dict. Safe to call on
+    every `cce init` and from the `cce summarize` command.
+    """
+    from context_engine.memory import db as memory_db
+    from context_engine.memory.project_summary import (
+        build_project_summary, is_stale, load_project_summary,
+        upsert_project_summary,
+    )
+    from context_engine.storage.local_backend import LocalBackend
+
+    project_name = project_dir.name
+    storage_base = Path(config.storage_path) / project_name
+    backend = LocalBackend(base_path=str(storage_base))
+    conn = memory_db.connect(memory_db.memory_db_path(storage_base))
+    try:
+        existing = load_project_summary(conn, project_name)
+        if existing and not is_stale(existing):
+            return existing
+        summary = build_project_summary(
+            project_dir=project_dir,
+            memory_conn=conn,
+            vector_store=backend._vector_store,
+        )
+        upsert_project_summary(conn, project_name, summary)
+        return summary
+    finally:
+        conn.close()
+
+
+@main.command()
+@click.option(
+    "--force", is_flag=True,
+    help="Regenerate even if the cached summary is fresh.",
+)
+@click.pass_context
+def summarize(ctx: click.Context, force: bool) -> None:
+    """Refresh the project summary that SessionStart injects.
+
+    Pulled extractively from README/pyproject + indexed chunks +
+    recent code_areas — no LLM needed. Called automatically by
+    `cce init` and refreshed every 7 days otherwise; run this
+    manually after a major architectural change so the next Claude
+    Code session sees the new shape.
+    """
+    from context_engine.memory.project_summary import format_summary_block
+    config = ctx.obj["config"]
+    project_dir = _safe_cwd()
+    project_name = project_dir.name
+
+    if force:
+        # Drop the existing row so _refresh_project_summary always
+        # rebuilds rather than honouring the freshness check.
+        from context_engine.memory import db as memory_db
+        storage_base = Path(config.storage_path) / project_name
+        conn = memory_db.connect(memory_db.memory_db_path(storage_base))
+        try:
+            conn.execute(
+                "DELETE FROM project_summary WHERE project = ?",
+                (project_name,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    summary = _refresh_project_summary(config, project_dir)
+    block = format_summary_block(summary)
+    if not block:
+        _warn("No summary content available yet — try `cce index` first.")
+        return
+    click.echo("")
+    click.echo(block)
+    click.echo("")
+    _ok(f"Project summary stored for {project_name}")
 
 
 @main.command()

@@ -45,6 +45,10 @@ def _conn(request: web.Request) -> sqlite3.Connection:
 
 _RESUME_RECENT_DECISIONS = 5
 _RESUME_DECISION_REASON_CHARS = 200
+# How many prior-session rollups to surface. Originally 1, but a single
+# rollup loses the trajectory of multi-day work — three is enough to
+# show "what we did Mon, Tue, Wed" without bloating the resume block.
+_RESUME_RECENT_SESSIONS = 3
 
 
 def _build_savings_line(conn: sqlite3.Connection) -> str:
@@ -99,15 +103,49 @@ def build_session_resume(conn: sqlite3.Connection, project: str) -> str:
     conversation start — so this is the mechanism that prevents "decisions
     you made last week have to be re-explained today." Empty string for
     a brand-new project so there's no awkward header on the first session.
+
+    Layout (each section omitted when empty):
+
+        ## CCE memory · resuming <project>
+
+        **Project summary**          ← from project_summary table
+          <pitch>
+          _Stack:_ <tech_stack>
+          _Recent focus:_
+            - <file> — <description>
+
+        **Savings**                  ← from savings_log
+
+        **Previous sessions**        ← last 3 sessions w/ rollup
+          (session sid · ended_at)
+            <rollup>
+
+        **Recent decisions**         ← last 5 decisions
+
+        Footer with session_recall / session_timeline hints.
     """
     parts: list[str] = []
 
-    last_rollup = conn.execute(
+    # ── Project summary (v4) ───────────────────────────────────────────
+    from context_engine.memory.project_summary import (
+        format_summary_block, load_project_summary,
+    )
+    try:
+        summary = load_project_summary(conn, project)
+    except sqlite3.Error:
+        # project_summary table may not exist yet on a partially-migrated
+        # db. Treat as absent and continue — the rest of the resume is
+        # independent.
+        summary = None
+    summary_block = format_summary_block(summary) if summary else ""
+
+    recent_sessions = list(conn.execute(
         "SELECT id, rollup_summary, ended_at "
         "FROM sessions "
         "WHERE rollup_summary IS NOT NULL AND rollup_summary != '' "
-        "ORDER BY started_at_epoch DESC LIMIT 1"
-    ).fetchone()
+        "ORDER BY started_at_epoch DESC LIMIT ?",
+        (_RESUME_RECENT_SESSIONS,),
+    ))
 
     decisions = list(conn.execute(
         "SELECT decision, reason, source, session_id, created_at "
@@ -118,7 +156,7 @@ def build_session_resume(conn: sqlite3.Connection, project: str) -> str:
 
     savings_line = _build_savings_line(conn)
 
-    if not last_rollup and not decisions and not savings_line:
+    if not (recent_sessions or decisions or savings_line or summary_block):
         return ""
 
     parts.append(f"## CCE memory · resuming {project}")
@@ -126,19 +164,32 @@ def build_session_resume(conn: sqlite3.Connection, project: str) -> str:
     # before display so the resume reads as natural prose.
     from context_engine.memory.grammar import expand as _grammar_expand
 
+    if summary_block:
+        parts.append("")
+        parts.append(summary_block)
+
     if savings_line:
         parts.append("")
         parts.append(f"**{savings_line}**")
 
-    if last_rollup:
-        when = last_rollup["ended_at"] or "in progress"
+    if recent_sessions:
         parts.append("")
-        parts.append(f"**Previous session** ({when}):")
-        rollup = _grammar_expand((last_rollup["rollup_summary"] or "").strip())
-        for line in rollup.split("\n"):
-            line = line.strip()
-            if line:
-                parts.append(f"  {line}")
+        if len(recent_sessions) == 1:
+            parts.append("**Previous session**:")
+        else:
+            parts.append(
+                f"**Previous {len(recent_sessions)} sessions** "
+                f"(most-recent first):"
+            )
+        for s in recent_sessions:
+            when = s["ended_at"] or "in progress"
+            sid = s["id"]
+            parts.append(f"  - _session `{sid}` · {when}_")
+            rollup = _grammar_expand((s["rollup_summary"] or "").strip())
+            for line in rollup.split("\n"):
+                line = line.strip()
+                if line:
+                    parts.append(f"      {line}")
     if decisions:
         parts.append("")
         parts.append("**Recent decisions** (most-recent first):")
