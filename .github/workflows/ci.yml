@@ -70,12 +70,21 @@ jobs:
       - name: Install package
         run: pip install -e ".[dev]"
 
+      # Pin fastembed's cache for BOTH the warm step and the test step so
+      # they share state. Embedder defaults to ~/.cache/fastembed under
+      # #67, and fastembed itself honours FASTEMBED_CACHE_PATH — setting
+      # this env var keeps the warm step and the tests pointed at the
+      # same directory without needing explicit kwargs.
       - name: Warm fastembed model cache
+        env:
+          FASTEMBED_CACHE_PATH: ${{ runner.temp }}/fastembed-cache
         run: |
           python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')"
           python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')"
 
       - name: Run tests
+        env:
+          FASTEMBED_CACHE_PATH: ${{ runner.temp }}/fastembed-cache
         run: pytest -n ${{ runner.os == 'Windows' && '0' || '4' }} --cov=context_engine --cov-report=xml --cov-report=term
         # Windows GitHub Actions runners send spurious SIGINT during pytest
         # teardown, causing exit code 1 even when all tests pass (779/779).
