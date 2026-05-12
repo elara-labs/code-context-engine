@@ -2927,16 +2927,30 @@ async def _run_serve(config) -> None:
             _log.info("Received %s, shutting down...", signame)
             mcp_task.cancel()
 
+    # Build the candidate list with getattr so we don't reference
+    # `signal.SIGHUP` at the tuple-construction site — SIGHUP is
+    # undefined on Windows and that AttributeError would fire *before*
+    # the try/except below could swallow it, crashing `cce serve` on
+    # Windows entirely (Copilot review on #69).
     installed_signals: list[int] = []
-    for _sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+    candidate_sigs = [
+        s for s in (
+            getattr(signal, "SIGINT", None),
+            getattr(signal, "SIGTERM", None),
+            getattr(signal, "SIGHUP", None),
+        ) if s is not None
+    ]
+    for _sig in candidate_sigs:
         try:
             serve_loop.add_signal_handler(
                 _sig, _request_shutdown, _sig.name,
             )
             installed_signals.append(_sig)
-        except (NotImplementedError, RuntimeError, AttributeError):
-            # Windows lacks add_signal_handler for SIGHUP, and asyncio
-            # raises NotImplementedError outside the main thread.
+        except (NotImplementedError, RuntimeError):
+            # Windows's ProactorEventLoop refuses add_signal_handler;
+            # asyncio also raises NotImplementedError outside the main
+            # thread. SIGTERM still arrives via the default Python
+            # handler in those environments.
             pass
 
     try:

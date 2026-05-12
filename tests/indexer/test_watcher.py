@@ -124,11 +124,19 @@ class _FakeEvent:
             self.dest_path = dest_path
 
 
-def _make_handler(tmp_path, queued):
+def _make_handler(tmp_path, queued, _registry: list | None = None):
+    """Build a _DebouncedHandler with a recorder swapped in for _enqueue.
+
+    A loop is required by the constructor but never used here —
+    `_enqueue` is monkey-patched below, so `on_change` is never
+    scheduled. Loops created by this helper are tracked in a
+    per-test registry so the test can close them on teardown — leaving
+    them open emits ResourceWarnings (Copilot review on #69).
+    """
     from context_engine.indexer.watcher import _DebouncedHandler
-    # A loop is required by the handler constructor but never used here —
-    # _enqueue is monkey-patched below, so on_change is never scheduled.
     loop = asyncio.new_event_loop()
+    if _registry is not None:
+        _registry.append(loop)
     handler = _DebouncedHandler(
         on_change=lambda p: None,
         debounce_ms=10,
@@ -136,20 +144,35 @@ def _make_handler(tmp_path, queued):
         watch_dir=str(tmp_path),
         loop=loop,
     )
-    # Swap in a recorder so we can assert what was enqueued without timing
-    # out on the real debounce timer.
     handler._enqueue = lambda path: queued.append(path)
     return handler
 
 
-def test_watcher_ignores_read_only_events(tmp_path):
+@pytest.fixture
+def synthetic_loops():
+    """Per-test registry that closes any loops created via _make_handler.
+
+    Tests that exercise the typed-handler dispatch use synthetic loops
+    they never run; without explicit close() each one leaks a
+    ResourceWarning on garbage collection.
+    """
+    loops: list[asyncio.AbstractEventLoop] = []
+    yield loops
+    for loop in loops:
+        try:
+            loop.close()
+        except Exception:
+            pass
+
+
+def test_watcher_ignores_read_only_events(tmp_path, synthetic_loops):
     """Read-only `opened`/`closed_no_write` events from a sibling `cce index`
     must not enqueue work. This is the trigger half of the #66 leak —
     without this, hundreds of read events per `cce index --path X` cascade
     into the reindex worker and spawn embed pools.
     """
     queued: list[str] = []
-    handler = _make_handler(tmp_path, queued)
+    handler = _make_handler(tmp_path, queued, synthetic_loops)
 
     # Read-only events flow through the base FileSystemEventHandler stubs,
     # which are no-ops on our subclass. They must NOT result in anything
@@ -182,9 +205,9 @@ def test_watcher_ignores_read_only_events(tmp_path):
     assert str(tmp_path / "new.py") in queued
 
 
-def test_watcher_skips_directory_events(tmp_path):
+def test_watcher_skips_directory_events(tmp_path, synthetic_loops):
     queued: list[str] = []
-    handler = _make_handler(tmp_path, queued)
+    handler = _make_handler(tmp_path, queued, synthetic_loops)
     handler.on_modified(_FakeEvent(str(tmp_path / "subdir"), is_directory=True))
     handler.on_created(_FakeEvent(str(tmp_path / "subdir2"), is_directory=True))
     handler.on_deleted(_FakeEvent(str(tmp_path / "subdir3"), is_directory=True))
@@ -195,10 +218,10 @@ def test_watcher_skips_directory_events(tmp_path):
     assert queued == []
 
 
-def test_watcher_move_with_same_src_and_dest(tmp_path):
+def test_watcher_move_with_same_src_and_dest(tmp_path, synthetic_loops):
     """Spurious move events sometimes report src == dest; queue only once."""
     queued: list[str] = []
-    handler = _make_handler(tmp_path, queued)
+    handler = _make_handler(tmp_path, queued, synthetic_loops)
     handler.on_moved(_FakeEvent(
         str(tmp_path / "x.py"), dest_path=str(tmp_path / "x.py"),
     ))

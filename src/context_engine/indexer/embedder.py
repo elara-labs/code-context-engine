@@ -33,7 +33,7 @@ _DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 #
 # Override grammar (case-insensitive):
 #   "0" | "none" | "off" | "false" | "no"  → None (single-process)
-#   "<int>=N"                              → min(N, cpu_count)   (cap added
+#   "N" (positive integer)                 → min(N, cpu_count)   (cap added
 #                                            for #66: 12-CPU users on a fast
 #                                            box could otherwise CCE_EMBED_PARALLEL=64
 #                                            and OOM themselves)

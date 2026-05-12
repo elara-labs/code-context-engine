@@ -75,9 +75,11 @@ class _DebouncedHandler(FileSystemEventHandler):
     def on_moved(self, event):
         if event.is_directory:
             return
-        # A move emits one event with both src_path and dest_path; queue
-        # whichever side is inside the watch dir (or both, if it's a rename
-        # within the project).
+        # A move emits one event with both src_path and dest_path. Enqueue
+        # each path; _enqueue → _should_ignore drops anything that
+        # resolves outside the watch dir (or under .cce / an ignore
+        # pattern). Putting the watch-dir filter inside _enqueue keeps the
+        # rule in one place for every event type.
         self._enqueue(event.src_path)
         dest = getattr(event, "dest_path", None)
         if dest and dest != event.src_path:

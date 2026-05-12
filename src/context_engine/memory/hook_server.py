@@ -62,11 +62,12 @@ async def start_hook_server(
             log.exception("memory_db close failed")
 
     async def _unlink_port_files(app):
-        # Without this, stale serve.port files survived `cce serve` exits
-        # (especially SIGKILL after the embed-worker leak in #66). The hook
-        # shell script would then POST to a dead port and capture would
-        # silently break for the next session. Best-effort unlink — if the
-        # file is already gone or unwritable, that's fine.
+        # Covers graceful shutdown paths only. SIGKILL bypasses
+        # `app.on_cleanup` entirely, so the residual-port-file class of
+        # bugs (#66) still needs the corresponding socket-liveness probe
+        # in the hook shell script. What this handler does cleanly cover
+        # is the orderly SIGINT/SIGTERM/Ctrl-D path so the next session
+        # doesn't inherit a stale serve.port from a normal exit.
         for f in app.get("_port_files", []):
             try:
                 f.unlink(missing_ok=True)
