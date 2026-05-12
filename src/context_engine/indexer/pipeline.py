@@ -401,8 +401,33 @@ async def _run_indexing_locked(
                 model_name=config.embedding_model,
             )
         if embedder is None:
-            embedder = Embedder(model_name=config.embedding_model, cache=cache)
+            embedder = Embedder(
+                model_name=config.embedding_model,
+                cache=cache,
+                ollama_model=getattr(config, "ollama_embed_model", "nomic-embed-text"),
+                ollama_url=getattr(config, "ollama_url", "http://localhost:11434"),
+            )
         return embedder, cache
+
+    # Dimension migration: if a previous run recorded a different embedding
+    # dimension, every file's stored content-hash → vector mapping is now
+    # stale. Force a full reindex once so the vector store (which auto-drops
+    # on dim mismatch) gets repopulated. Only triggered when both: prior
+    # dim was recorded AND files exist to (re)index.
+    if file_iter and manifest.embedding_dim is not None:
+        _emb, _ = _ensure_embedder()
+        if manifest.embedding_dim != _emb.dimension:
+            if log_fn:
+                log_fn(
+                    f"  [migration] embedding dim changed "
+                    f"({manifest.embedding_dim} → {_emb.dimension}, "
+                    f"backend={_emb.backend_name}) — forcing full reindex"
+                )
+            log.info(
+                "Embedding dimension changed (%s -> %s); clearing manifest "
+                "to force full reindex.", manifest.embedding_dim, _emb.dimension,
+            )
+            manifest.clear_entries()
 
     async def _embed_and_ingest(
         batch_chunks: list,
@@ -661,6 +686,11 @@ async def _run_indexing_locked(
                 except Exception as exc:  # pragma: no cover - defensive
                     result.errors.append(f"Failed to prune {deleted}: {exc}")
 
+        # Stamp the dimension of whatever backend produced this index so the
+        # next run can detect a backend swap (fastembed ↔ Ollama) and force
+        # a full reindex automatically.
+        if embedder is not None:
+            manifest.embedding_dim = embedder.dimension
         manifest.save()
         return result
     finally:

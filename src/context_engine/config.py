@@ -59,6 +59,11 @@ class Config:
 
     # Embedding
     embedding_model: str = "BAAI/bge-small-en-v1.5"
+    # Model used when the Ollama embedding backend is selected. Only
+    # consulted if fastembed isn't installed or `CCE_EMBED_BACKEND=ollama`
+    # forces the Ollama path. 768-dim default; switching this triggers a
+    # full reindex because the vector store rejects dimension mismatches.
+    ollama_embed_model: str = "nomic-embed-text"
 
     # Retrieval
     retrieval_confidence_threshold: float = 0.2
@@ -120,6 +125,7 @@ _EXPECTED_TYPES: dict[str, type | tuple[type, ...]] = {
     "ollama_url": str,
     "output_compression": str,
     "embedding_model": str,
+    "ollama_embed_model": str,
     "retrieval_confidence_threshold": (int, float),
     "retrieval_top_k": int,
     "bootstrap_max_tokens": int,
@@ -141,6 +147,7 @@ def _apply_dict_to_config(config: Config, data: dict) -> None:
         ("compression", "ollama_url"): "ollama_url",
         ("compression", "output"): "output_compression",
         ("embedding", "model"): "embedding_model",
+        ("embedding", "ollama_model"): "ollama_embed_model",
         ("retrieval", "confidence_threshold"): "retrieval_confidence_threshold",
         ("retrieval", "top_k"): "retrieval_top_k",
         ("retrieval", "bootstrap_max_tokens"): "bootstrap_max_tokens",
