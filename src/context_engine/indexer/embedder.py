@@ -30,21 +30,39 @@ _DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 # hits 100%). On Windows, ONNX Runtime worker processes crash with
 # ACCESS_VIOLATION (0xC0000005) due to DLL handle inheritance issues.
 # Default to None on darwin and win32; allow override via CCE_EMBED_PARALLEL.
+#
+# Override grammar (case-insensitive):
+#   "0" | "none" | "off" | "false" | "no"  → None (single-process)
+#   "N" (positive integer)                 → min(N, cpu_count)   (cap added
+#                                            for #66: 12-CPU users on a fast
+#                                            box could otherwise CCE_EMBED_PARALLEL=64
+#                                            and OOM themselves)
+#   anything else                          → fall through to platform default
+#
+# Evaluated lazily (not at import) so a caller — notably `cce serve` — can
+# set CCE_EMBED_PARALLEL=0 before any Embedder is constructed and have it
+# take effect for that process.
+_DISABLED_TOKENS = {"0", "none", "off", "false", "no"}
+
+
 def _resolve_parallel() -> int | None:
-    override = os.environ.get("CCE_EMBED_PARALLEL")
+    override = os.environ.get("CCE_EMBED_PARALLEL", "").strip().lower()
     if override:
+        if override in _DISABLED_TOKENS:
+            return None
         try:
-            return max(1, int(override))
+            n = int(override)
         except ValueError:
-            pass
+            n = None
+        if n is not None:
+            if n <= 0:
+                return None
+            return min(n, os.cpu_count() or n)
     if sys.platform == "darwin":
         return None
     if sys.platform == "win32":
         return None
     return min(os.cpu_count() or 2, 4)
-
-
-_PARALLEL: int | None = _resolve_parallel()
 
 
 class Embedder:
@@ -141,7 +159,7 @@ class Embedder:
         for i, emb in enumerate(self._model.embed(
             texts,
             batch_size=batch_size,
-            parallel=_PARALLEL,
+            parallel=_resolve_parallel(),
         )):
             chunks[i].embedding = emb.tolist()
             if progress_fn and ((i + 1) % batch_size == 0 or i + 1 == total):

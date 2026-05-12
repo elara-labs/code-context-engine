@@ -2,6 +2,7 @@
 """CLI entry point for code-context-engine."""
 import asyncio
 import json
+import os
 import socket
 import sys
 from pathlib import Path
@@ -2786,6 +2787,16 @@ async def _run_index(
 async def _run_serve(config) -> None:
     """Start MCP server with live file watcher."""
     import logging
+    import signal
+    # Force single-process embedding inside `cce serve` unless the user
+    # explicitly overrode it. The reindex worker triggered by file changes
+    # otherwise spawns a fastembed forkserver pool (~4 workers × ~1.6 GB on
+    # Linux) that orphans on abnormal exit and leaks RSS across `cce index`
+    # invocations (issue #66). Single-process embed is plenty for one-file
+    # watcher reindexes; bulk `cce index` run from a separate shell still
+    # gets the multiprocess path.
+    os.environ.setdefault("CCE_EMBED_PARALLEL", "0")
+
     from context_engine.storage.local_backend import LocalBackend
     from context_engine.indexer.embedder import Embedder
     from context_engine.retrieval.retriever import HybridRetriever
@@ -2903,9 +2914,56 @@ async def _run_serve(config) -> None:
         file=sys.stderr,
     )
 
+    # Install signal handlers so SIGINT (Ctrl-C), SIGTERM, and SIGHUP all
+    # route through the same orderly shutdown path. Previously only SIGTERM
+    # cancelled the MCP task — SIGINT was swallowed by stdio reads, leaving
+    # `cce serve` unkillable except via SIGKILL, which orphans the embed
+    # workers (#66).
+    serve_loop = asyncio.get_running_loop()
+    mcp_task = asyncio.create_task(mcp.run_stdio())
+
+    def _request_shutdown(signame: str) -> None:
+        if not mcp_task.done():
+            _log.info("Received %s, shutting down...", signame)
+            mcp_task.cancel()
+
+    # Build the candidate list with getattr so we don't reference
+    # `signal.SIGHUP` at the tuple-construction site — SIGHUP is
+    # undefined on Windows and that AttributeError would fire *before*
+    # the try/except below could swallow it, crashing `cce serve` on
+    # Windows entirely (Copilot review on #69).
+    installed_signals: list[int] = []
+    candidate_sigs = [
+        s for s in (
+            getattr(signal, "SIGINT", None),
+            getattr(signal, "SIGTERM", None),
+            getattr(signal, "SIGHUP", None),
+        ) if s is not None
+    ]
+    for _sig in candidate_sigs:
+        try:
+            serve_loop.add_signal_handler(
+                _sig, _request_shutdown, _sig.name,
+            )
+            installed_signals.append(_sig)
+        except (NotImplementedError, RuntimeError):
+            # Windows's ProactorEventLoop refuses add_signal_handler;
+            # asyncio also raises NotImplementedError outside the main
+            # thread. SIGTERM still arrives via the default Python
+            # handler in those environments.
+            pass
+
     try:
-        await mcp.run_stdio()
+        try:
+            await mcp_task
+        except asyncio.CancelledError:
+            pass
     finally:
+        for _sig in installed_signals:
+            try:
+                serve_loop.remove_signal_handler(_sig)
+            except (NotImplementedError, RuntimeError):
+                pass
         if watcher:
             watcher.stop()
         if worker_task:

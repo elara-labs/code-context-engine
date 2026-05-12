@@ -56,6 +56,7 @@ def test_resolve_parallel_linux_uses_cpu_count(monkeypatch):
 def test_resolve_parallel_env_override_wins(monkeypatch):
     monkeypatch.setenv("CCE_EMBED_PARALLEL", "2")
     monkeypatch.setattr("sys.platform", "darwin")
+    monkeypatch.setattr("os.cpu_count", lambda: 12)
     assert _resolve_parallel() == 2
 
 
@@ -64,3 +65,55 @@ def test_resolve_parallel_invalid_env_falls_through(monkeypatch):
     monkeypatch.setattr("sys.platform", "linux")
     monkeypatch.setattr("os.cpu_count", lambda: 2)
     assert _resolve_parallel() == 2
+
+
+# ─── Issue #66 regression coverage ──────────────────────────────────────
+
+
+def test_resolve_parallel_zero_disables(monkeypatch):
+    """CCE_EMBED_PARALLEL=0 → None (single-process), not 1.
+
+    The old behaviour `max(1, int(v))` floored 0 to 1, but parallel=1 still
+    takes the multiprocessing path and orphans workers on shutdown
+    (#66). Zero now means single-process.
+    """
+    monkeypatch.setenv("CCE_EMBED_PARALLEL", "0")
+    monkeypatch.setattr("sys.platform", "linux")
+    assert _resolve_parallel() is None
+
+
+@pytest.mark.parametrize("token", ["none", "off", "false", "no", "NONE", "Off"])
+def test_resolve_parallel_string_tokens_disable(monkeypatch, token):
+    monkeypatch.setenv("CCE_EMBED_PARALLEL", token)
+    monkeypatch.setattr("sys.platform", "linux")
+    assert _resolve_parallel() is None
+
+
+def test_resolve_parallel_caps_at_cpu_count(monkeypatch):
+    """CCE_EMBED_PARALLEL=64 on a 12-CPU host must not actually spawn 64."""
+    monkeypatch.setenv("CCE_EMBED_PARALLEL", "64")
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setattr("os.cpu_count", lambda: 12)
+    assert _resolve_parallel() == 12
+
+
+def test_resolve_parallel_negative_disables(monkeypatch):
+    monkeypatch.setenv("CCE_EMBED_PARALLEL", "-1")
+    monkeypatch.setattr("sys.platform", "linux")
+    assert _resolve_parallel() is None
+
+
+def test_resolve_parallel_is_lazy(monkeypatch):
+    """Resolution must happen on each call, not at import.
+
+    `cce serve` relies on setting CCE_EMBED_PARALLEL=0 inside the function
+    body and having subsequent embed calls observe it.
+    """
+    monkeypatch.delenv("CCE_EMBED_PARALLEL", raising=False)
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setattr("os.cpu_count", lambda: 8)
+    first = _resolve_parallel()
+    assert first == 4
+    monkeypatch.setenv("CCE_EMBED_PARALLEL", "0")
+    second = _resolve_parallel()
+    assert second is None
