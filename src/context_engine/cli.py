@@ -537,25 +537,43 @@ def _show_welcome_banner(config) -> None:
 def _preflight_check(config) -> None:
     """Verify all required components are ready before indexing starts.
 
-    Downloads the embedding model on first use with a clear progress message,
-    and reports Ollama status so users know what compression level they will get.
+    Auto-detects an embedding backend (fastembed → Ollama), reports which
+    one was picked, and surfaces Ollama status for the separate compression
+    path so users know what compression level they will get.
     """
-    # --- Embedding model ---
-    click.echo(_dim("  Checking embedding model") + "...", nl=False)
+    # --- Embedding backend ---
+    click.echo(_dim("  Detecting embedding backend") + "...", nl=False)
+    from context_engine.config import resolve_ollama_url
+    ollama_model = getattr(config, "ollama_embed_model", "nomic-embed-text")
+    ollama_url = resolve_ollama_url(config)
     try:
-        from fastembed import TextEmbedding
-        model_name = getattr(config, "embedding_model", "BAAI/bge-small-en-v1.5")
-        if "/" not in model_name:
-            model_name = f"sentence-transformers/{model_name}"
-        click.echo(_dim(" downloading if needed (60 MB, first time only)") + "...", nl=False)
-        TextEmbedding(model_name)
-        click.echo(" " + click.style("ready", fg="green"))
+        from context_engine.indexer.embedder import select_backend
+        # Don't echo a tentative "loading fastembed…" or "using Ollama…"
+        # banner before select_backend() picks. CCE_EMBED_BACKEND can
+        # force a different choice than the probe order suggests, and
+        # printing both messages produced contradictory output. Wait for
+        # the actual selection, then echo once with the truth.
+        backend = select_backend(
+            model_name=getattr(config, "embedding_model", "BAAI/bge-small-en-v1.5"),
+            ollama_model=ollama_model,
+            ollama_url=ollama_url,
+        )
+        click.echo(
+            " " + click.style(
+                f"ready ({backend.name}, {backend.dimension}-d, {backend.model_name})",
+                fg="green",
+            )
+        )
     except Exception as exc:
         click.echo("")
-        _warn(f"Could not load embedding model: {exc}")
-        _warn("Indexing will attempt to continue but may fail.")
+        _warn(f"No embedding backend available: {exc}")
+        _warn(
+            "Install fastembed (`pip install code-context-engine[local]`) "
+            f"or start an Ollama server at {ollama_url} and pull "
+            f"{ollama_model}."
+        )
 
-    # --- Ollama (optional) ---
+    # --- Ollama for LLM compression (independent of the embedding path) ---
     try:
         import httpx
         resp = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
