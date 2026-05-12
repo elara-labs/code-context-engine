@@ -10,6 +10,7 @@ import logging
 import os
 import sys
 from functools import lru_cache
+from pathlib import Path
 
 from fastembed import TextEmbedding
 
@@ -19,6 +20,66 @@ from context_engine.models import Chunk
 log = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
+
+
+def _resolve_cache_dir() -> Path:
+    """Pick a persistent fastembed cache location.
+
+    Precedence (highest first):
+      1. ``CCE_FASTEMBED_CACHE_PATH`` (CCE-specific override; takes
+         priority over fastembed's own var so users running multiple
+         tools that share fastembed can isolate CCE's cache)
+      2. ``FASTEMBED_CACHE_PATH`` (the env var fastembed itself recognises)
+      3. ``$XDG_CACHE_HOME/fastembed`` if XDG_CACHE_HOME is set
+      4. ``~/.cache/fastembed``
+
+    Previously CCE accepted fastembed's default of
+    ``$TMPDIR/fastembed_cache`` which on WSL/Ubuntu's systemd-tmpfiles
+    layout (``/tmp`` cleared on every boot) meant the model got
+    re-downloaded on each restart — and re-hit any flaky-network failure
+    along with it (issue #67).
+    """
+    cce_override = os.environ.get("CCE_FASTEMBED_CACHE_PATH", "").strip()
+    if cce_override:
+        return Path(cce_override).expanduser()
+    fast_override = os.environ.get("FASTEMBED_CACHE_PATH", "").strip()
+    if fast_override:
+        return Path(fast_override).expanduser()
+    xdg = os.environ.get("XDG_CACHE_HOME", "").strip()
+    if xdg:
+        return Path(xdg).expanduser() / "fastembed"
+    return Path.home() / ".cache" / "fastembed"
+
+
+def _sweep_incomplete_downloads(cache_dir: Path) -> int:
+    """Delete any ``*.incomplete`` files from a previous stalled download.
+
+    Without this sweep, a stalled ``huggingface_hub`` download leaves a
+    zero-byte ``model_optimized.onnx.incomplete`` file alongside the
+    expected ``model_optimized.onnx`` — and fastembed will then fail at
+    load time with a confusing ``NO_SUCHFILE`` error on every subsequent
+    run until the user manually nukes the cache (#67).
+
+    Returns the number of files removed.
+    """
+    if not cache_dir.exists():
+        return 0
+    removed = 0
+    try:
+        for path in cache_dir.rglob("*.incomplete"):
+            try:
+                path.unlink()
+                removed += 1
+            except OSError as exc:
+                log.warning("Could not remove stale fastembed file %s: %s", path, exc)
+    except OSError as exc:
+        log.warning("Failed to scan fastembed cache at %s: %s", cache_dir, exc)
+    if removed:
+        log.info(
+            "Cleared %d stale `*.incomplete` file(s) from fastembed cache at %s",
+            removed, cache_dir,
+        )
+    return removed
 
 # Passed straight to fastembed's `parallel` argument:
 #   None → no data-parallel mp; use onnxruntime's own threading
@@ -78,12 +139,24 @@ class Embedder:
             resolved = f"sentence-transformers/{model_name}"
         else:
             resolved = model_name
+        # Use a persistent cache dir that survives reboot, and clear out any
+        # partial downloads from a previously interrupted run so we never
+        # try to load a zero-byte ONNX file (#67).
+        cache_dir = _resolve_cache_dir()
         try:
-            self._model = TextEmbedding(resolved)
+            cache_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            log.warning("Could not create fastembed cache dir %s: %s", cache_dir, exc)
+        _sweep_incomplete_downloads(cache_dir)
+        try:
+            self._model = TextEmbedding(resolved, cache_dir=str(cache_dir))
         except Exception as exc:
             raise RuntimeError(
                 f"Failed to load embedding model '{model_name}'. "
                 f"Ensure fastembed is installed and the model name is valid. "
+                f"Cache dir: {cache_dir}. "
+                f"If a previous download was interrupted, deleting the cache "
+                f"directory and retrying may help. "
                 f"Supported models: TextEmbedding.list_supported_models(). "
                 f"Original error: {exc}"
             ) from exc
