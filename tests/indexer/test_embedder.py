@@ -56,6 +56,7 @@ def test_resolve_parallel_linux_uses_cpu_count(monkeypatch):
 def test_resolve_parallel_env_override_wins(monkeypatch):
     monkeypatch.setenv("CCE_EMBED_PARALLEL", "2")
     monkeypatch.setattr("sys.platform", "darwin")
+    monkeypatch.setattr("os.cpu_count", lambda: 12)
     assert _resolve_parallel() == 2
 
 
@@ -64,3 +65,120 @@ def test_resolve_parallel_invalid_env_falls_through(monkeypatch):
     monkeypatch.setattr("sys.platform", "linux")
     monkeypatch.setattr("os.cpu_count", lambda: 2)
     assert _resolve_parallel() == 2
+
+
+
+# ─── Issue #66 regression coverage ──────────────────────────────────────
+
+
+def test_resolve_parallel_zero_disables(monkeypatch):
+    """CCE_EMBED_PARALLEL=0 → None (single-process), not 1.
+
+    The old behaviour `max(1, int(v))` floored 0 to 1, but parallel=1 still
+    takes the multiprocessing path and orphans workers on shutdown
+    (#66). Zero now means single-process.
+    """
+    monkeypatch.setenv("CCE_EMBED_PARALLEL", "0")
+    monkeypatch.setattr("sys.platform", "linux")
+    assert _resolve_parallel() is None
+
+
+@pytest.mark.parametrize("token", ["none", "off", "false", "no", "NONE", "Off"])
+def test_resolve_parallel_string_tokens_disable(monkeypatch, token):
+    monkeypatch.setenv("CCE_EMBED_PARALLEL", token)
+    monkeypatch.setattr("sys.platform", "linux")
+    assert _resolve_parallel() is None
+
+
+def test_resolve_parallel_caps_at_cpu_count(monkeypatch):
+    """CCE_EMBED_PARALLEL=64 on a 12-CPU host must not actually spawn 64."""
+    monkeypatch.setenv("CCE_EMBED_PARALLEL", "64")
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setattr("os.cpu_count", lambda: 12)
+    assert _resolve_parallel() == 12
+
+
+def test_resolve_parallel_negative_disables(monkeypatch):
+    monkeypatch.setenv("CCE_EMBED_PARALLEL", "-1")
+    monkeypatch.setattr("sys.platform", "linux")
+    assert _resolve_parallel() is None
+
+
+def test_resolve_parallel_is_lazy(monkeypatch):
+    """Resolution must happen on each call, not at import.
+
+    `cce serve` relies on setting CCE_EMBED_PARALLEL=0 inside the function
+    body and having subsequent embed calls observe it.
+    """
+    monkeypatch.delenv("CCE_EMBED_PARALLEL", raising=False)
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setattr("os.cpu_count", lambda: 8)
+    first = _resolve_parallel()
+    assert first == 4
+    monkeypatch.setenv("CCE_EMBED_PARALLEL", "0")
+    second = _resolve_parallel()
+    assert second is None
+
+
+# ─── Issue #67 regression coverage ──────────────────────────────────────
+
+
+def test_resolve_cache_dir_default(monkeypatch, tmp_path):
+    """No env var set → ~/.cache/fastembed, NOT /tmp."""
+    from context_engine.indexer.embedder import _resolve_cache_dir
+    monkeypatch.delenv("CCE_FASTEMBED_CACHE_PATH", raising=False)
+    monkeypatch.delenv("FASTEMBED_CACHE_PATH", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    fake_home = tmp_path / "home"
+    monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: fake_home))
+    got = _resolve_cache_dir()
+    assert got == fake_home / ".cache" / "fastembed"
+
+
+def test_resolve_cache_dir_respects_fastembed_env(monkeypatch, tmp_path):
+    from context_engine.indexer.embedder import _resolve_cache_dir
+    monkeypatch.delenv("CCE_FASTEMBED_CACHE_PATH", raising=False)
+    monkeypatch.setenv("FASTEMBED_CACHE_PATH", str(tmp_path / "custom"))
+    assert _resolve_cache_dir() == tmp_path / "custom"
+
+
+def test_resolve_cache_dir_cce_override_wins(monkeypatch, tmp_path):
+    """CCE_FASTEMBED_CACHE_PATH overrides fastembed's own env var so users
+    with multiple tools sharing the fastembed default can isolate CCE's
+    cache."""
+    from context_engine.indexer.embedder import _resolve_cache_dir
+    monkeypatch.setenv("CCE_FASTEMBED_CACHE_PATH", str(tmp_path / "cce_path"))
+    monkeypatch.setenv("FASTEMBED_CACHE_PATH", str(tmp_path / "fast_path"))
+    assert _resolve_cache_dir() == tmp_path / "cce_path"
+
+
+def test_resolve_cache_dir_xdg(monkeypatch, tmp_path):
+    from context_engine.indexer.embedder import _resolve_cache_dir
+    monkeypatch.delenv("CCE_FASTEMBED_CACHE_PATH", raising=False)
+    monkeypatch.delenv("FASTEMBED_CACHE_PATH", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
+    assert _resolve_cache_dir() == tmp_path / "xdg" / "fastembed"
+
+
+def test_sweep_incomplete_removes_stale_partial(tmp_path):
+    """Issue #67: a stalled huggingface_hub download leaves a 0-byte
+    `model_optimized.onnx.incomplete` file that crashes every subsequent
+    load. We must remove these on startup."""
+    from context_engine.indexer.embedder import _sweep_incomplete_downloads
+    nested = tmp_path / "models--qdrant--bge" / "snapshots" / "abc"
+    nested.mkdir(parents=True)
+    bad = nested / "model_optimized.onnx.incomplete"
+    bad.write_bytes(b"")
+    good = nested / "tokenizer.json"
+    good.write_text("{}")
+
+    removed = _sweep_incomplete_downloads(tmp_path)
+    assert removed == 1
+    assert not bad.exists()
+    assert good.exists()  # other cache files must survive
+
+
+def test_sweep_incomplete_missing_dir_is_noop(tmp_path):
+    from context_engine.indexer.embedder import _sweep_incomplete_downloads
+    missing = tmp_path / "does_not_exist_yet"
+    assert _sweep_incomplete_downloads(missing) == 0

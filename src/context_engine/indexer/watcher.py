@@ -41,10 +41,7 @@ class _DebouncedHandler(FileSystemEventHandler):
                 return True
         return False
 
-    def on_any_event(self, event):
-        if event.is_directory:
-            return
-        path = event.src_path
+    def _enqueue(self, path: str) -> None:
         if self._should_ignore(path):
             return
         with self._lock:
@@ -53,6 +50,40 @@ class _DebouncedHandler(FileSystemEventHandler):
                 self._timer.cancel()
             self._timer = threading.Timer(self._debounce_s, self._flush)
             self._timer.start()
+
+    # Only the four content-changing event types trigger a reindex. Earlier
+    # versions used `on_any_event`, which also fires for `opened` and
+    # `closed_no_write` — those are emitted hundreds of times whenever a
+    # sibling `cce index` reads files to hash, causing the serve process to
+    # spawn a forkserver pool that orphaned ~5 GB on each invocation
+    # (issue #66). Read-only filesystem activity now goes ignored.
+    def on_modified(self, event):
+        if event.is_directory:
+            return
+        self._enqueue(event.src_path)
+
+    def on_created(self, event):
+        if event.is_directory:
+            return
+        self._enqueue(event.src_path)
+
+    def on_deleted(self, event):
+        if event.is_directory:
+            return
+        self._enqueue(event.src_path)
+
+    def on_moved(self, event):
+        if event.is_directory:
+            return
+        # A move emits one event with both src_path and dest_path. Enqueue
+        # each path; _enqueue → _should_ignore drops anything that
+        # resolves outside the watch dir (or under .cce / an ignore
+        # pattern). Putting the watch-dir filter inside _enqueue keeps the
+        # rule in one place for every event type.
+        self._enqueue(event.src_path)
+        dest = getattr(event, "dest_path", None)
+        if dest and dest != event.src_path:
+            self._enqueue(dest)
 
     def _flush(self):
         with self._lock:

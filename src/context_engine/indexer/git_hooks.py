@@ -1,4 +1,5 @@
 """Git hook installer and handler for triggering re-indexing."""
+import shlex
 import shutil
 import stat
 import sys
@@ -31,9 +32,22 @@ def _resolve_cce_binary() -> str:
 
 
 def _hook_script() -> str:
-    bin_path = _resolve_cce_binary()
+    # `cce index` without any flag already performs incremental indexing
+    # via the on-disk manifest's content-hash check. The old
+    # `--changed-only` flag was removed but the hook template hadn't been
+    # updated — every commit silently errored with
+    # "No such option: --changed-only" (issue #67).
+    #
+    # bin_path must be shell-quoted because resolved paths commonly
+    # include spaces (e.g. C:\Users\Alice Smith\... on Windows, or
+    # /Users/Firstname Lastname/.venv/bin/cce on macOS). git's hook
+    # runner invokes the file via POSIX sh on every platform — even
+    # git-for-windows ships a bundled sh — so single-quoting with
+    # shlex.quote produces a correct token for the shell that actually
+    # runs the hook (Copilot review).
+    bin_path = shlex.quote(_resolve_cce_binary())
     return f"""{HOOK_MARKER}
-{bin_path} index --changed-only >/dev/null 2>&1 &
+{bin_path} index >/dev/null 2>&1 &
 """
 
 
