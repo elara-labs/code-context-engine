@@ -23,7 +23,7 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-CURRENT_VERSION = 3
+CURRENT_VERSION = 4
 
 # bge-small-en-v1.5 — the default embedder used everywhere else in cce.
 # If the project's embedder swaps to a different model, vec tables are
@@ -229,6 +229,27 @@ _SCHEMA_V3 = [
 ]
 
 
+# v4: work_profile — extractive summary of how the user works on this
+# project, derived from their accumulated session history (cadence,
+# top-touched files, recurring rollup keywords, decision volume). One
+# row per project, refreshed by `cce summarize` and on `cce init`. Used
+# alongside any per-session resume so each new Claude/Codex session
+# opens with both "what is this project" and "how does this user
+# typically work on it" context.
+_SCHEMA_V4 = [
+    """
+    CREATE TABLE IF NOT EXISTS work_profile (
+      project TEXT PRIMARY KEY,
+      cadence TEXT NOT NULL DEFAULT '',
+      top_files TEXT NOT NULL DEFAULT '',
+      recurring_themes TEXT NOT NULL DEFAULT '',
+      open_decisions INTEGER NOT NULL DEFAULT 0,
+      generated_at_epoch INTEGER NOT NULL
+    )
+    """,
+]
+
+
 def _vec_table_stmts(dim: int) -> list[str]:
     """vec0 virtual tables for the two surfaces session_recall actually reads.
 
@@ -324,6 +345,8 @@ def _ensure_schema(conn: sqlite3.Connection, *, has_vec: bool) -> None:
                     cur.execute(stmt)
             for stmt in _SCHEMA_V3:
                 cur.execute(stmt)
+            for stmt in _SCHEMA_V4:
+                cur.execute(stmt)
             cur.execute(
                 "INSERT INTO schema_versions (version, applied_at_epoch) "
                 "VALUES (?, strftime('%s','now'))",
@@ -338,7 +361,8 @@ def _ensure_schema(conn: sqlite3.Connection, *, has_vec: bool) -> None:
     # Existing db — apply additive upgrades up to CURRENT_VERSION.
     # v1 → v2: add vec tables + cleanup triggers (needs sqlite-vec).
     # v2 → v3: add savings_log (no extension dependency).
-    # If sqlite-vec is unavailable we can still apply v3, but we don't
+    # v3 → v4: add work_profile (no extension dependency).
+    # If sqlite-vec is unavailable we can still apply v3/v4, but we don't
     # stamp the version row so a future connection with vec loaded will
     # complete the v1 → v2 step.
     current = schema_version(conn)
@@ -353,6 +377,9 @@ def _ensure_schema(conn: sqlite3.Connection, *, has_vec: bool) -> None:
                 cur.execute(stmt)
         if current < 3:
             for stmt in _SCHEMA_V3:
+                cur.execute(stmt)
+        if current < 4:
+            for stmt in _SCHEMA_V4:
                 cur.execute(stmt)
         if current < 2 and not has_vec:
             # No version bump — vec step still pending.

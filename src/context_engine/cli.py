@@ -755,12 +755,90 @@ def init(ctx: click.Context) -> None:
         "  " + click.style("Indexing project", fg="cyan", bold=True) + "..."
     )
     asyncio.run(_run_index(config, str(project_dir), full=True))
+
+    # Capture a baseline work_profile so the very first SessionStart
+    # already has something to inject. Best-effort: a partially-migrated
+    # db or missing v4 table must not break `cce init`.
+    try:
+        _refresh_work_profile(config, project_dir)
+    except Exception:  # pragma: no cover - defensive
+        # `cce init` runs before there's a meaningful work history, so a
+        # failure here is almost never user-visible. Swallow silently.
+        pass
+
     click.echo("")
     click.echo(
         click.style("  Done!", fg="green", bold=True) +
         click.style("  Restart Claude Code to activate CCE.", fg="white")
     )
     click.echo("")
+
+
+def _refresh_work_profile(config, project_dir: Path) -> dict | None:
+    """Rebuild the work_profile row for `project_dir` if missing or stale.
+
+    Returns the persisted profile dict, or None if memory.db is
+    unavailable. Safe to call from `cce init` and `cce profile`.
+    """
+    from context_engine.memory import db as memory_db
+    from context_engine.memory.work_profile import refresh_work_profile
+
+    project_name = project_dir.name
+    storage_base = Path(config.storage_path) / project_name
+    db_path = memory_db.memory_db_path(storage_base)
+    if not db_path.exists() and not db_path.parent.exists():
+        return None
+    conn = memory_db.connect(db_path)
+    try:
+        return refresh_work_profile(conn, project_name)
+    finally:
+        conn.close()
+
+
+@main.command()
+@click.option(
+    "--force", is_flag=True,
+    help="Regenerate even if the cached profile is fresh.",
+)
+@click.pass_context
+def profile(ctx: click.Context, force: bool) -> None:
+    """Show (and refresh) the user work-profile injected at SessionStart.
+
+    Extractive — pulled from session cadence, code_areas, rollup
+    summaries, and decisions — so there's no LLM or network call.
+    The block is regenerated automatically every 3 days, on
+    `cce init`, and any time you pass --force.
+    """
+    from context_engine.memory import db as memory_db
+    from context_engine.memory.work_profile import (
+        format_profile_block, refresh_work_profile,
+    )
+    config = ctx.obj["config"]
+    project_dir = _safe_cwd()
+    project_name = project_dir.name
+    storage_base = Path(config.storage_path) / project_name
+    db_path = memory_db.memory_db_path(storage_base)
+    if not db_path.exists():
+        _warn("No memory.db yet — run `cce serve` for a session first.")
+        return
+    conn = memory_db.connect(db_path)
+    try:
+        profile_data = refresh_work_profile(
+            conn, project_name, force=force,
+        )
+    finally:
+        conn.close()
+    block = format_profile_block(profile_data)
+    if not block:
+        _warn(
+            "Not enough session history yet — let Claude Code run for a "
+            "few sessions, then retry."
+        )
+        return
+    click.echo("")
+    click.echo(block)
+    click.echo("")
+    _ok(f"Work profile stored for {project_name}")
 
 
 @main.command()

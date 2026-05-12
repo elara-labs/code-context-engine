@@ -102,6 +102,18 @@ def build_session_resume(conn: sqlite3.Connection, project: str) -> str:
     """
     parts: list[str] = []
 
+    # Extractive user work-profile (v4): cadence, top files, recurring
+    # rollup keywords, decision volume. Tolerates a missing v4 table on
+    # partially-migrated dbs so the rest of the resume still renders.
+    from context_engine.memory.work_profile import (
+        format_profile_block, load_work_profile,
+    )
+    try:
+        profile = load_work_profile(conn, project)
+    except sqlite3.Error:
+        profile = None
+    work_profile_block = format_profile_block(profile) if profile else ""
+
     last_rollup = conn.execute(
         "SELECT id, rollup_summary, ended_at "
         "FROM sessions "
@@ -118,13 +130,17 @@ def build_session_resume(conn: sqlite3.Connection, project: str) -> str:
 
     savings_line = _build_savings_line(conn)
 
-    if not last_rollup and not decisions and not savings_line:
+    if not (last_rollup or decisions or savings_line or work_profile_block):
         return ""
 
     parts.append(f"## CCE memory · resuming {project}")
     # Stored values went through grammar.compress on the write side; expand
     # before display so the resume reads as natural prose.
     from context_engine.memory.grammar import expand as _grammar_expand
+
+    if work_profile_block:
+        parts.append("")
+        parts.append(work_profile_block)
 
     if savings_line:
         parts.append("")
