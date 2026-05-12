@@ -1,4 +1,5 @@
 """MCP server exposing context engine tools to Claude Code."""
+import asyncio
 import json
 import logging
 import re
@@ -883,24 +884,57 @@ class ContextEngineMCP:
 
     # ── tool handlers ───────────────────────────────────────────────────────
 
-    async def _ensure_indexed(self) -> None:
-        """Lazy indexing: if the index is empty, trigger indexing on first query."""
-        if self._lazy_indexed:
-            return
-        self._lazy_indexed = True
+    async def _ensure_indexed(self) -> bool:
+        """Lazy indexing on empty index.
+
+        Returns True iff the index already has content. When the index is
+        empty, indexing is kicked off as a background task and the method
+        returns False so the caller can surface an informative message
+        instead of blocking the MCP request for the duration of the
+        first-time index. The old behaviour silently blocked context_search
+        for many seconds (or many minutes on a large repo); from the
+        client's side it looked like the call had hung (#67).
+        """
         try:
             count = self._backend._vector_store.count()
             if count > 0:
-                return
+                return True
         except Exception:
-            pass
-        # Index is empty — trigger on-the-fly indexing
-        log.info("Index empty — triggering lazy indexing for %s", self._project_name)
+            # If we can't tell, assume it's populated rather than kick off
+            # an erroneous reindex.
+            return True
+
+        if self._lazy_indexed:
+            # Already kicked off — index is presumably building in the
+            # background. Keep telling callers to wait until it shows up.
+            return False
+        self._lazy_indexed = True
+
+        log.info(
+            "Index empty — kicking off background indexing for %s",
+            self._project_name,
+        )
+
+        async def _bg_index():
+            try:
+                from context_engine.indexer.pipeline import run_indexing
+                await run_indexing(self._config, self._project_dir, full=False)
+                log.info("Background indexing complete for %s", self._project_name)
+            except Exception as exc:
+                log.warning("Background indexing failed: %s", exc)
+
         try:
-            from context_engine.indexer.pipeline import run_indexing
-            await run_indexing(self._config, self._project_dir, full=False)
-        except Exception as exc:
-            log.warning("Lazy indexing failed: %s", exc)
+            asyncio.create_task(_bg_index())
+        except RuntimeError:
+            # No running loop (synchronous test harness, etc.) — fall back
+            # to blocking. Better than swallowing the request.
+            try:
+                from context_engine.indexer.pipeline import run_indexing
+                await run_indexing(self._config, self._project_dir, full=False)
+                return True
+            except Exception as exc:
+                log.warning("Lazy indexing failed: %s", exc)
+        return False
 
     async def _handle_context_search(self, args):
         query = (args.get("query") or "").strip()
@@ -914,8 +948,21 @@ class ContextEngineMCP:
                 )
             ]
 
-        # Lazy index if this is the first query and index is empty
-        await self._ensure_indexed()
+        # Lazy index if this is the first query and index is empty.
+        # When the index is empty we return immediately with a status line
+        # rather than blocking the call for the full indexing run — the
+        # MCP client otherwise sees a multi-second/minute hang with no
+        # progress indicator (#67).
+        indexed = await self._ensure_indexed()
+        if not indexed:
+            return [TextContent(
+                type="text",
+                text=(
+                    f"Index for {self._project_name} is empty — indexing has "
+                    "been started in the background. Retry this search in a "
+                    "few seconds, or run `cce index` for a synchronous index."
+                ),
+            )]
 
         top_k = _clamp_top_k(args.get("top_k", 10))
         max_tokens = args.get("max_tokens", 8000)

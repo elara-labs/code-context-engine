@@ -78,6 +78,17 @@ PORT_FILE="${HOME}/.cce/projects/$(basename "${PWD}")/serve.port"
 PORT="$(cat "${PORT_FILE}" 2>/dev/null)"
 [ -n "${PORT}" ] || exit 0
 
+# Quick TCP liveness probe via bash's /dev/tcp — if nothing is listening on
+# the port (i.e. cce serve died but left its serve.port behind), bail out
+# immediately instead of letting curl burn its full 1-2s timeout per hook
+# call. On long Claude Code sessions with hundreds of PostToolUse events
+# that adds up to many seconds of wasted wait (#67). If bash isn't
+# available (rare on POSIX), fall through to the timed curl below — slower
+# but still correct.
+if command -v bash >/dev/null 2>&1; then
+    bash -c "exec 3<>/dev/tcp/127.0.0.1/${PORT}" 2>/dev/null || exit 0
+fi
+
 if [ "${HOOK_NAME}" = "SessionStart" ]; then
     RESPONSE="$(curl -sf -m 2 -X POST -H "Content-Type: application/json" \\
         --data-binary @- "http://127.0.0.1:${PORT}/hooks/${HOOK_NAME}" \\
@@ -114,6 +125,13 @@ if not exist "%PORT_FILE%" exit /b 0
 
 set /p PORT=<"%PORT_FILE%"
 if "%PORT%"=="" exit /b 0
+
+REM Liveness probe before spending curl's full timeout. PowerShell's
+REM TcpClient is universally available on supported Windows targets and
+REM exits in ~50ms when nothing's listening, vs. curl's 1-2s.
+REM See the POSIX comment above for the motivation (#67).
+powershell -NoProfile -Command "$ErrorActionPreference='Stop'; try { (New-Object Net.Sockets.TcpClient).Connect('127.0.0.1',%PORT%); exit 0 } catch { exit 1 }" >nul 2>&1
+if errorlevel 1 exit /b 0
 
 if /i "%HOOK_NAME%"=="SessionStart" (
     set "TMP_RESP=%TEMP%\\cce_hook_resp_%RANDOM%.txt"

@@ -46,3 +46,20 @@ def test_install_hooks_returns_empty_for_non_git(tmp_path):
     """Non-git directory should return empty list, not raise."""
     result = install_hooks(project_dir=str(tmp_path))
     assert result == []
+
+
+# ─── Issue #67 regression coverage ──────────────────────────────────────
+
+
+def test_post_commit_hook_does_not_use_removed_flag(git_repo):
+    """`cce index --changed-only` flag was removed but the template still
+    referenced it, so every commit silently errored. The hook must invoke
+    bare `cce index` (which already does incremental indexing)."""
+    install_hooks(project_dir=str(git_repo))
+    for name in ("post-commit", "post-checkout", "post-merge"):
+        content = (git_repo / ".git" / "hooks" / name).read_text()
+        assert "--changed-only" not in content, (
+            f"{name} still references the removed --changed-only flag"
+        )
+        # Sanity: the hook still triggers an index.
+        assert " index " in content or "index>" in content

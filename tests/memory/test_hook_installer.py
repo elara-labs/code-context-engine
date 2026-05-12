@@ -63,6 +63,34 @@ def test_posix_hook_script_body_when_platform_not_win(monkeypatch):
     assert "curl -sf" in body
 
 
+# ─── Issue #67 regression coverage: liveness probe in hook scripts ─────
+
+
+def test_posix_hook_has_tcp_liveness_probe(monkeypatch):
+    """POSIX hook must short-circuit when nothing's listening on the port
+    so a stale serve.port doesn't waste 1-2s/curl call (#67)."""
+    monkeypatch.setattr(hi, "_is_windows", lambda: False)
+    body = hi._hook_script_body()
+    # The probe uses bash's /dev/tcp pseudo-device.
+    assert "/dev/tcp/127.0.0.1" in body
+    # The probe gates curl: if it fails we exit BEFORE the curl call.
+    probe_pos = body.index("/dev/tcp/127.0.0.1")
+    curl_pos = body.index("curl -sf")
+    assert probe_pos < curl_pos, (
+        "Liveness probe must run before any curl invocation"
+    )
+
+
+def test_windows_hook_has_tcp_liveness_probe(monkeypatch):
+    monkeypatch.setattr(hi, "_is_windows", lambda: True)
+    body = hi._hook_script_body()
+    # TcpClient is the cheapest port probe available without extra deps.
+    assert "TcpClient" in body
+    probe_pos = body.index("TcpClient")
+    curl_pos = body.index("curl -sf")
+    assert probe_pos < curl_pos
+
+
 def test_install_settings_uses_cmd_quoting_on_windows(tmp_path: Path, monkeypatch):
     """On Windows, the hook command must use cmd.exe-style double quotes
     around the path. POSIX single-quotes (shlex.quote) would not dequote

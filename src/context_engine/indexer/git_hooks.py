@@ -31,9 +31,14 @@ def _resolve_cce_binary() -> str:
 
 
 def _hook_script() -> str:
+    # `cce index` without any flag already performs incremental indexing
+    # via the on-disk manifest's content-hash check. The old
+    # `--changed-only` flag was removed but the hook template hadn't been
+    # updated — every commit silently errored with
+    # "No such option: --changed-only" (issue #67).
     bin_path = _resolve_cce_binary()
     return f"""{HOOK_MARKER}
-{bin_path} index --changed-only >/dev/null 2>&1 &
+{bin_path} index >/dev/null 2>&1 &
 """
 
 
