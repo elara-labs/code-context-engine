@@ -98,6 +98,12 @@ cd /path/to/your/project
 cce init                              # index, install hooks, register MCP server
 ```
 
+**Embedding backends:** CCE auto-detects the best available backend. If you have Ollama running, it uses `nomic-embed-text` with zero extra dependencies. For offline/local embedding without Ollama, install the `[local]` extra:
+
+```bash
+uv tool install "code-context-engine[local]"   # includes fastembed + ONNX Runtime
+```
+
 Restart your editor. Done. Every question now hits the index instead of re-reading files.
 
 `cce init` auto-detects your editor and writes the right config:
@@ -375,11 +381,12 @@ Tell Claude: "switch to max compression" or "turn off compression". Code blocks 
 
 | Component | Size |
 |-----------|------|
-| Installed package | ~189 MB (ONNX Runtime is 66 MB of that) |
-| Embedding model (one-time download) | ~60 MB |
+| Core install (Ollama backend) | ~17 MB |
+| With `[local]` extra (fastembed + ONNX) | ~189 MB |
+| Embedding model (one-time download) | ~60 MB (fastembed) or managed by Ollama |
 | Index per project (small/medium/large) | 5-60 MB |
 
-No GPU required. Embedding model runs on CPU via ONNX Runtime.
+No GPU required. With Ollama, embeddings are handled by the Ollama server. With the `[local]` extra, the embedding model runs on CPU via ONNX Runtime.
 
 ---
 
