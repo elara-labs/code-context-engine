@@ -1523,10 +1523,11 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
                 f"{label('compression')} {value(f'{max(0, compression_pct)}%')}"
             )
 
-        click.echo(
-            f"  {dim(f'Cost estimate based on {_model_label} pricing '
-                    f'(input ${_input_price_per_m}/1M, output ${_output_price_per_m}/1M)')}"
+        pricing_note = (
+            f"Cost estimate based on {_model_label} pricing "
+            f"(input ${_input_price_per_m}/1M, output ${_output_price_per_m}/1M)"
         )
+        click.echo(f"  {dim(pricing_note)}")
 
     def _json_entry(name: str, stats: dict, buckets: dict, levels: dict) -> dict:
         full_file = stats.get("full_file_tokens", 0)
