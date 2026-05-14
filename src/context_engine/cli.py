@@ -2094,10 +2094,15 @@ def upgrade(ctx: click.Context, check: bool) -> None:
 
     new_version = current  # fallback
     try:
-        # Re-read version from the just-upgraded package
-        importlib.metadata.invalidate_caches()
-        dist = importlib.metadata.distribution("code-context-engine")
-        new_version = dist.metadata["Version"]
+        # The running process still sees the old venv metadata, so shell out
+        # to the upgraded executable to get the real post-upgrade version.
+        ver_result = subprocess.run(
+            [str(cce_bin), "--version"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if ver_result.returncode == 0:
+            # Output format: "cce, version X.Y.Z"
+            new_version = ver_result.stdout.strip().rsplit(None, 1)[-1]
     except Exception:
         pass
 
