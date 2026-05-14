@@ -1257,12 +1257,19 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
 
     _all_pricing = get_model_pricing()
     _pricing_model = config.pricing_model.lower()
-    _price_per_m = _all_pricing.get(_pricing_model, _all_pricing.get("opus", 5.0))
-    _COST_PER_TOKEN = _price_per_m / 1_000_000
+    _default = _all_pricing.get("opus", {"input": 15.0, "output": 75.0})
+    _model_pricing = _all_pricing.get(_pricing_model, _default)
+    _input_price_per_m = _model_pricing["input"]
+    _output_price_per_m = _model_pricing["output"]
+    _INPUT_COST = _input_price_per_m / 1_000_000
+    _OUTPUT_COST = _output_price_per_m / 1_000_000
     _model_label = _pricing_model.capitalize()
     _GRID_COLS = 10
     _FILLED = "⛁"
     _EMPTY = "⛶"
+
+    # The output_compression bucket is the only one saving output tokens.
+    _OUTPUT_BUCKETS = {"output_compression"}
 
     def _fmt_tokens(n: int) -> str:
         if n >= 1_000_000:
@@ -1271,11 +1278,26 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             return f"{n / 1000:.1f}k"
         return str(n)
 
-    def _fmt_cost(n: int) -> str:
-        cost = n * _COST_PER_TOKEN
+    def _fmt_cost_input(n: int) -> str:
+        cost = n * _INPUT_COST
         if cost < 0.01:
             return "<$0.01"
         return f"${cost:.2f}"
+
+    def _fmt_cost_output(n: int) -> str:
+        cost = n * _OUTPUT_COST
+        if cost < 0.01:
+            return "<$0.01"
+        return f"${cost:.2f}"
+
+    def _bucket_cost(bucket: str, tokens: int) -> float:
+        rate = _OUTPUT_COST if bucket in _OUTPUT_BUCKETS else _INPUT_COST
+        return tokens * rate
+
+    def _fmt_cost_raw(amount: float) -> str:
+        if amount < 0.01:
+            return "<$0.01"
+        return f"${amount:.2f}"
 
     def _bar(saved_pct: int) -> str:
         """Render ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ grid where filled = tokens used."""
@@ -1307,6 +1329,20 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
         s = sum(int(v.get("served", 0)) for v in buckets.values())
         return b, s
 
+    def _split_io(buckets: dict) -> tuple[int, int, int, int]:
+        """Split buckets into (input_baseline, input_served, output_baseline, output_served)."""
+        ib = is_ = ob = os_ = 0
+        for key, v in buckets.items():
+            base = int(v.get("baseline", 0))
+            srv = int(v.get("served", 0))
+            if key in _OUTPUT_BUCKETS:
+                ob += base
+                os_ += srv
+            else:
+                ib += base
+                is_ += srv
+        return ib, is_, ob, os_
+
     def _print_project(name: str, stats: dict, buckets: dict, levels: dict) -> None:
         queries = stats.get("queries", 0)
 
@@ -1325,6 +1361,16 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
 
         tokens_saved = max(0, baseline - served) if queries > 0 else 0
         saved_pct = int(tokens_saved / baseline * 100) if baseline > 0 and queries > 0 else 0
+
+        # Split into input / output savings
+        in_base, in_srv, out_base, out_srv = _split_io(buckets)
+        in_saved = max(0, in_base - in_srv)
+        out_saved = max(0, out_base - out_srv)
+        # Legacy projects have no bucket data; treat all savings as input.
+        if bucket_baseline == 0 and tokens_saved > 0:
+            in_saved = tokens_saved
+            out_saved = 0
+        total_cost_saved = in_saved * _INPUT_COST + out_saved * _OUTPUT_COST
 
         q_label = "query" if queries == 1 else "queries"
 
@@ -1350,29 +1396,28 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
         )
         click.echo()
 
-        # Before / after / saved
+        # Input / output / total saved
         click.echo(
-            f"  {dim('Without CCE')}   "
-            f"{value(_fmt_tokens(baseline)):>10}  {dim('tokens')}   "
-            f"{dim(_fmt_cost(baseline))}"
+            f"  {dim('Input savings')}   "
+            f"{value(_fmt_tokens(in_saved)):>10}  {dim('tokens')}   "
+            f"{dim(_fmt_cost_input(in_saved))}"
         )
-        click.echo(
-            f"  {success('With CCE')}      "
-            f"{value(_fmt_tokens(served)):>10}  {dim('tokens')}   "
-            f"{dim(_fmt_cost(served))}"
-        )
+        if out_saved > 0:
+            click.echo(
+                f"  {dim('Output savings')}  "
+                f"{value(_fmt_tokens(out_saved)):>10}  {dim('tokens')}   "
+                f"{dim(_fmt_cost_output(out_saved))}"
+            )
         click.echo(f"  {dim('─' * 42)}")
         click.echo(
-            f"  {success('Saved')}         "
+            f"  {success('Total saved')}   "
             f"{click.style(_fmt_tokens(tokens_saved), fg='green', bold=True):>10}  {dim('tokens')}   "
-            f"{click.style(_fmt_cost(tokens_saved), fg='green', bold=True)}"
+            f"{click.style(_fmt_cost_raw(total_cost_saved), fg='green', bold=True)}"
         )
-        # Per-query average — the number a user actually grounds "is this
-        # worth my time?" on. Skipped when there are no queries or no
-        # savings (avoids dividing by zero and showing $0.00/query noise).
+        # Per-query average
         if queries > 0 and tokens_saved > 0:
             avg_tokens = tokens_saved // max(1, queries)
-            avg_cost = _fmt_cost(avg_tokens)
+            avg_cost = _fmt_cost_raw(total_cost_saved / max(1, queries))
             click.echo(
                 f"  {dim(f'~{_fmt_tokens(avg_tokens)} tokens / query')}  "
                 f"{dim(f'~{avg_cost} / query')}"
@@ -1390,9 +1435,9 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             if saved <= 0:
                 continue
             pct = int(saved / baseline * 100) if baseline > 0 else 0
-            rows.append((display, pct, saved, int(b.get("calls", 0)), is_est, idx))
+            rows.append((key, display, pct, saved, int(b.get("calls", 0)), is_est, idx))
         # Polish 2: sort by saved tokens descending. Biggest wins first.
-        rows.sort(key=lambda r: (-r[2], r[5]))
+        rows.sort(key=lambda r: (-r[3], r[6]))
 
         if rows:
             click.echo(f"  {dim('Breakdown:')}")
@@ -1401,16 +1446,16 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             # form so estimate buckets don't blow out the alignment.
             displayed_labels = [
                 f"{display}*" if is_est else display
-                for display, _, _, _, is_est, _ in rows
+                for _, display, _, _, _, is_est, _ in rows
             ]
             label_width = max(len(s) for s in displayed_labels) + 1
             # Polish 3: normalize bar fill against the largest bucket's saved
             # tokens, not the total. Otherwise a dominant bucket squashes all
             # others to 0–1 cells and the visualisation goes blind.
-            max_saved = max(r[2] for r in rows)
+            max_saved = max(r[3] for r in rows)
             any_estimate = False
-            for display, pct, saved, calls, is_est in [
-                (d, p, s, c, e) for d, p, s, c, e, _ in rows
+            for key, display, pct, saved, calls, is_est in [
+                (k, d, p, s, c, e) for k, d, p, s, c, e, _ in rows
             ]:
                 if is_est:
                     any_estimate = True
@@ -1430,11 +1475,12 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
                 call_text = "1 call" if calls == 1 else f"{calls} calls"
                 # Polish 5: asterisk glued to label, no separate marker column.
                 label_text = f"{display}*" if is_est else display
+                cost_str = _fmt_cost_raw(_bucket_cost(key, saved))
                 click.echo(
                     f"    {label(label_text.ljust(label_width))}  "
                     f"{value(pct_text)}  {mini_bar}  "
                     f"{dim(_fmt_tokens(saved).rjust(6))} "
-                    f"{dim(_fmt_cost(saved).rjust(8))} "
+                    f"{dim(cost_str.rjust(8))} "
                     f"{dim(f'· {call_text}')}"
                 )
             click.echo()
@@ -1477,9 +1523,11 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
                 f"{label('compression')} {value(f'{max(0, compression_pct)}%')}"
             )
 
-        click.echo(
-            f"  {dim(f'Cost estimate based on {_model_label} input pricing (${_price_per_m:.0f}/1M tokens)')}"
+        pricing_note = (
+            f"Cost estimate based on {_model_label} pricing "
+            f"(input ${_input_price_per_m}/1M, output ${_output_price_per_m}/1M)"
         )
+        click.echo(f"  {dim(pricing_note)}")
 
     def _json_entry(name: str, stats: dict, buckets: dict, levels: dict) -> dict:
         full_file = stats.get("full_file_tokens", 0)
@@ -1493,6 +1541,9 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             baseline = max(full_file, raw) if full_file > 0 else raw
             served_total = served
         saved = max(0, baseline - served_total)
+        in_base, in_srv, out_base, out_srv = _split_io(buckets)
+        in_saved = max(0, in_base - in_srv)
+        out_saved = max(0, out_base - out_srv)
         retrieval_pct = (
             int(round((1 - raw / full_file) * 100))
             if full_file > 0 and raw <= full_file
@@ -1510,6 +1561,8 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             "raw_tokens": raw,
             "served_tokens": served,
             "tokens_saved": saved,
+            "input_tokens_saved": in_saved,
+            "output_tokens_saved": out_saved,
             # Kept for backward compat with anything scraping this JSON:
             "savings_pct": int(saved / baseline * 100) if baseline > 0 else 0,
             "retrieval_savings_pct": max(0, retrieval_pct),
@@ -1602,6 +1655,17 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
         total_queries = sum(s.get("queries", 0) for _, s, _, _ in reports)
         total_saved = max(0, total_baseline - total_served)
         total_pct = int(total_saved / total_baseline * 100) if total_baseline > 0 else 0
+        # Aggregate input/output across all projects
+        all_in_saved = all_out_saved = 0
+        for _, stats, bkts, _ in reports:
+            ib, is_, ob, os_ = _split_io(bkts)
+            all_in_saved += max(0, ib - is_)
+            all_out_saved += max(0, ob - os_)
+        # Legacy projects with no bucket data: attribute remaining to input
+        bucket_total_saved = all_in_saved + all_out_saved
+        if bucket_total_saved < total_saved:
+            all_in_saved += total_saved - bucket_total_saved
+        agg_cost = all_in_saved * _INPUT_COST + all_out_saved * _OUTPUT_COST
         click.echo()
         click.echo(
             f"  {bold('Total')} {dim('across')} {value(str(len(reports)))} "
@@ -1613,7 +1677,7 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             f"{dim('saved ·')} "
             f"{click.style(_fmt_tokens(total_saved), fg='green', bold=True)} "
             f"{dim('tokens ·')} "
-            f"{click.style(_fmt_cost(total_saved), fg='green', bold=True)}"
+            f"{click.style(_fmt_cost_raw(agg_cost), fg='green', bold=True)}"
         )
 
     click.echo()

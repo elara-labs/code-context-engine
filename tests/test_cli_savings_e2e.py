@@ -225,12 +225,12 @@ async def test_query_and_savings(runner, indexed_project):
 
     # Cost estimate line present
     assert "Cost estimate" in out
-    assert "/1M tokens" in out
+    assert "input $" in out
+    assert "output $" in out
 
-    # Before/after/saved structure present
-    assert "Without CCE" in out
-    assert "With CCE" in out
-    assert "Saved" in out
+    # Input/output/total saved structure present
+    assert "Input savings" in out
+    assert "Total saved" in out
 
     # JSON output also works
     with runner.isolated_filesystem():

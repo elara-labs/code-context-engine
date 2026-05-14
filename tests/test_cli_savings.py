@@ -59,10 +59,10 @@ def test_savings_with_data(runner, stats_dir):
     result = _invoke_savings(runner, storage_path, project_name)
     assert result.exit_code == 0
     assert "test-project" in result.output
-    # Three absolute totals, _fmt_k-formatted (served / raw / full-file baseline).
-    assert "2.0k" in result.output      # served_tokens
-    assert "3.0k" in result.output      # raw_tokens (chunks before compression)
-    assert "5.0k" in result.output      # full_file baseline
+    # Legacy project: saved = 5000 - 2000 = 3000, all attributed to input.
+    assert "Input savings" in result.output
+    assert "3.0k" in result.output      # total saved tokens
+    assert "Total saved" in result.output
     # Split percentages reported separately so the headline doesn't conflate them.
     # Retrieval = (5000-3000)/5000 = 40%; Compression = (3000-2000)/3000 = 33%.
     assert "40%" in result.output

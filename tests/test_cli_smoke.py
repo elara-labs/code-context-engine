@@ -244,15 +244,15 @@ def test_clear_no_data(runner, tmp_path):
 
 
 def test_pricing_fetch_and_fallback():
-    """get_model_pricing returns a dict with opus/sonnet/haiku keys."""
+    """get_model_pricing returns a dict with input/output pricing per family."""
     from context_engine.pricing import get_model_pricing
     pricing = get_model_pricing()
     assert isinstance(pricing, dict)
     assert len(pricing) >= 1
-    # All values are positive floats
-    for family, price in pricing.items():
-        assert isinstance(price, (int, float))
-        assert price > 0
+    for family, entry in pricing.items():
+        assert isinstance(entry, dict)
+        assert entry["input"] > 0
+        assert entry["output"] > 0
 
 
 def test_pricing_fallback_on_network_error():
@@ -267,13 +267,14 @@ def test_pricing_fallback_on_network_error():
 
 
 def test_pricing_shown_in_savings_output(runner, storage):
-    """Savings report shows cost estimate line with model name."""
+    """Savings report shows cost estimate line with model name and both rates."""
     p1, p2 = _patch_config(str(storage))
     with runner.isolated_filesystem(), p1, p2:
         result = runner.invoke(main, ["savings"])
     assert result.exit_code == 0
     assert "Cost estimate" in result.output
-    assert "/1M tokens" in result.output
+    assert "input $" in result.output
+    assert "output $" in result.output
 
 
 # ── Grid bar rendering ──────────────────────────────────────
