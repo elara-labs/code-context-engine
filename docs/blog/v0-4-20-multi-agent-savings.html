@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>v0.4.20: Multi-Agent Targeting and Input/Output Savings Split</title>
+  <meta name="description" content="CCE v0.4.20 adds --agent flag for targeting specific AI coding agents, splits savings into input and output tokens with accurate pricing, and fixes upgrade version detection.">
+  <meta name="keywords" content="Code Context Engine, CCE update, multi-agent MCP, cce init agent, input output token savings, Claude Code tokens, Codex MCP, Copilot MCP, AI coding costs">
+  <meta property="og:title" content="v0.4.20: Multi-Agent Targeting and Input/Output Savings Split">
+  <meta property="og:description" content="New --agent flag, accurate input/output cost tracking, and upgrade fixes.">
+  <meta property="og:type" content="article">
+  <link rel="canonical" href="https://elara-labs.github.io/code-context-engine/blog/v0-4-20-multi-agent-savings.html">
+  <link rel="icon" type="image/svg+xml" href="../logo.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg:#06080f; --bg2:#0c1120; --bg3:#131c30; --cyan:#00d4ff; --green:#34d399; --amber:#fbbf24; --text:#e8f0ff; --text2:#7b93b8; --text3:#3a5070; --border:#1a2a42; --mono:'DM Mono',monospace; --sans:'Instrument Sans',system-ui,sans-serif; }
+    body { background:var(--bg); color:var(--text); font-family:var(--sans); line-height:1.7; }
+    nav { position:sticky; top:0; z-index:100; padding:16px 48px; background:rgba(6,8,15,.85); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+    nav a { color:var(--text2); text-decoration:none; font-size:14px; font-weight:500; }
+    nav a:hover { color:var(--cyan); }
+    .nav-brand { display:flex; align-items:center; gap:10px; color:var(--text); font-weight:700; font-size:15px; }
+    .nav-brand img { width:24px; height:24px; border-radius:5px; }
+    article { max-width:720px; margin:0 auto; padding:80px 24px 120px; }
+    .meta { font-size:13px; color:var(--text3); font-family:var(--mono); margin-bottom:32px; }
+    h1 { font-size:40px; font-weight:800; line-height:1.2; letter-spacing:-0.025em; margin-bottom:24px; }
+    .subtitle { font-size:20px; color:var(--text2); margin-bottom:56px; line-height:1.5; }
+    h2 { font-size:26px; font-weight:700; margin-top:56px; margin-bottom:20px; }
+    h3 { font-size:20px; font-weight:700; margin-top:36px; margin-bottom:14px; }
+    p { font-size:17px; color:var(--text2); margin-bottom:20px; }
+    strong { color:var(--text); }
+    ul, ol { margin:0 0 20px 24px; color:var(--text2); font-size:17px; }
+    li { margin-bottom:8px; }
+    code { font-family:var(--mono); font-size:.88em; background:var(--bg3); border:1px solid var(--border); border-radius:4px; padding:2px 6px; color:var(--cyan); }
+    pre { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:24px; font-family:var(--mono); font-size:14px; color:var(--text); overflow-x:auto; margin:24px 0; line-height:1.8; }
+    .callout { background:var(--bg2); border-left:3px solid var(--cyan); border-radius:0 10px 10px 0; padding:20px 24px; margin:24px 0; }
+    .callout p { margin-bottom:0; }
+    table { width:100%; border-collapse:collapse; margin:24px 0; font-size:15px; }
+    th { text-align:left; padding:12px 16px; font-size:12px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--text3); border-bottom:2px solid var(--border); }
+    td { padding:12px 16px; border-bottom:1px solid var(--border); color:var(--text2); }
+    td:first-child { color:var(--text); font-weight:500; }
+    .highlight { color:var(--cyan); font-weight:700; }
+    .cta-box { background:var(--bg2); border:1px solid rgba(0,212,255,0.2); border-radius:12px; padding:36px; margin-top:56px; text-align:center; }
+    .cta-box h3 { font-size:22px; margin-bottom:12px; margin-top:0; }
+    .cta-box p { text-align:center; }
+    .cta-link { display:inline-block; margin-top:20px; color:var(--cyan); text-decoration:none; font-weight:600; font-size:16px; }
+    .cta-link:hover { text-decoration:underline; }
+    .tags { margin-top:56px; padding-top:24px; border-top:1px solid var(--border); display:flex; flex-wrap:wrap; gap:8px; }
+    .tag { font-family:var(--mono); font-size:12px; padding:4px 12px; background:var(--bg3); border:1px solid var(--border); border-radius:20px; color:var(--text3); }
+    footer { border-top:1px solid var(--border); padding:24px 48px; text-align:center; font-size:13px; color:var(--text3); }
+    footer a { color:var(--text2); text-decoration:none; }
+    footer a:hover { color:var(--cyan); }
+    @media (max-width:640px) { article { padding:48px 16px 80px; } h1 { font-size:28px; } nav { padding:14px 16px; } }
+  </style>
+  <script type="application/ld+json">
+  { "@context":"https://schema.org", "@type":"Article", "headline":"v0.4.20: Multi-Agent Targeting and Input/Output Savings Split", "datePublished":"2026-05-15", "author":{"@type":"Organization","name":"Elara Labs"} }
+  </script>
+</head>
+<body>
+<nav>
+  <a href="../" class="nav-brand"><img src="../logo.svg" alt="CCE"> Code Context Engine</a>
+  <a href="https://github.com/elara-labs/code-context-engine">GitHub</a>
+</nav>
+<article>
+  <div class="meta">May 15, 2026 · 4 min read</div>
+  <h1>v0.4.20: Multi-Agent Targeting and Input/Output Savings Split</h1>
+  <p class="subtitle">Target specific AI coding agents with <code>--agent</code>, see accurate cost savings split by input and output tokens, and get reliable upgrade version detection.</p>
+
+  <h2>Target the agent you actually use</h2>
+  <p><code>cce init</code> has always auto-detected your editor. That works well when you have Claude Code installed. But if you only use Codex, or only use Copilot, auto-detection could miss your setup or write config files you don't need.</p>
+  <p>Now you can be explicit:</p>
+
+<pre>cce init --agent codex      # Codex only: ~/.codex/config.toml + AGENTS.md
+cce init --agent copilot    # VS Code only: .vscode/mcp.json + .github/copilot-instructions.md
+cce init --agent claude     # Claude only: .mcp.json + CLAUDE.md
+cce init --agent all        # Every supported editor
+cce init                    # Auto-detect (same as before)</pre>
+
+  <p>Each flag writes exactly what that agent needs. No surprise edits to files belonging to other editors.</p>
+
+  <h3>What gets written</h3>
+  <table>
+    <thead>
+      <tr><th>Flag</th><th>MCP config</th><th>Instruction file</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>--agent claude</code></td><td><code>.mcp.json</code></td><td><code>CLAUDE.md</code></td></tr>
+      <tr><td><code>--agent codex</code></td><td><code>~/.codex/config.toml</code></td><td><code>AGENTS.md</code></td></tr>
+      <tr><td><code>--agent copilot</code></td><td><code>.vscode/mcp.json</code></td><td><code>.github/copilot-instructions.md</code></td></tr>
+      <tr><td><code>--agent all</code></td><td>All of the above + Cursor, Gemini, OpenCode, Tabnine</td><td>All instruction files</td></tr>
+    </tbody>
+  </table>
+
+  <p><code>--agent all</code> is computed from the editor registry at runtime. When new editors are added to CCE, <code>all</code> picks them up automatically.</p>
+
+  <h2>Input and output savings, split correctly</h2>
+  <p>Before this release, <code>cce savings</code> priced everything at the input token rate. That was wrong. Output tokens cost 5x more than input tokens on Opus ($75/1M vs $15/1M). A small output savings is worth more in dollars than a large input savings.</p>
+
+  <p>The savings report now splits these correctly:</p>
+
+<pre>  Input savings   8.6k  tokens   $0.13
+  Output savings  325  tokens   $0.02
+  ──────────────────────────────────────────
+  Total saved   8.9k  tokens   $0.15
+  ~4.5k tokens / query  ~$0.08 / query
+
+  Breakdown:
+    retrieval              48%  ▰▰▰▰▰▰▰▰▰▰    6.0k    $0.09 · 1 call
+    chunk compression      20%  ▰▰▰▰▱▱▱▱▱▱    2.6k    $0.04 · 1 call
+    output compression*     2%  ▰▱▱▱▱▱▱▱▱▱     325    $0.02 · 1 call
+
+  Cost estimate based on Opus pricing (input $15/1M, output $75/1M)</pre>
+
+  <p>The pricing module now fetches both input and output rates from the Anthropic docs page. Old cache files from previous versions are migrated automatically.</p>
+
+  <h2>Upgrade version detection fix</h2>
+  <p><code>cce upgrade</code> had a bug where it always reported "Already on latest version" even after a successful upgrade. The running process couldn't see the new version metadata because <code>uv tool upgrade</code> installs into a separate virtual environment.</p>
+  <p>The fix: after upgrading, CCE shells out to the upgraded binary with <code>--version</code> to read the real post-upgrade version. Simple, reliable.</p>
+
+  <h2>Upgrade</h2>
+
+<pre>cce upgrade</pre>
+
+  <p>Or manually:</p>
+
+<pre>uv tool upgrade code-context-engine</pre>
+
+  <div class="callout">
+    <p><strong>Existing projects:</strong> Run <code>cce init --agent all</code> if you want to add instruction files for Codex and Copilot. Your existing <code>CLAUDE.md</code> and <code>.mcp.json</code> will be preserved.</p>
+  </div>
+
+  <h2>Full changelog</h2>
+  <ul>
+    <li><strong>feat:</strong> <code>cce init --agent {auto,claude,codex,copilot,all}</code> for explicit agent targeting</li>
+    <li><strong>feat:</strong> New instruction file targets: <code>AGENTS.md</code> (Codex) and <code>.github/copilot-instructions.md</code> (Copilot)</li>
+    <li><strong>feat:</strong> Savings report splits input and output token savings with correct per-type pricing</li>
+    <li><strong>feat:</strong> Pricing module tracks both input and output rates per model family</li>
+    <li><strong>fix:</strong> <code>cce upgrade</code> now correctly detects the post-upgrade version</li>
+    <li><strong>fix:</strong> Claude-only setup (session hooks, memory hooks) skipped when targeting non-Claude agents</li>
+  </ul>
+
+  <div class="cta-box">
+    <h3>Get started</h3>
+    <p>Install CCE and start saving tokens in under a minute.</p>
+    <a class="cta-link" href="https://github.com/elara-labs/code-context-engine">GitHub &rarr;</a>
+  </div>
+
+  <div class="tags">
+    <span class="tag">release</span>
+    <span class="tag">v0.4.20</span>
+    <span class="tag">multi-agent</span>
+    <span class="tag">token-savings</span>
+    <span class="tag">codex</span>
+    <span class="tag">copilot</span>
+  </div>
+</article>
+<footer>
+  <a href="../">Code Context Engine</a> · <a href="https://github.com/elara-labs/code-context-engine">GitHub</a> · MIT License
+</footer>
+</body>
+</html>
