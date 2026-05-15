@@ -123,6 +123,16 @@ Call `record_code_area(file_path="...", description="...")` after meaningful wor
 """
 
 INSTRUCTION_FILES: dict[str, dict] = {
+    "agents": {
+        "name": "AGENTS.md",
+        "path": "AGENTS.md",
+        "detect": ["AGENTS.md"],
+    },
+    "copilot": {
+        "name": ".github/copilot-instructions.md",
+        "path": ".github/copilot-instructions.md",
+        "detect": [".github/copilot-instructions.md"],
+    },
     "cursorrules": {
         "name": ".cursorrules",
         "path": ".cursorrules",
@@ -563,6 +573,7 @@ def write_instruction_file(project_dir: Path, file_key: str) -> bool:
     info = INSTRUCTION_FILES[file_key]
     path = project_dir / info["path"]
     marker = "## Context Engine (CCE)"
+    path.parent.mkdir(parents=True, exist_ok=True)
 
     if path.exists():
         content = path.read_text()

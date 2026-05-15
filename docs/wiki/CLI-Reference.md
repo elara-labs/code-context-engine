@@ -46,7 +46,7 @@ Shows every available command grouped by category:
 
 ```
   ── Setup ─────────────────────────────────────────
-    cce init                            Index project, install git hooks, write .mcp.json
+    cce init [--agent auto|all|...]     Index project and register MCP config
     cce index                           Re-index changed files
     cce index --full                    Force full re-index of every file
     cce index --path <file>             Index one file or directory
@@ -113,12 +113,15 @@ Shows every available command grouped by category:
 
 ## cce init
 
-One-time setup for a project. Checks dependencies, indexes all code, installs git hooks, and connects Claude Code via MCP.
+One-time setup for a project. Checks dependencies, indexes all code, installs git hooks, and connects AI coding agents via MCP.
 
 ```bash
 cd /path/to/your/project
 cce init
 ```
+
+Use `--agent claude`, `--agent codex`, `--agent copilot`, or `--agent all` to
+target a specific integration instead of auto-detection.
 
 **Expected output:**
 
@@ -140,7 +143,7 @@ cce init
 
   ✓ Indexed 1,247 chunks from 89 files
 
-  Done!  Restart Claude Code to activate CCE.
+  Done!  Restart your AI coding agent to activate CCE.
 ```
 
 **With Ollama running:**
@@ -162,8 +165,8 @@ cce init
 - Checks Ollama status and reports compression mode
 - Builds vector, FTS, and graph indexes
 - Installs `post-commit` and `pre-push` git hooks
-- Writes `.mcp.json` pointing Claude Code at the MCP server
-- Creates or updates `CLAUDE.md` with CCE instructions
+- Writes MCP config for selected agents (`.mcp.json`, `.vscode/mcp.json`, or `~/.codex/config.toml`)
+- Creates or updates agent instruction files (`CLAUDE.md`, `AGENTS.md`, or `.github/copilot-instructions.md`)
 - Adds per-machine files to `.gitignore`
 
 ---

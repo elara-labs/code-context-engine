@@ -681,10 +681,62 @@ def main(ctx: click.Context, verbose: bool) -> None:
         _show_welcome_banner(ctx.obj["config"])
 
 
+_INIT_AGENT_CHOICES = ("auto", "claude", "codex", "copilot", "all")
+_INIT_AGENT_TO_EDITORS = {
+    "claude": {"claude"},
+    "codex": {"codex"},
+    "copilot": {"vscode"},
+}
+# Editor key → instruction-file key. `claude` is omitted because CLAUDE.md is
+# written by `_ensure_claude_md`, not via the generic instruction-file path.
+# `opencode` has no instruction file.
+_INIT_EDITOR_TO_INSTRUCTIONS = {
+    "codex": "agents",
+    "vscode": "copilot",
+    "cursor": "cursorrules",
+    "gemini": "gemini",
+    "tabnine": "tabnine",
+}
+
+
+def _init_editor_targets(project_dir: Path, agent: str) -> set[str]:
+    """Return editor keys to configure for `cce init --agent`.
+
+    - `all`: every editor in EDITORS (computed at call time so the set never
+      drifts when new editors are added).
+    - `auto`: Claude plus any editor whose project/home markers exist.
+    - explicit (`claude`/`codex`/`copilot`): exactly the editors that flag
+      maps to.
+    """
+    from context_engine.editors import EDITORS, detect_editors
+
+    if agent == "all":
+        return set(EDITORS.keys())
+    if agent != "auto":
+        return set(_INIT_AGENT_TO_EDITORS[agent])
+    return {"claude", *detect_editors(project_dir)}
+
+
+def _init_instruction_targets(editor_targets: set[str]) -> set[str]:
+    """Instruction-file keys derived from the selected editors."""
+    return {
+        file_key
+        for editor_key, file_key in _INIT_EDITOR_TO_INSTRUCTIONS.items()
+        if editor_key in editor_targets
+    }
+
+
 @main.command()
+@click.option(
+    "--agent",
+    type=click.Choice(_INIT_AGENT_CHOICES),
+    default="auto",
+    show_default=True,
+    help="Agent/editor target: auto, claude, codex, copilot, or all.",
+)
 @click.pass_context
-def init(ctx: click.Context) -> None:
-    """Initialize context engine and connect it to Claude Code."""
+def init(ctx: click.Context, agent: str) -> None:
+    """Initialize context engine and connect it to AI coding agents."""
     from context_engine.indexer.git_hooks import install_hooks
     from context_engine.project_commands import ensure_gitignore
     config = ctx.obj["config"]
@@ -719,23 +771,24 @@ def init(ctx: click.Context) -> None:
         _warn("Not a git repository — git hook skipped")
         click.echo(_dim("    Run `cce index` manually after making changes."))
 
-    # 4. MCP config — Claude Code + any detected editors
+    # 4. MCP config — selected agents/editors
     from context_engine.editors import (
         EDITORS, INSTRUCTION_FILES,
-        detect_editors, configure_mcp, write_instruction_file,
+        configure_mcp, write_instruction_file,
     )
-    configured = _configure_mcp(project_dir)
-    if configured:
-        _ok("MCP server registered in " + click.style(".mcp.json", fg="cyan"))
-    else:
-        _ok("MCP server already configured in " + click.style(".mcp.json", fg="cyan"))
-
-    # Configure MCP for other detected editors (Cursor, VS Code, Gemini, Codex, Tabnine)
     from context_engine.editors import _editor_section  # noqa: SLF001
-    detected = detect_editors(project_dir)
-    for editor_key in detected:
+
+    editor_targets = _init_editor_targets(project_dir, agent)
+    if "claude" in editor_targets:
+        configured = _configure_mcp(project_dir)
+        if configured:
+            _ok("MCP server registered in " + click.style(".mcp.json", fg="cyan"))
+        else:
+            _ok("MCP server already configured in " + click.style(".mcp.json", fg="cyan"))
+
+    for editor_key in sorted(editor_targets):
         if editor_key == "claude":
-            continue  # already handled above
+            continue
         editor = EDITORS[editor_key]
         changed = configure_mcp(project_dir, editor_key)
         if changed is None:
@@ -751,19 +804,26 @@ def init(ctx: click.Context) -> None:
             section = _editor_section(editor, project_dir)
             click.echo(_dim(f"    ~/{editor['config_path']}  →  [{section}]"))
 
-    # Write instruction files for detected editors
-    for file_key, info in INSTRUCTION_FILES.items():
-        for marker in info["detect"]:
-            if (project_dir / marker).exists():
-                if write_instruction_file(project_dir, file_key):
-                    _ok(f"CCE instructions added to {info['name']}")
-                break
+    # Write instruction files for the selected editors. In `auto` mode, also
+    # pick up instruction files whose marker exists even if the editor itself
+    # wasn't detected (e.g. an `AGENTS.md` checked in without a `~/.codex/`).
+    # Explicit `--agent X` writes only what X covers — no surprise edits.
+    instruction_targets = _init_instruction_targets(editor_targets)
+    if agent == "auto":
+        for file_key, info in INSTRUCTION_FILES.items():
+            if any((project_dir / marker).exists() for marker in info["detect"]):
+                instruction_targets.add(file_key)
+    for file_key in sorted(instruction_targets):
+        info = INSTRUCTION_FILES[file_key]
+        if write_instruction_file(project_dir, file_key):
+            _ok(f"CCE instructions added to {info['name']}")
 
     # 5. CLAUDE.md + session hook + memory lifecycle hooks
-    _ensure_claude_md(project_dir)
-    _ensure_session_hook(project_dir)
-    _install_memory_hooks(project_dir)
-    _check_memory_capture_reachable(config, project_dir)
+    if "claude" in editor_targets:
+        _ensure_claude_md(project_dir)
+        _ensure_session_hook(project_dir)
+        _install_memory_hooks(project_dir)
+        _check_memory_capture_reachable(config, project_dir)
 
     # 6. .gitignore — add CCE per-machine entries
     ensure_gitignore(str(project_dir))
@@ -777,7 +837,7 @@ def init(ctx: click.Context) -> None:
     click.echo("")
     click.echo(
         click.style("  Done!", fg="green", bold=True) +
-        click.style("  Restart Claude Code to activate CCE.", fg="white")
+        click.style("  Restart your AI coding agent to activate CCE.", fg="white")
     )
     click.echo("")
 
@@ -962,7 +1022,7 @@ def list_commands() -> None:
 
     groups = [
         ("Setup", [
-            ("cce init", "Index project, install git hooks, write .mcp.json"),
+            ("cce init [--agent auto|all|...]", "Index project and register MCP config"),
             ("cce index", "Re-index changed files"),
             ("cce index --full", "Force full re-index of every file"),
             ("cce index --path <file>", "Index one file or directory"),
@@ -2197,7 +2257,7 @@ def upgrade(ctx: click.Context, check: bool) -> None:
     click.echo("")
     click.echo(
         click.style("  Done!", fg="green", bold=True) +
-        click.style("  Restart Claude Code to pick up changes.", fg="white")
+        click.style("  Restart your AI coding agent to pick up changes.", fg="white")
     )
     click.echo("")
 
