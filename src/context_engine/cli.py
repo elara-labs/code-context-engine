@@ -56,6 +56,88 @@ def _safe_cwd() -> Path:
         ) from exc
 
 
+# ── Update check ─────────────────────────────────────────────────────
+_CCE_HOME = Path.home() / ".cce"
+_UPDATE_CACHE = _CCE_HOME / "update_check.json"
+_UPDATE_CHECK_TTL = 24 * 3600  # 1 day
+
+
+def _version_tuple(v: str) -> tuple[int, ...]:
+    """Parse '0.4.21' into (0, 4, 21) for comparison."""
+    return tuple(int(x) for x in v.split(".") if x.isdigit())
+
+
+def _check_for_update() -> str | None:
+    """Return the latest PyPI version if newer than installed, else None.
+
+    Checks at most once per day. Best-effort: swallows all errors.
+    """
+    import time
+    from importlib.metadata import version as pkg_version
+
+    try:
+        current = pkg_version("code-context-engine")
+    except Exception:
+        return None
+
+    # Read cache
+    try:
+        if _UPDATE_CACHE.exists():
+            data = json.loads(_UPDATE_CACHE.read_text())
+            if time.time() - data.get("ts", 0) < _UPDATE_CHECK_TTL:
+                latest = data.get("latest", "")
+                if latest and _version_tuple(latest) > _version_tuple(current):
+                    return latest
+                return None
+    except Exception:
+        pass
+
+    # Fetch from PyPI
+    latest = None
+    try:
+        import httpx
+        resp = httpx.get(
+            "https://pypi.org/pypi/code-context-engine/json",
+            timeout=3.0,
+            follow_redirects=True,
+        )
+        if resp.status_code == 200:
+            latest = resp.json()["info"]["version"]
+    except Exception:
+        pass
+
+    # Cache result
+    try:
+        _CCE_HOME.mkdir(parents=True, exist_ok=True)
+        _UPDATE_CACHE.write_text(json.dumps({"ts": time.time(), "latest": latest or ""}))
+    except Exception:
+        pass
+
+    if latest and _version_tuple(latest) > _version_tuple(current):
+        return latest
+    return None
+
+
+def _show_update_notice() -> None:
+    """Print a one-line update notice if a newer version is available."""
+    from importlib.metadata import version as pkg_version
+
+    try:
+        latest = _check_for_update()
+        if latest:
+            current = pkg_version("code-context-engine")
+            click.echo(
+                f"\n  {click.style('Update available', fg='yellow', bold=True)} "
+                f"{click.style(current, dim=True)} → "
+                f"{click.style(latest, fg='green', bold=True)}  "
+                f"{click.style('Run', dim=True)} "
+                f"{click.style('cce upgrade', fg='cyan')} "
+                f"{click.style('to update', dim=True)}"
+            )
+    except Exception:
+        pass
+
+
 def _configure_mcp(project_dir: Path) -> bool:
     """Write MCP server config to .mcp.json in the project directory.
 
@@ -679,6 +761,16 @@ def main(ctx: click.Context, verbose: bool) -> None:
 
     if ctx.invoked_subcommand is None:
         _show_welcome_banner(ctx.obj["config"])
+
+
+@main.result_callback()
+@click.pass_context
+def _after_command(ctx: click.Context, *_args, **_kwargs) -> None:
+    """Run after every command. Shows update notice if available."""
+    # Skip for serve (long-running MCP server) and upgrade (already handles it)
+    if ctx.invoked_subcommand in ("serve", "upgrade"):
+        return
+    _show_update_notice()
 
 
 _INIT_AGENT_CHOICES = ("auto", "claude", "codex", "copilot", "all")

@@ -303,3 +303,36 @@ def test_grid_bar_high_usage(runner, tmp_path):
     assert result.exit_code == 0
     # 20% savings = 80% usage = 8 filled cells
     assert result.output.count("⛁") >= 7
+
+
+# ── Update check ──────────────────────────────────────
+
+
+def test_version_tuple_comparison():
+    """_version_tuple correctly compares version strings."""
+    from context_engine.cli import _version_tuple
+    assert _version_tuple("0.4.21") > _version_tuple("0.4.20")
+    assert _version_tuple("1.0.0") > _version_tuple("0.99.99")
+    assert _version_tuple("0.4.20") == _version_tuple("0.4.20")
+
+
+def test_update_check_shows_notice_when_newer(runner, storage):
+    """Update notice shown when PyPI has a newer version."""
+    p1, p2 = _patch_config(str(storage))
+    with runner.isolated_filesystem(), p1, p2, \
+         patch("context_engine.cli._check_for_update", return_value="99.0.0"):
+        result = runner.invoke(main, ["savings"])
+    assert result.exit_code == 0
+    assert "Update available" in result.output
+    assert "99.0.0" in result.output
+    assert "cce upgrade" in result.output
+
+
+def test_update_check_silent_when_current(runner, storage):
+    """No update notice when already on latest."""
+    p1, p2 = _patch_config(str(storage))
+    with runner.isolated_filesystem(), p1, p2, \
+         patch("context_engine.cli._check_for_update", return_value=None):
+        result = runner.invoke(main, ["savings"])
+    assert result.exit_code == 0
+    assert "Update available" not in result.output
