@@ -69,10 +69,10 @@
 ```bash
 uv tool install code-context-engine
 cd /path/to/your/project
-cce init
+cce init                              # or: cce init --agent all
 ```
 
-That's it. Claude now searches your index instead of reading entire files. No config needed.
+That's it. Your AI coding agent now searches your index instead of reading entire files. No config needed.
 
 ---
 
@@ -106,21 +106,26 @@ uv tool install "code-context-engine[local]"   # includes fastembed + ONNX Runti
 
 Restart your editor. Done. Every question now hits the index instead of re-reading files.
 
-`cce init` auto-detects your editor and writes the right config:
+`cce init` auto-detects your editor and writes the right config. To target a
+specific agent, use `--agent claude`, `--agent codex`, `--agent copilot`, or
+`--agent all`.
 
 | Editor | Config written | Instructions |
 |--------|---------------|--------------|
 | Claude Code | `.mcp.json` | `CLAUDE.md` |
-| VS Code / Copilot | `.vscode/mcp.json` | |
+| VS Code / Copilot | `.vscode/mcp.json` | `.github/copilot-instructions.md` |
 | Cursor | `.cursor/mcp.json` | `.cursorrules` |
 | Gemini CLI | `.gemini/settings.json` | `GEMINI.md` |
-| OpenAI Codex | `~/.codex/config.toml` (user-global, per-project section) | |
+| OpenAI Codex | `~/.codex/config.toml` (user-global, per-project section) | `AGENTS.md` |
 | OpenCode | `opencode.json` | |
 | Tabnine | `.tabnine/agent/settings.json` | `TABNINE.md` |
 
 Multiple editors in the same project? All get configured in one command.
 
-**Codex note:** Codex CLI reads MCP servers from `~/.codex/config.toml` only — it has no per-project config. `cce init` adds one `[mcp_servers.cce-<project>-<hash>]` section per project so multiple projects coexist; `cce uninstall` removes only the section for the current project.
+**Codex note:** Codex CLI reads MCP servers from `~/.codex/config.toml` only —
+it has no per-project config. `cce init` adds one `[mcp_servers.cce-<project>-<hash>]`
+section per project so multiple projects coexist; `cce uninstall` removes only
+the section for the current project.
 
 ```
   my-project · 38 queries
