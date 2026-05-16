@@ -1,0 +1,34 @@
+---
+title: Code Context Engine
+description: Documentation for Code Context Engine, a local MCP server that saves 94% on AI coding tokens.
+template: splash
+hero:
+  title: Code Context Engine
+  tagline: Index your codebase. AI searches instead of reading files. 94% token savings.
+  actions:
+    - text: Getting Started
+      link: /code-context-engine/guide/getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/elara-labs/code-context-engine
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid>
+  <Card title="Multi-Agent Support" icon="rocket">
+    Works with Claude Code, Codex, Copilot, Cursor, Gemini CLI, OpenCode, and Tabnine.
+  </Card>
+  <Card title="94% Token Savings" icon="approve-check">
+    Benchmarked on FastAPI. 20 real queries. Reproducible results.
+  </Card>
+  <Card title="Local and Private" icon="seti:lock">
+    Everything runs on your machine. No code leaves your system.
+  </Card>
+  <Card title="Built-in Search" icon="magnifier">
+    Hybrid vector + keyword search with graph expansion finds relevant code fast.
+  </Card>
+</CardGrid>
