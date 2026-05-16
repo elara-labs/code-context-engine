@@ -441,6 +441,55 @@ All other text files are chunked by line range. Binary files are skipped.
 
 ---
 
+## FAQ
+
+### Does CCE affect response quality?
+
+No. Quality stays the same or slightly improves.
+
+CCE replaces "dump the entire file" with "search for the relevant function." The model still gets the code it needs (0.90 Recall@10 in benchmarks). Less irrelevant context means less noise competing for attention, which can improve the model's focus on your actual question.
+
+### How do I increase output token savings?
+
+Set the output compression level in your project config (`cce.yaml`):
+
+```yaml
+compression:
+  output: max       # off | lite | standard | max
+```
+
+Or change it at runtime via the MCP tool:
+
+```
+set_output_level output_level=max
+```
+
+| Level | Savings | What it does |
+|-------|---------|--------------|
+| `off` | 0% | No compression |
+| `lite` | ~25% | Removes filler/hedging/pleasantries + diff-only for code changes |
+| `standard` | ~70% | Drops articles, fragments, short synonyms + diff-only for code |
+| `max` | ~80% | Telegraphic style + diff-only for code |
+
+Default is `standard`. All levels include **code output rules** that instruct the model to show only changed lines (not full file rewrites), which is where most output tokens go in coding sessions. The `max` level produces very terse prose (similar to "caveman mode"). Code blocks, paths, and commands are never compressed regardless of level.
+
+### Where do the savings come from?
+
+Most savings are **input tokens** (what goes into the model):
+
+| Layer | Type | Typical savings |
+|-------|------|-----------------|
+| Retrieval | Input | 94% (full files → relevant chunks) |
+| Chunk compression | Input | 89% (chunks → signatures) |
+| Grammar compression | Input | 13% (article/filler removal) |
+| Turn summarization | Input | varies (session history) |
+| Progressive disclosure | Input | varies (tool payloads) |
+| Output compression | Output | 25-80% (depends on level) |
+
+Output tokens cost 5x more per token (e.g. Opus: $15/1M input vs $75/1M output), so even a small output reduction has outsized cost impact.
+
+---
+
 ## Roadmap
 
 - [x] Multi-repo benchmarks (FastAPI, chi, fiber)
