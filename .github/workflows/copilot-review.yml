@@ -19,11 +19,9 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
-          gh api graphql -f query='
-            mutation($pullRequestId: ID!, $userIds: [ID!]!) {
-              requestReviews(input: {pullRequestId: $pullRequestId, userIds: $userIds, union: true}) {
-                pullRequest { number }
-              }
-            }' \
-            -f pullRequestId="$(gh api repos/$REPO/pulls/$PR_NUMBER --jq .node_id)" \
-            -f userIds[]="BOT_kgDOC9w8XQ"
+          gh api \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            "repos/$REPO/pulls/$PR_NUMBER/requested_reviewers" \
+            -f 'reviewers[]=Copilot' \
+            || echo "Copilot review request failed — check org Copilot seat config."
