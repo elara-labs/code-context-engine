@@ -46,9 +46,23 @@ class VectorStore:
     def _connect(self) -> sqlite3.Connection:
         import sqlite_vec
         conn = sqlite3.connect(self._db_file, check_same_thread=False)
-        conn.enable_load_extension(True)
-        sqlite_vec.load(conn)
-        conn.enable_load_extension(False)
+        try:
+            conn.enable_load_extension(True)
+            sqlite_vec.load(conn)
+            conn.enable_load_extension(False)
+        except AttributeError:
+            raise RuntimeError(
+                "Your Python was compiled without SQLite extension support "
+                "(enable_load_extension is missing). This is common with "
+                "python.org installers on macOS.\n\n"
+                "Fix: reinstall CCE under a Python that has extension support:\n"
+                "  uv tool install --python $(brew --prefix python3)/bin/python3 "
+                "--force code-context-engine\n\n"
+                "Or use Homebrew Python directly:\n"
+                "  brew install python3\n"
+                "  uv tool install --python /opt/homebrew/bin/python3 "
+                "--force code-context-engine"
+            ) from None
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         return conn

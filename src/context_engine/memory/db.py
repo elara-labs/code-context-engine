@@ -281,6 +281,14 @@ def _try_load_vec(conn: sqlite3.Connection) -> bool:
         sqlite_vec.load(conn)
         conn.enable_load_extension(False)
         return True
+    except AttributeError:
+        log.warning(
+            "sqlite-vec load failed; semantic recall disabled. "
+            "Python was compiled without SQLite extension support. "
+            "Reinstall CCE with Homebrew Python: "
+            "uv tool install --python /opt/homebrew/bin/python3 --force code-context-engine"
+        )
+        return False
     except Exception as exc:
         log.warning("sqlite-vec load failed; semantic recall disabled: %s", exc)
         return False
