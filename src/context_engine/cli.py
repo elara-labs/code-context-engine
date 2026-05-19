@@ -666,13 +666,15 @@ def _preflight_check(config) -> None:
                 fg="green",
             )
         )
-    except Exception as exc:
+    except Exception:
         click.echo("")
-        _warn(f"No embedding backend available: {exc}")
-        _warn(
-            "Install fastembed (`pip install code-context-engine[local]`) "
-            f"or start an Ollama server at {ollama_url} and pull "
-            f"{ollama_model}."
+        raise click.ClickException(
+            "No embedding backend available.\n\n"
+            "Fix (pick one):\n"
+            "  1. Install local embeddings:\n"
+            "     uv tool install 'code-context-engine[local]'\n\n"
+            f"  2. Start Ollama and pull the embedding model:\n"
+            f"     ollama pull {ollama_model}\n"
         )
 
     # --- Ollama for LLM compression (independent of the embedding path) ---
