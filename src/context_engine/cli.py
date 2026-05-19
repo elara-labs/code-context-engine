@@ -182,12 +182,12 @@ _CCE_CLAUDE_MD_MARKER = "## Context Engine (CCE)"
 # Version stamp embedded as an HTML comment so it doesn't render in the final
 # Markdown but lets `_ensure_claude_md` detect when the installed block is
 # stale and needs replacing. Bump whenever _CCE_CLAUDE_MD_BLOCK changes.
-_CCE_CLAUDE_MD_VERSION = "3"
+_CCE_CLAUDE_MD_VERSION = "4"
 _CCE_CLAUDE_MD_VERSION_TAG = f"<!-- cce-block-version: {_CCE_CLAUDE_MD_VERSION} -->"
 _CCE_CLAUDE_MD_VERSION_PREFIX = "<!-- cce-block-version: "
 _CCE_CLAUDE_MD_END_MARKER = "<!-- /cce-block -->"
 
-_CCE_CLAUDE_MD_BLOCK = f"""\
+_CCE_CLAUDE_MD_BLOCK_TEMPLATE = f"""\
 {_CCE_CLAUDE_MD_VERSION_TAG}
 ## Context Engine (CCE)
 
@@ -268,16 +268,20 @@ the goal is durable signal, not an event log.
 Both are read-only and cheap. Prefer them over re-running tool calls or
 asking the user to re-paste context.
 
-## Output Style
-
-Be concise. Lead with the answer or action, not reasoning. Skip filler words,
-preamble, and phrases like "I'll help you with that" or "Certainly!". Prefer
-fragments over full sentences in explanations. No trailing summaries of what
-you just did. One sentence if it fits.
-
-Code blocks, file paths, commands, and error messages are always written in full.
+{{output_style}}
 {_CCE_CLAUDE_MD_END_MARKER}
 """
+
+
+def _build_claude_md_block(output_level: str = "standard") -> str:
+    """Generate the CLAUDE.md CCE block with the configured output style."""
+    from context_engine.compression.output_rules import get_instruction_output_block
+    block = get_instruction_output_block(output_level)
+    return _CCE_CLAUDE_MD_BLOCK_TEMPLATE.replace("{output_style}", block)
+
+
+# Default block for backward compat
+_CCE_CLAUDE_MD_BLOCK = _build_claude_md_block("standard")
 
 
 def _resolve_cce_cmd() -> str:
@@ -694,7 +698,7 @@ def _preflight_check(config) -> None:
         click.echo(_dim("  Tip: ollama pull phi3:mini for LLM summarization"))
 
 
-def _ensure_claude_md(project_dir: Path) -> None:
+def _ensure_claude_md(project_dir: Path, output_level: str = "standard") -> None:
     """Add or upgrade the CCE instructions block in CLAUDE.md.
 
     Three states the file can be in:
@@ -709,9 +713,10 @@ def _ensure_claude_md(project_dir: Path) -> None:
     """
     from context_engine.utils import atomic_write_text
 
+    block = _build_claude_md_block(output_level)
     claude_md = project_dir / "CLAUDE.md"
     if not claude_md.exists():
-        atomic_write_text(claude_md, _CCE_CLAUDE_MD_BLOCK)
+        atomic_write_text(claude_md, block)
         _ok("CLAUDE.md created with CCE instructions")
         return
 
@@ -726,13 +731,13 @@ def _ensure_claude_md(project_dir: Path) -> None:
     # survives the upgrade.
     old_block = _extract_existing_cce_block(existing)
     if old_block is not None:
-        new_content = existing.replace(old_block, _CCE_CLAUDE_MD_BLOCK.rstrip(), 1)
+        new_content = existing.replace(old_block, block.rstrip(), 1)
         atomic_write_text(claude_md, new_content)
         _ok("CLAUDE.md upgraded to current CCE instructions")
         return
 
     # No CCE block detected — append.
-    new_content = existing.rstrip() + "\n\n" + _CCE_CLAUDE_MD_BLOCK
+    new_content = existing.rstrip() + "\n\n" + block
     atomic_write_text(claude_md, new_content)
     _ok("CLAUDE.md updated with CCE instructions")
 
@@ -921,14 +926,15 @@ def init(ctx: click.Context, agent: str) -> None:
         for file_key, info in INSTRUCTION_FILES.items():
             if any((project_dir / marker).exists() for marker in info["detect"]):
                 instruction_targets.add(file_key)
+    output_level = getattr(config, "output_compression", "standard")
     for file_key in sorted(instruction_targets):
         info = INSTRUCTION_FILES[file_key]
-        if write_instruction_file(project_dir, file_key):
+        if write_instruction_file(project_dir, file_key, output_level=output_level):
             _ok(f"CCE instructions added to {info['name']}")
 
     # 5. CLAUDE.md + session hook + memory lifecycle hooks
     if "claude" in editor_targets:
-        _ensure_claude_md(project_dir)
+        _ensure_claude_md(project_dir, output_level=output_level)
         _ensure_session_hook(project_dir)
         _install_memory_hooks(project_dir)
         _check_memory_capture_reachable(config, project_dir)

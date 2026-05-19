@@ -92,7 +92,7 @@ EDITORS: dict[str, dict] = {
 # ── Instruction file definitions ──────────────────────────────────────
 
 # Editor-agnostic CCE instructions (no "Claude Code" references)
-_CCE_INSTRUCTIONS = """\
+_CCE_INSTRUCTIONS_BASE = """\
 ## Context Engine (CCE)
 
 This project uses Code Context Engine for intelligent code retrieval and
@@ -121,6 +121,19 @@ Call `session_recall("topic phrase")` before answering non-trivial questions.
 Call `record_decision(decision="...", reason="...")` after making choices.
 Call `record_code_area(file_path="...", description="...")` after meaningful work.
 """
+
+
+def _build_instructions(output_level: str = "standard") -> str:
+    """Build CCE instructions with the configured output style."""
+    from context_engine.compression.output_rules import get_instruction_output_block
+    block = get_instruction_output_block(output_level)
+    if block:
+        return _CCE_INSTRUCTIONS_BASE + "\n" + block + "\n"
+    return _CCE_INSTRUCTIONS_BASE
+
+
+# Default instructions (standard output compression)
+_CCE_INSTRUCTIONS = _build_instructions("standard")
 
 INSTRUCTION_FILES: dict[str, dict] = {
     "agents": {
@@ -568,21 +581,24 @@ def _remove_toml(config_path: Path, display_path: str, *, section: str) -> str |
         return None
 
 
-def write_instruction_file(project_dir: Path, file_key: str) -> bool:
+def write_instruction_file(
+    project_dir: Path, file_key: str, output_level: str = "standard",
+) -> bool:
     """Write CCE instructions to an editor's instruction file. Returns True if written."""
     info = INSTRUCTION_FILES[file_key]
     path = project_dir / info["path"]
     marker = "## Context Engine (CCE)"
     path.parent.mkdir(parents=True, exist_ok=True)
+    instructions = _build_instructions(output_level)
 
     if path.exists():
         content = path.read_text()
         if marker in content:
             return False  # already has CCE block
         # Append
-        path.write_text(content.rstrip() + "\n\n" + _CCE_INSTRUCTIONS)
+        path.write_text(content.rstrip() + "\n\n" + instructions)
     else:
-        path.write_text(_CCE_INSTRUCTIONS)
+        path.write_text(instructions)
     return True
 
 

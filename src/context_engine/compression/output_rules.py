@@ -90,3 +90,57 @@ def get_level_description(level: str) -> str:
         "max": "Telegraphic style with abbreviations and symbols. Diff-only for code. ~80% savings.",
     }
     return descriptions.get(level, "Unknown level")
+
+
+# ── Instruction-file blocks ──────────────────────────────────────────
+# These go into CLAUDE.md, AGENTS.md, .cursorrules, etc. so they apply
+# to the entire session, not just CCE tool responses.
+
+_INSTRUCTION_OUTPUT_STYLES = {
+    "lite": """\
+### Output style
+
+Respond concisely. Remove filler words (just, really, basically, actually,
+simply), hedging (I think, it seems, perhaps), and pleasantries (Sure!,
+Happy to help, Great question). No trailing summaries. Keep full grammar.
+
+When suggesting code changes, show only the changed lines with 3 lines of
+context. Never rewrite entire files. For new files, show the full file.
+For edits, show only what changes.""",
+
+    "standard": """\
+### Output style
+
+Respond in compressed style. Drop articles (a, an, the) in prose. Use
+sentence fragments over full sentences. Use short synonyms (fix not resolve,
+check not investigate). Pattern: [thing] [action] [reason]. [next step].
+No filler, hedging, pleasantries, trailing summaries, or restating what
+the user said. One sentence if one sentence is enough.
+
+When suggesting code changes, show only the changed lines with 3 lines of
+context. Never rewrite entire files. Multiple changes in one file: show each
+change separately. Never echo back unchanged code the user already has.
+
+Code blocks, file paths, commands, error messages: always written in full.
+Security warnings and destructive action confirmations: use full clarity.""",
+
+    "max": """\
+### Output style
+
+Respond in telegraphic style. Drop articles, pronouns, conjunctions where
+meaning survives. Abbreviate common terms: DB, auth, config, fn, dep, impl,
+req, resp, init. Use arrows for causality: X → Y. Use symbols: + (add),
+- (remove), ~ (change), ! (warning). Max 1-2 sentences per explanation.
+Pattern: [thing] → [action]. [reason].
+
+When suggesting code changes, show only changed lines. Never rewrite files.
+Never echo back unchanged code.
+
+Code blocks, paths, commands, errors: always full.
+Security warnings and destructive actions: full clarity, drop compression.""",
+}
+
+
+def get_instruction_output_block(level: str) -> str:
+    """Return the output style block for instruction files, or empty if off."""
+    return _INSTRUCTION_OUTPUT_STYLES.get(level, "")
