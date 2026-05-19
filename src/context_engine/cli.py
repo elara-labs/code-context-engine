@@ -623,6 +623,22 @@ def _preflight_check(config) -> None:
     one was picked, and surfaces Ollama status for the separate compression
     path so users know what compression level they will get.
     """
+    # --- SQLite extension support ---
+    import sqlite3 as _sqlite3
+    _test_conn = _sqlite3.connect(":memory:")
+    if not hasattr(_test_conn, "enable_load_extension"):
+        _test_conn.close()
+        raise click.ClickException(
+            "Your Python was compiled without SQLite extension support "
+            "(enable_load_extension is missing).\n"
+            "This is common with python.org installers on macOS.\n\n"
+            "Fix: reinstall CCE under a Python that has extension support:\n\n"
+            "  brew install python3\n"
+            "  uv tool install --python /opt/homebrew/bin/python3 "
+            "--force code-context-engine\n"
+        )
+    _test_conn.close()
+
     # --- Embedding backend ---
     click.echo(_dim("  Detecting embedding backend") + "...", nl=False)
     from context_engine.config import resolve_ollama_url
