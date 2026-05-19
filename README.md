@@ -64,15 +64,17 @@
 
 ---
 
-## Quick start (3 lines)
+## Quick start
 
 ```bash
-uv tool install code-context-engine
+uv tool install "code-context-engine[local]"    # or: pipx install "code-context-engine[local]"
 cd /path/to/your/project
-cce init                              # or: cce init --agent all
+cce init                                        # or: cce init --agent all
 ```
 
-That's it. Your AI coding agent now searches your index instead of reading entire files. No config needed.
+That's it. Your AI coding agent now searches your index instead of reading entire files.
+
+> **Already have Ollama?** You can skip `[local]` and use `uv tool install code-context-engine` instead. CCE auto-detects Ollama at localhost:11434 and uses `nomic-embed-text`.
 
 ---
 
@@ -92,16 +94,18 @@ Tested on all three platforms in CI (macOS, Linux, Windows × Python 3.11/3.12/3
 
 ## Install and see savings in 60 seconds
 
+You need an embedding backend to index code. Pick one:
+
+| Option | Install command | Size | Requires |
+|--------|----------------|------|----------|
+| **Local (recommended)** | `uv tool install "code-context-engine[local]"` | +60 MB | Nothing else |
+| **Ollama** | `uv tool install code-context-engine` | Core only | Ollama running + `nomic-embed-text` pulled |
+
+Then:
+
 ```bash
-uv tool install code-context-engine   # or: pipx install code-context-engine
 cd /path/to/your/project
 cce init                              # index, install hooks, register MCP server
-```
-
-**Embedding backends:** CCE auto-detects the best available backend. If you have Ollama running, it uses `nomic-embed-text` with zero extra dependencies. For offline/local embedding without Ollama, install the `[local]` extra:
-
-```bash
-uv tool install "code-context-engine[local]"   # includes fastembed + ONNX Runtime
 ```
 
 Restart your editor. Done. Every question now hits the index instead of re-reading files.
@@ -449,16 +453,18 @@ No. Quality stays the same or slightly improves.
 
 CCE replaces "dump the entire file" with "search for the relevant function." The model still gets the code it needs (0.90 Recall@10 in benchmarks). Less irrelevant context means less noise competing for attention, which can improve the model's focus on your actual question.
 
-### How do I increase output token savings?
+### How does output token savings work?
 
-Set the output compression level in your project config (`cce.yaml`):
+CCE writes output compression rules directly into your agent's instruction files (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, etc.) during `cce init`. These rules apply to the **entire session**, not just CCE tool responses, so every reply from the agent follows them.
+
+Set the level in `cce.yaml`:
 
 ```yaml
 compression:
   output: max       # off | lite | standard | max
 ```
 
-Or change it at runtime via the MCP tool:
+Then re-run `cce init` to update instruction files. Or change at runtime:
 
 ```
 set_output_level output_level=max
@@ -471,7 +477,7 @@ set_output_level output_level=max
 | `standard` | ~70% | Drops articles, fragments, short synonyms + diff-only for code |
 | `max` | ~80% | Telegraphic style + diff-only for code |
 
-Default is `standard`. All levels include **code output rules** that instruct the model to show only changed lines (not full file rewrites), which is where most output tokens go in coding sessions. The `max` level produces very terse prose (similar to "caveman mode"). Code blocks, paths, and commands are never compressed regardless of level.
+Default is `standard`. All levels include **code output rules** that tell the model to show only changed lines (not full file rewrites), which is where most output tokens go in coding sessions. The `max` level produces very terse prose (similar to "caveman mode"). Code blocks, paths, and commands are never compressed regardless of level.
 
 ### Where do the savings come from?
 

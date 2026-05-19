@@ -30,28 +30,36 @@ Example output:
 
 ## Understanding the input/output split
 
-Savings come from two independent stages:
+The report separates input and output token savings because they have different pricing. Output tokens cost 5x more than input (e.g. Opus: $75/1M output vs $15/1M input).
 
-- **Retrieval savings (input).** Instead of sending the entire codebase, CCE returns only the chunks relevant to the query. This is measured as: `1 - (served_tokens / full_codebase_tokens)`.
+**Input savings** come from:
 
-- **Compression savings (input).** The retrieved chunks are further compressed (truncation, summarization) before being sent to the agent. This is measured as: `1 - (compressed_tokens / raw_chunk_tokens)`.
+- **Retrieval.** Only relevant chunks returned instead of full files (biggest contributor, often 94%).
+- **Chunk compression.** Chunks truncated to signatures/docstrings or summarized via Ollama.
+- **Grammar compression.** Articles and filler removed from context.
+- **Turn summarization.** Session history compressed.
+- **Progressive disclosure.** Tool payloads filtered.
 
-The combined effect is multiplicative. If retrieval cuts 90% and compression cuts another 50%, the total savings are 95%.
+**Output savings** come from:
+
+- **Output compression.** Session-wide style directives written into instruction files (`CLAUDE.md`, `AGENTS.md`, etc.) during `cce init`. These tell the agent to use compressed prose and diff-only code changes across the entire session. Configure the level in `cce.yaml` (`compression.output`: off/lite/standard/max).
 
 ## Per-bucket breakdown
 
-The `How:` line in the output shows the contribution of each stage:
+The breakdown shows each savings layer with its contribution:
 
 ```
-How:  retrieval 93%  +  compression 90%
+  Breakdown:
+    retrieval              48%  ▰▰▰▰▰▰▰▰▰▰    6.0k    $0.09 · 1 call
+    chunk compression      20%  ▰▰▰▰▱▱▱▱▱▱    2.6k    $0.04 · 1 call
+    output compression*     2%  ▰▱▱▱▱▱▱▱▱▱     325    $0.02 · 1 call
 ```
 
-- **retrieval** represents the savings from selecting only relevant chunks.
-- **compression** represents the savings from compressing those chunks.
+Each row uses the correct pricing (input rate for input buckets, output rate for the output compression bucket). Buckets marked with `*` use estimated values.
 
 ## Configuring the pricing model
 
-Cost estimates use model-specific input pricing. Configure which model to estimate for:
+Cost estimates use model-specific pricing for both input and output tokens. Configure which model to estimate for:
 
 ```yaml
 # ~/.cce/config.yaml or .context-engine.yaml

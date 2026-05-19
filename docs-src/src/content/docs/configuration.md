@@ -57,22 +57,21 @@ Controls how much CCE compresses code chunks before including them in the agent'
 
 ### Output compression (`compression.output`)
 
-Controls how verbose the agent's responses are. Set via the `set_output_compression` MCP tool or config.
+Controls how verbose the agent's responses are. During `cce init`, the configured level is written into instruction files (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, etc.) so it applies to the **entire session**, not just CCE tool responses.
 
 | Level | Style | Typical savings |
 |-------|-------|----------------|
 | `off` | Full output | 0% |
-| `lite` | Removes filler and hedging | ~30% |
-| `standard` | Shorter phrasing, fragments where possible | ~65% |
-| `max` | Telegraphic, minimal prose | ~75% |
+| `lite` | No filler/hedging, diff-only code | ~25% |
+| `standard` | Fragments, short synonyms, diff-only code | ~70% |
+| `max` | Telegraphic, abbreviations, diff-only code | ~80% |
 
-Code blocks, file paths, commands, and error messages are never compressed regardless of level.
+All levels include code output rules: show only changed lines, never rewrite entire files, never echo back unchanged code. Code blocks, paths, commands, and error messages are never compressed. Security warnings use full clarity.
 
-Change at runtime by telling your agent:
+Change the level and re-run `cce init` to update instruction files, or change at runtime:
 
 ```
-Switch to max output compression
-Turn off output compression
+set_output_level output_level=max
 ```
 
 ## Embedding model

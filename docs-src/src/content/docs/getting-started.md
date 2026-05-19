@@ -17,21 +17,22 @@ description: Install CCE and start saving tokens in under a minute
 
 ## Install
 
-```bash
-uv tool install code-context-engine
-```
+CCE needs an embedding backend to index your code. Pick one:
 
-Or with pipx:
+| Option | Install command | What it needs |
+|--------|----------------|---------------|
+| **Local (recommended)** | `uv tool install "code-context-engine[local]"` | Nothing else. Includes fastembed + ONNX Runtime (~60 MB download on first run). |
+| **Ollama** | `uv tool install code-context-engine` | Ollama running at localhost:11434 with `nomic-embed-text` pulled. |
 
-```bash
-pipx install code-context-engine
-```
-
-### Optional: Local embedding (no Ollama)
+Using pipx instead of uv:
 
 ```bash
-uv tool install "code-context-engine[local]"   # includes fastembed + ONNX Runtime
+pipx install "code-context-engine[local]"
 ```
+
+:::caution
+Installing without `[local]` and without Ollama running will cause `cce init` to fail with "No embedding backend available." Always pick one of the two options above.
+:::
 
 ## Initialize your project
 
@@ -41,11 +42,11 @@ cce init
 ```
 
 This does everything:
-- Detects your embedding backend (Ollama or fastembed)
+- Detects your embedding backend (fastembed or Ollama)
 - Builds vector, FTS, and graph indexes
 - Installs git hooks (auto-updates index on commit)
 - Writes MCP config for detected editors
-- Creates instruction files
+- Creates instruction files with output compression rules
 
 ### Target a specific agent
 
@@ -79,12 +80,12 @@ cce savings
 
 ## Embedding backends
 
-CCE auto-detects the best available backend:
+CCE auto-detects the best available backend at init time:
 
-1. **Ollama** (preferred) — If running at localhost:11434, uses `nomic-embed-text`. Zero extra dependencies.
-2. **fastembed** — Install with `[local]` extra. Uses `BAAI/bge-small-en-v1.5`. Works offline, ~60 MB download.
+1. **fastembed** (with `[local]` extra) — Uses `BAAI/bge-small-en-v1.5`. Works offline, no external services needed. ~60 MB model downloaded on first run.
+2. **Ollama** — If running at localhost:11434 with `nomic-embed-text` pulled. Zero extra Python dependencies.
 
-Set `CCE_EMBED_BACKEND=ollama` or `CCE_EMBED_BACKEND=fastembed` to force a specific backend.
+Force a specific backend with `CCE_EMBED_BACKEND=fastembed` or `CCE_EMBED_BACKEND=ollama`.
 
 ## Next steps
 

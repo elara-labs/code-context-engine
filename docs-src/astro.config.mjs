@@ -14,6 +14,7 @@ export default defineConfig({
       ],
       sidebar: [
         { slug: 'introduction' },
+        { slug: 'why-cce' },
         { slug: 'getting-started' },
         {
           label: 'Agent Setup',

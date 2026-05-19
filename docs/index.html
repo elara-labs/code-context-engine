@@ -929,11 +929,11 @@
       <div style="display:flex;flex-direction:column;gap:10px">
         <div class="install-row">
           <span class="install-dollar">$</span>
-          <span class="install-text">uv tool install code-context-engine</span>
-          <button class="copy-btn" id="copy-hero" onclick="copyText(this,'uv tool install code-context-engine')">Copy</button>
+          <span class="install-text">uv tool install "code-context-engine[local]"</span>
+          <button class="copy-btn" id="copy-hero" onclick="copyText(this,'uv tool install &quot;code-context-engine[local]&quot;')">Copy</button>
         </div>
         <div class="install-alt">
-          or: <a href="https://pypi.org/project/code-context-engine/" target="_blank">pipx install code-context-engine</a>
+          or: <a href="https://pypi.org/project/code-context-engine/" target="_blank">pipx install "code-context-engine[local]"</a> · Ollama users: skip [local]
         </div>
       </div>
 
@@ -1087,7 +1087,7 @@
         <div>
           <h3 style="font-size:18px;font-weight:700;margin-bottom:12px">Reproduce it</h3>
           <div class="bench-reproduce">
-            <span class="t-dim">$</span> <span class="t-cmd">pip install code-context-engine</span><br>
+            <span class="t-dim">$</span> <span class="t-cmd">pip install "code-context-engine[local]"</span><br>
             <span class="t-dim">$</span> <span class="t-cmd">python benchmarks/run_benchmark.py \</span><br>
             <span class="t-dim">&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="t-cmd">--repo https://github.com/fastapi/fastapi.git \</span><br>
             <span class="t-dim">&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="t-cmd">--source-dir fastapi</span>
@@ -1295,8 +1295,8 @@
 
     <div class="cta-install">
       <span class="install-dollar" style="border-right:1px solid var(--border)">$</span>
-      <span class="install-text" style="padding:0 16px">uv tool install code-context-engine</span>
-      <button class="copy-btn" style="margin:6px" onclick="copyText(this,'uv tool install code-context-engine')">Copy</button>
+      <span class="install-text" style="padding:0 16px">uv tool install "code-context-engine[local]"</span>
+      <button class="copy-btn" style="margin:6px" onclick="copyText(this,'uv tool install &quot;code-context-engine[local]&quot;')">Copy</button>
     </div>
 
     <div class="cta-steps">

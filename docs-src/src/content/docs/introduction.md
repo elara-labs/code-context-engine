@@ -45,5 +45,5 @@ CCE parses your code into semantic chunks (functions, classes, modules) using Tr
 
 1. **Index** — Tree-sitter parses code into semantic chunks. Stored locally with vector embeddings.
 2. **Search** — Agent calls `context_search` via MCP. Hybrid vector + BM25 merged with Reciprocal Rank Fusion. Graph expansion adds related imports.
-3. **Compress** — Chunks are compressed (truncation or LLM summary with Ollama). Output compression reduces reply tokens.
+3. **Compress** — Chunks are compressed (truncation or LLM summary with Ollama). Session-wide output compression rules in instruction files reduce reply tokens (diff-only code, no filler).
 4. **Track** — Every query recorded. `cce savings` shows tokens and dollars saved.
