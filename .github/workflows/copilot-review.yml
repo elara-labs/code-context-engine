@@ -1,0 +1,29 @@
+name: Request Copilot review
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  request-copilot-review:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request review from Copilot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api graphql -f query='
+            mutation($pullRequestId: ID!, $userIds: [ID!]!) {
+              requestReviews(input: {pullRequestId: $pullRequestId, userIds: $userIds, union: true}) {
+                pullRequest { number }
+              }
+            }' \
+            -f pullRequestId="$(gh api repos/$REPO/pulls/$PR_NUMBER --jq .node_id)" \
+            -f userIds[]="BOT_kgDOC9w8XQ"
