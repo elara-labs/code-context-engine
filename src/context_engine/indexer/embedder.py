@@ -319,16 +319,66 @@ class OllamaBackend:
             for _ in resp.iter_lines():
                 pass
 
+    # nomic-embed-text has an 8192-token context. Dense-tokenizing content
+    # (YAML with ${{ }}, Python separator comments) can hit ~1 char/token,
+    # so 3000 chars is a safe ceiling that works for all content types.
+    _MAX_EMBED_CHARS = 3000
+
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         import httpx
-        resp = httpx.post(
-            f"{self.base_url}/api/embed",
-            json={"model": self.model_name, "input": texts},
-            timeout=self._timeout,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        return data.get("embeddings", [])
+        # Truncate oversized texts and skip empty ones
+        safe_texts = []
+        original_indices = []
+        for i, t in enumerate(texts):
+            if not t or not t.strip():
+                continue
+            safe_texts.append(t[:self._MAX_EMBED_CHARS])
+            original_indices.append(i)
+
+        if not safe_texts:
+            return [[] for _ in texts]
+
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/api/embed",
+                json={"model": self.model_name, "input": safe_texts},
+                timeout=self._timeout,
+            )
+            resp.raise_for_status()
+            embeddings = resp.json().get("embeddings", [])
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 400:
+                raise
+            # Batch failed (possibly one text still too large after truncation).
+            # Fall back to one-at-a-time with halving retry.
+            log.warning("Ollama batch embed failed, retrying one-at-a-time")
+            embeddings = []
+            for text in safe_texts:
+                vec = self._embed_single_with_retry(text)
+                embeddings.append(vec)
+
+        # Map embeddings back to original positions (empty texts get empty vecs)
+        result: list[list[float]] = [[] for _ in texts]
+        for idx, emb in zip(original_indices, embeddings):
+            result[idx] = emb
+        return result
+
+    def _embed_single_with_retry(self, text: str) -> list[float]:
+        """Embed a single text, halving on context-length errors."""
+        import httpx
+        while text:
+            resp = httpx.post(
+                f"{self.base_url}/api/embed",
+                json={"model": self.model_name, "input": [text]},
+                timeout=self._timeout,
+            )
+            if resp.status_code == 400 and "context length" in resp.text:
+                text = text[:len(text) // 2]
+                continue
+            resp.raise_for_status()
+            vecs = resp.json().get("embeddings", [[]])
+            return vecs[0] if vecs else []
+        return []
 
     def embed_texts(self, texts: list[str], batch_size: int = 64) -> list[list[float]]:
         out: list[list[float]] = []
