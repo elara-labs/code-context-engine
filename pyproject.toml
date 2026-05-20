@@ -1,14 +1,14 @@
 [project]
 name = "code-context-engine"
 version = "0.4.22"
-description = "Save 94% on Claude Code tokens. Index your codebase locally, AI agents search instead of reading files. Reduce Claude API costs, save tokens on Cursor, VS Code, Gemini CLI. Free, open source MCP server."
+description = "Save 94% on AI coding tokens. Index your codebase, agents search instead of reading files. Works with Claude Code, Cursor, Codex, Copilot, Gemini CLI. Local MCP server, free, open source."
 readme = {file = "README.md", content-type = "text/markdown"}
 license = "MIT"
 authors = [
     {name = "Fazle Elahee", email = "felahee@gmail.com"},
     {name = "Raj", email = "rajkumar.sakti@gmail.com"},
 ]
-keywords = ["claude-code", "save-tokens", "token-savings", "mcp-server", "claude", "cursor", "code-indexing", "reduce-ai-costs", "llm", "vector-search", "ai-coding"]
+keywords = ["claude-code", "codex", "copilot", "cursor", "gemini-cli", "save-tokens", "token-savings", "mcp-server", "code-indexing", "reduce-ai-costs", "ai-coding", "vector-search"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

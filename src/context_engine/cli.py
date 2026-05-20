@@ -790,8 +790,11 @@ def main(ctx: click.Context, verbose: bool) -> None:
 @click.pass_context
 def _after_command(ctx: click.Context, *_args, **_kwargs) -> None:
     """Run after every command. Shows update notice if available."""
-    # Skip for serve (long-running MCP server) and upgrade (already handles it)
+    # Skip for serve (long-running), upgrade (already handles it),
+    # and any --json output (would corrupt parseable output).
     if ctx.invoked_subcommand in ("serve", "upgrade"):
+        return
+    if "--json" in sys.argv:
         return
     _show_update_notice()
 

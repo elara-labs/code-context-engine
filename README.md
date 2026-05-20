@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://elara-labs.github.io/code-context-engine/">Website</a> · <a href="https://elara-labs.github.io/code-context-engine/blog/what-is-code-context-engine.html">Guide</a> · <a href="https://elara-labs.github.io/code-context-engine/blog/benchmark-fastapi.html">Benchmark</a> · <a href="https://github.com/elara-labs/code-context-engine">GitHub</a>
+  <a href="https://elara-labs.github.io/code-context-engine/">Website</a> · <a href="https://elara-labs.github.io/code-context-engine/guide/">Docs</a> · <a href="https://elara-labs.github.io/code-context-engine/guide/why-cce/">Why CCE?</a> · <a href="https://elara-labs.github.io/code-context-engine/blog/benchmark-fastapi.html">Benchmark</a> · <a href="https://github.com/elara-labs/code-context-engine">GitHub</a>
 </p>
 
 <br>
