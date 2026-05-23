@@ -311,10 +311,10 @@ async def run_indexing(
             _ENV_SECURITY_SCAN_TIMEOUT_SECONDS,
         )
     except Exception as exc:
-        log.warning("Pre-index security scan failed: %s", exc, exc_info=exc)
+        log.warning("Pre-index security scan failed: %s", exc, exc_info=True)
     else:
         if scan.returncode != 0:
-            detail = (scan.stderr or scan.stdout or "").strip()
+            detail = "\n".join(s for s in (scan.stderr, scan.stdout) if s).strip()
             if detail:
                 log.warning("Pre-index security scan failed: %s", detail)
             else:
