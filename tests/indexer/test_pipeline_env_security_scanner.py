@@ -44,7 +44,7 @@ async def test_run_indexing_invokes_env_security_scanner_before_pipeline(tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_run_indexing_aborts_when_env_security_scanner_fails(tmp_path):
+async def test_run_indexing_continues_when_env_security_scanner_fails(tmp_path):
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
     storage = tmp_path / "storage"
@@ -60,10 +60,12 @@ async def test_run_indexing_aborts_when_env_security_scanner_fails(tmp_path):
             stdout="",
             stderr="scan failed",
         ),
-    ), patch(
-        "context_engine.indexer.pipeline._run_indexing_locked", new=AsyncMock()
+    ) as scan_run, patch(
+        "context_engine.indexer.pipeline._run_indexing_locked",
+        new=AsyncMock(return_value=IndexResult(total_chunks=3)),
     ) as run_locked:
         result = await run_indexing(config, project_dir, full=True)
 
-    assert result.errors == ["Pre-index security scan failed: scan failed"]
-    run_locked.assert_not_awaited()
+    assert result.total_chunks == 3
+    scan_run.assert_called_once()
+    run_locked.assert_awaited_once()

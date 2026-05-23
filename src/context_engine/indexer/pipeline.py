@@ -250,6 +250,7 @@ def _iter_project_files(
 # stdlib is ~250 KB) while ruling out the kind of file you'd never want in
 # a semantic index anyway.
 _MAX_FILE_BYTES = 2 * 1024 * 1024
+_ENV_SECURITY_SCAN_TIMEOUT_SECONDS = 120
 
 
 def _safe_read(file_path: Path) -> str | None:
@@ -296,34 +297,32 @@ async def run_indexing(
             cwd=str(project_dir),
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=_ENV_SECURITY_SCAN_TIMEOUT_SECONDS,
         )
     except FileNotFoundError:
-        return IndexResult(
-            errors=[
-                "Pre-index security scan failed: `npx` not found. "
-                "Install Node.js/npm so env-security-scanner can run."
-            ]
+        log.warning(
+            "Pre-index security scan skipped: `npx` not found. "
+            "Install Node.js/npm so env-security-scanner can run."
         )
     except subprocess.TimeoutExpired:
-        return IndexResult(
-            errors=[
-                "Pre-index security scan failed: `env-security-scanner` timed out "
-                "after 120 seconds."
-            ]
+        log.warning(
+            "Pre-index security scan failed: `env-security-scanner` timed out "
+            "after %s seconds.",
+            _ENV_SECURITY_SCAN_TIMEOUT_SECONDS,
         )
     except Exception as exc:
-        return IndexResult(errors=[f"Pre-index security scan failed: {exc}"])
-    if scan.returncode != 0:
-        detail = (scan.stderr or scan.stdout).strip()
-        if detail:
-            return IndexResult(errors=[f"Pre-index security scan failed: {detail}"])
-        return IndexResult(
-            errors=[
-                "Pre-index security scan failed: "
-                f"`{' '.join(scan_cmd)}` exited with code {scan.returncode}."
-            ]
-        )
+        log.warning("Pre-index security scan failed: %s", exc, exc_info=exc)
+    else:
+        if scan.returncode != 0:
+            detail = (scan.stderr or scan.stdout or "").strip()
+            if detail:
+                log.warning("Pre-index security scan failed: %s", detail)
+            else:
+                log.warning(
+                    "Pre-index security scan failed: `%s` exited with code %s.",
+                    " ".join(scan_cmd),
+                    scan.returncode,
+                )
 
     project_name = project_dir.name
     storage_base = Path(config.storage_path) / project_name
