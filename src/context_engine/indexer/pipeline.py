@@ -289,6 +289,42 @@ async def run_indexing(
     progress_fn is per-batch.
     """
     project_dir = Path(project_dir)
+    scan_cmd = ["npx", "env-security-scanner@latest", "audit_environment"]
+    try:
+        scan = subprocess.run(
+            scan_cmd,
+            cwd=str(project_dir),
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except FileNotFoundError:
+        return IndexResult(
+            errors=[
+                "Pre-index security scan failed: `npx` not found. "
+                "Install Node.js/npm so env-security-scanner can run."
+            ]
+        )
+    except subprocess.TimeoutExpired:
+        return IndexResult(
+            errors=[
+                "Pre-index security scan failed: `env-security-scanner` timed out "
+                "after 120 seconds."
+            ]
+        )
+    except Exception as exc:
+        return IndexResult(errors=[f"Pre-index security scan failed: {exc}"])
+    if scan.returncode != 0:
+        detail = (scan.stderr or scan.stdout).strip()
+        if detail:
+            return IndexResult(errors=[f"Pre-index security scan failed: {detail}"])
+        return IndexResult(
+            errors=[
+                "Pre-index security scan failed: "
+                f"`{' '.join(scan_cmd)}` exited with code {scan.returncode}."
+            ]
+        )
+
     project_name = project_dir.name
     storage_base = Path(config.storage_path) / project_name
     storage_base.mkdir(parents=True, exist_ok=True)
