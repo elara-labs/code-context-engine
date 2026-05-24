@@ -15,6 +15,7 @@ from context_engine.storage.local_backend import LocalBackend
 from context_engine.utils import project_storage_dir
 from context_engine.indexer.embedder import Embedder
 from context_engine.compression.compressor import Compressor
+from context_engine.retrieval.retriever import HybridRetriever
 from context_engine.models import Chunk, ChunkType, GraphNode, GraphEdge, NodeType, EdgeType
 
 try:
@@ -35,6 +36,7 @@ class ContextEngineHTTP:
         self.backend = backend
         self.embedder = embedder
         self.compressor = compressor
+        self.retriever = HybridRetriever(backend=backend, embedder=embedder)
 
     async def handle_vector_search(self, request: web.Request) -> web.Response:
         data = await _read_json(request)
@@ -88,6 +90,35 @@ class ContextEngineHTTP:
             return web.json_response({"error": "invalid file_path"}, status=400)
         await self.backend.delete_by_file(file_path)
         return web.json_response({"ok": True})
+
+    async def handle_search(self, request: web.Request) -> web.Response:
+        data = await _read_json(request)
+        query = (data.get("query") or "").strip()
+        if not query:
+            return web.json_response({"error": "query cannot be empty"}, status=400)
+        top_k = int(data.get("top_k", 10))
+        confidence_threshold = float(data.get("confidence_threshold", 0.2))
+        chunks = await self.retriever.retrieve(
+            query,
+            top_k=top_k,
+            confidence_threshold=confidence_threshold,
+        )
+        return web.json_response({
+            "results": [
+                {
+                    "id": c.id,
+                    "file_path": c.file_path,
+                    "start_line": c.start_line,
+                    "end_line": c.end_line,
+                    "content": c.content,
+                    "chunk_type": c.chunk_type.value,
+                    "language": c.language,
+                    "confidence_score": getattr(c, "confidence_score", None),
+                    "metadata": c.metadata,
+                }
+                for c in chunks
+            ]
+        })
 
     async def handle_health(self, request: web.Request) -> web.Response:
         return web.json_response({"status": "ok"})
@@ -195,6 +226,7 @@ def create_app(backend, embedder, compressor, *, api_token: str | None = None) -
         middlewares=[_make_auth_middleware(api_token), _error_middleware],
     )
     app.router.add_get("/health", handler.handle_health)
+    app.router.add_post("/search", handler.handle_search)
     app.router.add_post("/vector_search", handler.handle_vector_search)
     app.router.add_post("/fts_search", handler.handle_fts_search)
     app.router.add_post("/chunks_by_ids", handler.handle_chunks_by_ids)
