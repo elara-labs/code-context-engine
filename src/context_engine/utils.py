@@ -1,4 +1,6 @@
 """Shared utilities for CCE."""
+import hashlib
+import logging
 import os
 import shutil
 import sys
@@ -45,6 +47,58 @@ def atomic_write_text(path: Path, data: str) -> None:
         except OSError:
             pass
         raise
+
+
+_log = logging.getLogger(__name__)
+
+
+def _project_slug(project_dir: Path) -> str:
+    """Stable per-directory slug: ``<sanitised-basename>-<6hex>``.
+
+    Same algorithm as ``editors._project_slug`` so two projects sharing a
+    basename (``api``, ``web``) get distinct storage directories.
+    Symlinks are resolved before hashing so two paths pointing at the
+    same on-disk directory produce the same slug.
+    """
+    resolved = project_dir.resolve()
+    abs_path = str(resolved)
+    h = hashlib.sha256(abs_path.encode()).hexdigest()[:6]
+    safe = "".join(
+        c if (c.isascii() and (c.isalnum() or c in "-_")) else "-"
+        for c in resolved.name
+    )
+    return f"{safe or 'project'}-{h}"
+
+
+def project_storage_dir(config: object, project_dir: Path) -> Path:
+    """Return the per-project storage directory under ``config.storage_path``.
+
+    Uses a ``<basename>-<6hex>`` slug so two projects sharing the same
+    basename (e.g. ``~/work/api`` and ``~/scratch/api``) get separate
+    storage directories instead of silently colliding.
+
+    On first call, if the legacy directory (bare basename, no hash suffix)
+    exists but the new slug directory does not, the legacy directory is
+    renamed in place to preserve existing users' data.
+    """
+    slug = _project_slug(project_dir)
+    storage_root = Path(config.storage_path)  # type: ignore[union-attr]
+    slug_path = storage_root / slug
+    legacy_path = storage_root / project_dir.resolve().name
+
+    if not slug_path.exists() and legacy_path.exists():
+        try:
+            legacy_path.rename(slug_path)
+            _log.info("Migrated storage %s -> %s", legacy_path, slug_path)
+        except OSError:
+            _log.warning(
+                "Could not migrate legacy storage %s to %s; "
+                "using slug path (may re-index)",
+                legacy_path,
+                slug_path,
+            )
+
+    return slug_path
 
 
 def resolve_cce_binary() -> str:

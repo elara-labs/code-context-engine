@@ -7,7 +7,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from context_engine.utils import atomic_write_text as _atomic_write_text
+from context_engine.utils import atomic_write_text as _atomic_write_text, project_storage_dir
 
 from mcp.server import Server
 from mcp.types import Tool, TextContent
@@ -398,7 +398,7 @@ class ContextEngineMCP:
         project_name = Path.cwd().name
         self._project_name = project_name
         self._project_dir = str(Path.cwd())
-        self._storage_base = Path(config.storage_path) / project_name
+        self._storage_base = project_storage_dir(config, Path.cwd())
         self._storage_base.mkdir(parents=True, exist_ok=True)
         self._stats_path = self._storage_base / "stats.json"
         self._state_path = self._storage_base / "state.json"
