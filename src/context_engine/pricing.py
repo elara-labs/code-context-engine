@@ -1,4 +1,8 @@
-"""Dynamic model pricing — fetched from Anthropic docs, cached locally."""
+"""Model pricing for savings estimates.
+
+Anthropic pricing is fetched from docs and cached. Other providers use
+static fallbacks that are updated with releases.
+"""
 import json
 import re
 import time
@@ -16,19 +20,38 @@ class ModelPricing(TypedDict):
     output: float  # $/1M output tokens
 
 
-# Used only when fetch fails and no cache exists
-_FALLBACK: dict[str, ModelPricing] = {
+# Anthropic fallback (used when fetch fails and no cache exists)
+_ANTHROPIC_FALLBACK: dict[str, ModelPricing] = {
     "opus": {"input": 15.0, "output": 75.0},
     "sonnet": {"input": 3.0, "output": 15.0},
     "haiku": {"input": 0.80, "output": 4.0},
 }
 
-# Flat input-only fallback kept for backward compat with existing cache files
-_FALLBACK_INPUT: dict[str, float] = {
-    "opus": 15.0,
-    "sonnet": 3.0,
-    "haiku": 0.80,
+# Static pricing for non-Anthropic models. Updated with releases.
+# Keys are lowercase, matched against config pricing.model.
+_STATIC_PRICING: dict[str, ModelPricing] = {
+    # OpenAI
+    "gpt-4o": {"input": 2.50, "output": 10.0},
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+    "gpt-4.1": {"input": 2.0, "output": 8.0},
+    "gpt-4.1-mini": {"input": 0.40, "output": 1.60},
+    "gpt-4.1-nano": {"input": 0.10, "output": 0.40},
+    "o3": {"input": 2.0, "output": 8.0},
+    "o3-mini": {"input": 1.10, "output": 4.40},
+    "o4-mini": {"input": 1.10, "output": 4.40},
+    "codex-mini": {"input": 1.50, "output": 6.0},
+    # Google
+    "gemini-2.5-pro": {"input": 1.25, "output": 10.0},
+    "gemini-2.5-flash": {"input": 0.15, "output": 0.60},
+    "gemini-2.0-flash": {"input": 0.10, "output": 0.40},
+    # Anthropic (duplicated here so static lookup works without fetching)
+    "opus": {"input": 15.0, "output": 75.0},
+    "sonnet": {"input": 3.0, "output": 15.0},
+    "haiku": {"input": 0.80, "output": 4.0},
 }
+
+# Backward compat alias
+_FALLBACK = _ANTHROPIC_FALLBACK
 
 
 def _parse_html(html: str) -> dict[str, ModelPricing] | None:
@@ -137,12 +160,53 @@ def _save_cache(pricing: dict[str, ModelPricing]) -> None:
 
 
 def get_model_pricing() -> dict[str, ModelPricing]:
-    """Return {family: {input, output}} pricing per 1M tokens. Cached 7 days."""
+    """Return {model: {input, output}} pricing per 1M tokens.
+
+    Merges static pricing for all providers with live Anthropic pricing
+    (fetched from docs, cached 7 days). Live data wins for Anthropic models.
+    """
+    result = dict(_STATIC_PRICING)
     cached = _load_cache()
     if cached:
-        return cached
+        result.update(cached)
+        return result
     fetched = _fetch()
     if fetched:
         _save_cache(fetched)
-        return fetched
-    return dict(_FALLBACK)
+        result.update(fetched)
+        return result
+    return result
+
+
+def list_available_models() -> list[str]:
+    """Return sorted list of all model keys with known pricing."""
+    return sorted(get_model_pricing().keys())
+
+
+def resolve_pricing(config: "Config") -> tuple[str, ModelPricing]:
+    """Return (model_label, {input, output}) respecting config overrides.
+
+    Priority:
+    1. Explicit pricing.input / pricing.output in config (full override)
+    2. Lookup by pricing.model in the merged pricing table
+    3. Fallback to Opus
+    """
+    from context_engine.config import Config  # noqa: F811 — deferred import
+
+    model = config.pricing_model.lower()
+    all_pricing = get_model_pricing()
+    default = all_pricing.get("opus", {"input": 15.0, "output": 75.0})
+    base = all_pricing.get(model, default)
+
+    resolved: ModelPricing = {
+        "input": config.pricing_input if config.pricing_input is not None else base["input"],
+        "output": config.pricing_output if config.pricing_output is not None else base["output"],
+    }
+
+    # Label reflects whether user overrode rates
+    if config.pricing_input is not None or config.pricing_output is not None:
+        label = f"{model} (custom)"
+    else:
+        label = model
+
+    return label, resolved

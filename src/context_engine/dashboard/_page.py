@@ -768,7 +768,14 @@ body { background: var(--bg2); color: var(--text); font-family: var(--sans); fon
           </div>
           <svg width="32" height="32" viewBox="0 0 32 32" id="sv-ring" style="flex-shrink:0;margin-left:8px"></svg>
         </div>
+        <div class="stat-card blue">
+          <div class="stat-left">
+            <div class="stat-label">Est. cost saved</div>
+            <div class="stat-num blue" id="sv-cost">\u2014</div>
+          </div>
+        </div>
       </div>
+      <div style="padding:0 0 8px 4px;font-size:11px;font-family:var(--mono);color:var(--text3)" id="sv-pricing-note"></div>
 
       <!-- Chart row: big donut + stacked breakdown -->
       <div class="panel-row" style="margin-bottom:10px">
@@ -1423,11 +1430,19 @@ async function loadSavings() {
     var pct      = d.savings_pct    || 0;
     var usedPct  = baseline > 0 ? Math.round(served/baseline*100) : 0;
 
+    var costSaved   = d.cost_saved      || 0;
+    var pricingModel = d.pricing_model  || 'opus';
+    var inputPrice  = d.input_price_per_m  || 0;
+    var outputPrice = d.output_price_per_m || 0;
+
     // Stat cards
     document.getElementById('sv-queries').textContent = fmt(queries);
     document.getElementById('sv-saved').textContent   = fmtK(saved);
     document.getElementById('sv-pct').textContent     = pct+'%';
+    document.getElementById('sv-cost').textContent    = costSaved < 0.01 && costSaved > 0 ? '<$0.01' : '$'+costSaved.toFixed(2);
     drawMiniRing('sv-ring', pct, 'var(--purple)');
+    document.getElementById('sv-pricing-note').textContent =
+      'Cost estimate based on '+pricingModel+' pricing (input $'+inputPrice+'/1M, output $'+outputPrice+'/1M). Configure via pricing.model in cce.toml.';
 
     // Big donut
     if (baseline > 0) {

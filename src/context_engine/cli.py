@@ -1432,17 +1432,14 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
         return empty, {}
 
     from context_engine.cli_style import dim, bold
-    from context_engine.pricing import get_model_pricing
+    from context_engine.pricing import resolve_pricing
 
-    _all_pricing = get_model_pricing()
-    _pricing_model = config.pricing_model.lower()
-    _default = _all_pricing.get("opus", {"input": 15.0, "output": 75.0})
-    _model_pricing = _all_pricing.get(_pricing_model, _default)
+    _model_label, _model_pricing = resolve_pricing(config)
     _input_price_per_m = _model_pricing["input"]
     _output_price_per_m = _model_pricing["output"]
     _INPUT_COST = _input_price_per_m / 1_000_000
     _OUTPUT_COST = _output_price_per_m / 1_000_000
-    _model_label = _pricing_model.capitalize()
+    _model_label = _model_label.capitalize()
     _GRID_COLS = 10
     _FILLED = "⛁"
     _EMPTY = "⛶"
