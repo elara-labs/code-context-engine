@@ -922,6 +922,14 @@ def init(ctx: click.Context, agent: str) -> None:
             section = _editor_section(editor, project_dir)
             click.echo(_dim(f"    ~/{editor['config_path']}  →  [{section}]"))
 
+    # In auto mode, show which agents weren't detected so the user knows
+    # they can use --agent <name> to force configuration.
+    if agent == "auto":
+        skipped = set(EDITORS.keys()) - editor_targets
+        if skipped:
+            names = ", ".join(sorted(EDITORS[k]["name"] for k in skipped))
+            click.echo(_dim(f"    Not detected: {names}. Use --agent <name> to configure manually."))
+
     # Write instruction files for the selected editors. In `auto` mode, also
     # pick up instruction files whose marker exists even if the editor itself
     # wasn't detected (e.g. an `AGENTS.md` checked in without a `~/.codex/`).
