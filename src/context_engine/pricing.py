@@ -3,11 +3,16 @@
 Anthropic pricing is fetched from docs and cached. Other providers use
 static fallbacks that are updated with releases.
 """
+from __future__ import annotations
+
 import json
 import re
 import time
 from pathlib import Path
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
+
+if TYPE_CHECKING:
+    from context_engine.config import Config
 
 _CCE_HOME = Path.home() / ".cce"
 _CACHE_PATH = _CCE_HOME / "pricing_cache.json"
@@ -183,7 +188,7 @@ def list_available_models() -> list[str]:
     return sorted(get_model_pricing().keys())
 
 
-def resolve_pricing(config: "Config") -> tuple[str, ModelPricing]:
+def resolve_pricing(config: Config) -> tuple[str, ModelPricing]:
     """Return (model_label, {input, output}) respecting config overrides.
 
     Priority:
@@ -191,8 +196,6 @@ def resolve_pricing(config: "Config") -> tuple[str, ModelPricing]:
     2. Lookup by pricing.model in the merged pricing table
     3. Fallback to Opus
     """
-    from context_engine.config import Config  # noqa: F811 — deferred import
-
     model = config.pricing_model.lower()
     all_pricing = get_model_pricing()
     default = all_pricing.get("opus", {"input": 15.0, "output": 75.0})
