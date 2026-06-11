@@ -418,3 +418,67 @@ async def test_session_start_no_savings_no_line(hook_app, aiohttp_client):
     )
     text = await resp.text()
     assert "CCE saved" not in text
+
+
+# ── Out-of-order hooks (SessionStart missed) ────────────────────────────
+
+
+async def test_prompt_without_session_start_backfills(hook_app, aiohttp_client):
+    """UserPromptSubmit before SessionStart should backfill the sessions row
+    instead of crashing with FOREIGN KEY constraint failed."""
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    # No SessionStart — go straight to prompt
+    resp = await client.post(
+        "/hooks/UserPromptSubmit",
+        json={"session_id": "orphan", "prompt_text": "hi"},
+    )
+    assert resp.status == 200
+    data = await resp.json()
+    assert data["ok"] is True
+    # Session row was backfilled
+    row = conn.execute("SELECT id, status FROM sessions WHERE id = ?", ("orphan",)).fetchone()
+    assert row is not None
+    assert row["status"] == "active"
+
+
+async def test_tool_use_without_session_start_backfills(hook_app, aiohttp_client):
+    """PostToolUse before SessionStart should backfill the sessions row."""
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    resp = await client.post(
+        "/hooks/PostToolUse",
+        json={
+            "session_id": "orphan2",
+            "tool_name": "Bash",
+            "tool_input": "ls",
+            "tool_output": "file.py",
+        },
+    )
+    assert resp.status == 200
+    data = await resp.json()
+    assert data["ok"] is True
+    row = conn.execute("SELECT id FROM sessions WHERE id = ?", ("orphan2",)).fetchone()
+    assert row is not None
+
+
+async def test_stop_without_session_start_does_not_crash(hook_app, aiohttp_client):
+    """Stop before SessionStart should not crash."""
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    resp = await client.post(
+        "/hooks/Stop",
+        json={"session_id": "orphan3"},
+    )
+    assert resp.status == 200
+
+
+async def test_session_end_without_session_start_does_not_crash(hook_app, aiohttp_client):
+    """SessionEnd before SessionStart should not crash."""
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    resp = await client.post(
+        "/hooks/SessionEnd",
+        json={"session_id": "orphan4", "exit_reason": "normal"},
+    )
+    assert resp.status == 200
