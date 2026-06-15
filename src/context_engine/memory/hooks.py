@@ -76,7 +76,11 @@ def _build_savings_line(conn: sqlite3.Connection) -> str:
     if total_baseline <= 0 or total_queries <= 0:
         return ""
 
-    saved_pct = (1 - total_served / total_baseline) * 100
+    tokens_saved = max(0, total_baseline - total_served)
+    if tokens_saved == 0:
+        return ""
+
+    saved_pct = tokens_saved / total_baseline * 100
 
     def _fmt_k(n: int) -> str:
         if n >= 1_000_000:
@@ -85,13 +89,11 @@ def _build_savings_line(conn: sqlite3.Connection) -> str:
             return f"{n / 1_000:.1f}k"
         return str(n)
 
-    tokens_saved = total_baseline - total_served
     cost_str = ""
     try:
-        from context_engine.pricing import get_model_pricing
-        pricing = get_model_pricing()
-        # Use opus as default; the session hook doesn't have config access
-        rate = pricing.get("opus", {"input": 15.0})["input"]
+        from context_engine.pricing import _STATIC_PRICING
+        # Use static opus pricing to avoid network fetch on session start
+        rate = _STATIC_PRICING.get("opus", {"input": 15.0})["input"]
         cost = tokens_saved * rate / 1_000_000
         if cost >= 0.01:
             cost_str = f", ${cost:.2f} saved"

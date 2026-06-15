@@ -1010,15 +1010,15 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
                 full = stats.get("full_file_tokens", 0)
                 served = stats.get("served_tokens", 0)
                 if q > 0 and full > 0:
-                    pct = int((full - served) / full * 100)
-                    tokens_saved = full - served
-                    from context_engine.pricing import get_model_pricing
-                    model = config.pricing_model.lower()
-                    all_pricing = get_model_pricing()
-                    rate = all_pricing.get(model, all_pricing.get("opus", {"input": 15.0}))
-                    cost = tokens_saved * rate["input"] / 1_000_000
-                    cost_str = f"${cost:.2f}" if cost >= 0.01 else "<$0.01"
-                    savings = f" · {pct}% saved over {q} queries ({cost_str} saved)"
+                    tokens_saved = max(0, full - served)
+                    if tokens_saved > 0:
+                        pct = int(tokens_saved / full * 100)
+                        from context_engine.pricing import _STATIC_PRICING
+                        model = config.pricing_model.lower()
+                        rate = _STATIC_PRICING.get(model, _STATIC_PRICING.get("opus", {"input": 15.0}))
+                        cost = tokens_saved * rate["input"] / 1_000_000
+                        cost_str = f"${cost:.2f}" if cost >= 0.01 else "<$0.01"
+                        savings = f" · {pct}% saved over {q} queries ({cost_str} saved)"
             except Exception:
                 pass
         click.echo(
