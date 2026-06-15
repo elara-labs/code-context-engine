@@ -164,41 +164,58 @@ def _save_cache(pricing: dict[str, ModelPricing]) -> None:
         pass
 
 
-def get_model_pricing() -> dict[str, ModelPricing]:
+def get_model_pricing(*, fetch_live: bool = True) -> dict[str, ModelPricing]:
     """Return {model: {input, output}} pricing per 1M tokens.
 
     Merges static pricing for all providers with live Anthropic pricing
     (fetched from docs, cached 7 days). Live data wins for Anthropic models.
+
+    When *fetch_live* is False, only static + cached pricing is used (no
+    network request). Use this on hot paths like dashboard requests.
     """
     result = dict(_STATIC_PRICING)
     cached = _load_cache()
     if cached:
         result.update(cached)
         return result
-    fetched = _fetch()
-    if fetched:
-        _save_cache(fetched)
-        result.update(fetched)
-        return result
+    if fetch_live:
+        fetched = _fetch()
+        if fetched:
+            _save_cache(fetched)
+            result.update(fetched)
+            return result
     return result
 
 
 def list_available_models() -> list[str]:
-    """Return sorted list of all model keys with known pricing."""
-    return sorted(get_model_pricing().keys())
+    """Return sorted list of all model keys with known pricing.
+
+    Uses static pricing plus any cached live pricing without triggering
+    a network fetch, so this is safe for dashboard/CLI hot paths.
+    """
+    result = dict(_STATIC_PRICING)
+    cached = _load_cache()
+    if cached:
+        result.update(cached)
+    return sorted(result.keys())
 
 
-def resolve_pricing(config: Config) -> tuple[str, ModelPricing]:
+def resolve_pricing(
+    config: Config, *, fetch_live: bool = True
+) -> tuple[str, ModelPricing]:
     """Return (model_label, {input, output}) respecting config overrides.
 
     Priority:
     1. Explicit pricing.input / pricing.output in config (full override)
     2. Lookup by pricing.model in the merged pricing table
     3. Fallback to Opus
+
+    When *fetch_live* is False, skip network fetch (use static + cache only).
     """
-    model = config.pricing_model.lower()
-    all_pricing = get_model_pricing()
-    default = all_pricing.get("opus", {"input": 15.0, "output": 75.0})
+    model = config.pricing_model.strip().lower()
+    all_pricing = get_model_pricing(fetch_live=fetch_live)
+    opus_default: ModelPricing = {"input": 15.0, "output": 75.0}
+    default = all_pricing.get("opus", opus_default)
     base = all_pricing.get(model, default)
 
     resolved: ModelPricing = {
@@ -206,9 +223,11 @@ def resolve_pricing(config: Config) -> tuple[str, ModelPricing]:
         "output": config.pricing_output if config.pricing_output is not None else base["output"],
     }
 
-    # Label reflects whether user overrode rates
+    # Label reflects whether user overrode rates or fell back
     if config.pricing_input is not None or config.pricing_output is not None:
         label = f"{model} (custom)"
+    elif model not in all_pricing:
+        label = f"opus (fallback from {model})"
     else:
         label = model
 

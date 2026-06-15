@@ -151,7 +151,9 @@ def test_sessions_returns_persisted(tmp_path):
     assert len(data[0]["decisions"]) == 1
 
 
-def test_savings_no_data(tmp_path):
+@patch("context_engine.pricing._fetch", return_value=None)
+@patch("context_engine.pricing._load_cache", return_value=None)
+def test_savings_no_data(mock_cache, mock_fetch, tmp_path):
     client, _ = _make_client(tmp_path)
     r = client.get("/api/savings")
     assert r.status_code == 200
@@ -164,7 +166,9 @@ def test_savings_no_data(tmp_path):
     assert isinstance(data["available_models"], list)
 
 
-def test_savings_with_data(tmp_path):
+@patch("context_engine.pricing._fetch", return_value=None)
+@patch("context_engine.pricing._load_cache", return_value=None)
+def test_savings_with_data(mock_cache, mock_fetch, tmp_path):
     client, storage_base = _make_client(tmp_path)
     stats = {"queries": 38, "full_file_tokens": 48000, "served_tokens": 14200, "raw_tokens": 14200}
     (storage_base / "stats.json").write_text(json.dumps(stats))

@@ -139,8 +139,8 @@ _EXPECTED_TYPES: dict[str, type | tuple[type, ...]] = {
     "audit_log_enabled": bool,
     "storage_path": str,
     "pricing_model": str,
-    "pricing_input": (int, float),
-    "pricing_output": (int, float),
+    "pricing_input": (int, float, type(None)),
+    "pricing_output": (int, float, type(None)),
 }
 
 

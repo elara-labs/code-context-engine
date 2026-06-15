@@ -333,7 +333,7 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
 
         from context_engine.pricing import resolve_pricing, list_available_models
 
-        label, model_pricing = resolve_pricing(config)
+        label, model_pricing = resolve_pricing(config, fetch_live=False)
         input_cost = saved * model_pricing["input"] / 1_000_000
         cost_saved = input_cost
 

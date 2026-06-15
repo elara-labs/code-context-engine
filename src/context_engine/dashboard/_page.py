@@ -1442,7 +1442,7 @@ async function loadSavings() {
     document.getElementById('sv-cost').textContent    = costSaved < 0.01 && costSaved > 0 ? '<$0.01' : '$'+costSaved.toFixed(2);
     drawMiniRing('sv-ring', pct, 'var(--purple)');
     document.getElementById('sv-pricing-note').textContent =
-      'Cost estimate based on '+pricingModel+' pricing (input $'+inputPrice+'/1M, output $'+outputPrice+'/1M). Configure via pricing.model in cce.toml.';
+      'Cost estimate based on '+pricingModel+' pricing (input $'+inputPrice+'/1M, output $'+outputPrice+'/1M). Configure via pricing.model, pricing.input, pricing.output in ~/.cce/config.yaml or .context-engine.yaml.';
 
     // Big donut
     if (baseline > 0) {
