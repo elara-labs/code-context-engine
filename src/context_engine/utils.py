@@ -55,10 +55,10 @@ _log = logging.getLogger(__name__)
 def _project_slug(project_dir: Path) -> str:
     """Stable per-directory slug: ``<sanitised-basename>-<6hex>``.
 
-    Same algorithm as ``editors._project_slug`` so two projects sharing a
-    basename (``api``, ``web``) get distinct storage directories.
-    Symlinks are resolved before hashing so two paths pointing at the
-    same on-disk directory produce the same slug.
+    Canonical implementation, also used by ``editors._project_slug`` for
+    per-editor config sections. Two projects sharing a basename (``api``,
+    ``web``) get distinct slugs. Symlinks are resolved before hashing so
+    two paths pointing at the same on-disk directory produce the same slug.
     """
     resolved = project_dir.resolve()
     abs_path = str(resolved)
@@ -91,12 +91,21 @@ def project_storage_dir(config: object, project_dir: Path) -> Path:
             legacy_path.rename(slug_path)
             _log.info("Migrated storage %s -> %s", legacy_path, slug_path)
         except OSError:
-            _log.warning(
-                "Could not migrate legacy storage %s to %s; "
-                "using slug path (may re-index)",
-                legacy_path,
-                slug_path,
-            )
+            if slug_path.exists():
+                # Likely a concurrent migration completed first
+                _log.info(
+                    "Legacy storage %s not migrated; slug path %s already exists",
+                    legacy_path,
+                    slug_path,
+                )
+            else:
+                _log.warning(
+                    "Could not migrate legacy storage %s to %s; "
+                    "using slug path (may re-index)",
+                    legacy_path,
+                    slug_path,
+                    exc_info=True,
+                )
 
     return slug_path
 

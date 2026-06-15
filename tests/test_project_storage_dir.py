@@ -68,7 +68,8 @@ def test_legacy_dir_is_migrated(tmp_path):
 
 
 def test_no_migration_if_slug_dir_already_exists(tmp_path):
-    """If the slug dir already exists, the legacy dir is left alone."""
+    """Once the slug dir exists (from a prior migration), a newly created
+    legacy dir is not migrated again."""
     cfg = _config(tmp_path)
     project = tmp_path / "subdir" / "api"
     project.mkdir(parents=True)
