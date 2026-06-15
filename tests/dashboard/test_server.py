@@ -8,14 +8,16 @@ from fastapi.testclient import TestClient
 
 from context_engine.config import Config
 from context_engine.dashboard.server import create_app
+from context_engine.utils import project_storage_dir
 
 
 def _setup_storage(tmp_path: Path, project_name: str = "my-project") -> tuple[Path, Path]:
     """Create storage dir with stats.json and manifest.json; return (storage_root, project_dir)."""
     project_dir = tmp_path / "workspace" / project_name
     project_dir.mkdir(parents=True)
-    storage_base = tmp_path / "storage" / project_name
-    storage_base.mkdir(parents=True)
+    config = Config(storage_path=str(tmp_path / "storage"))
+    storage_base = project_storage_dir(config, project_dir)
+    storage_base.mkdir(parents=True, exist_ok=True)
     return storage_base, project_dir
 
 
