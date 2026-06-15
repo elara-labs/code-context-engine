@@ -217,7 +217,12 @@ def _toml_quote(s: str) -> str:
 
 def detect_editors(project_dir: Path) -> list[str]:
     """Return list of editor keys detected for this project. Markers are
-    looked up under each editor's scope root (project dir or home dir)."""
+    looked up under each editor's scope root (project dir or home dir).
+
+    For Codex, also checks for the VS Code extension directory
+    (``~/.vscode/extensions/openai.*``) since the extension doesn't
+    create ``~/.codex`` until the CLI is run separately.
+    """
     found = []
     for key, editor in EDITORS.items():
         root = _scope_root(editor, project_dir)
@@ -225,7 +230,21 @@ def detect_editors(project_dir: Path) -> list[str]:
             if (root / marker).exists():
                 found.append(key)
                 break
+        else:
+            # Secondary detection for Codex: VS Code extension installed
+            if key == "codex" and _has_vscode_openai_extension():
+                found.append(key)
     return found
+
+
+def _has_vscode_openai_extension() -> bool:
+    """Check if any OpenAI VS Code extension is installed (as a proxy for Codex)
+    by looking for extension directories matching ``openai.*`` under
+    ``~/.vscode/extensions``. No subprocess needed, works cross-platform."""
+    ext_dir = Path.home() / ".vscode" / "extensions"
+    if not ext_dir.is_dir():
+        return False
+    return any(ext_dir.glob("openai.*"))
 
 
 def _codex_toml_block(command: str, project_dir: str, *, section: str) -> str:

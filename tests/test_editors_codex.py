@@ -130,6 +130,22 @@ def test_no_codex_detection_when_home_codex_absent(fake_home, project_dir):
     assert "codex" not in detect_editors(project_dir)
 
 
+def test_detect_codex_via_vscode_extension(fake_home, project_dir):
+    """Codex VS Code extension installed but ~/.codex doesn't exist yet.
+    Detection should still fire via the extension directory."""
+    ext_dir = fake_home / ".vscode" / "extensions" / "openai.openai-chatgpt-adhoc-1.0.0"
+    ext_dir.mkdir(parents=True)
+    # ~/.codex does NOT exist
+    assert not (fake_home / ".codex").exists()
+    detected = detect_editors(project_dir)
+    assert "codex" in detected
+
+
+def test_no_codex_detection_without_any_signal(fake_home, project_dir):
+    """Neither ~/.codex nor VS Code extension present — no detection."""
+    assert "codex" not in detect_editors(project_dir)
+
+
 # ── Configure: writes to ~/.codex/config.toml ────────────────────────────────
 
 def test_configure_writes_to_user_global_codex_config(fake_home, project_dir):
