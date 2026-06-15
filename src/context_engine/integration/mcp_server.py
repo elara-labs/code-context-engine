@@ -1432,12 +1432,28 @@ class ContextEngineMCP:
         body = self._apply_output_compression(body)
         return [TextContent(type="text", text=body)]
 
+    def _fmt_cost_saved(self, tokens_saved: int) -> str:
+        """Format cost savings as a short string, e.g. ', $4.37 saved'."""
+        if tokens_saved <= 0:
+            return ""
+        try:
+            from context_engine.pricing import get_model_pricing
+            model = self._config.pricing_model.lower()
+            pricing = get_model_pricing()
+            rate = pricing.get(model, pricing.get("opus", {"input": 15.0}))
+            cost = tokens_saved * rate["input"] / 1_000_000
+            if cost >= 0.01:
+                return f", ${cost:.2f} saved"
+        except Exception:
+            pass
+        return ""
+
     async def _handle_index_status(self):
         queries = self._stats["queries"]
         raw = self._stats["raw_tokens"]
         served = self._stats["served_tokens"]
         full_file = self._stats.get("full_file_tokens", 0)
-        saved = raw - served
+        saved = max(0, raw - served)
         pct = int(saved / raw * 100) if raw > 0 else 0
 
         status_parts = [
@@ -1448,17 +1464,19 @@ class ContextEngineMCP:
         if queries > 0:
             # Show full-file baseline savings (the headline number)
             if full_file > 0:
-                full_saved = full_file - served
-                full_pct = int(full_saved / full_file * 100)
+                full_saved = max(0, full_file - served)
+                full_pct = int(full_saved / full_file * 100) if full_saved > 0 else 0
+                cost_note = self._fmt_cost_saved(full_saved)
                 status_parts.append(
                     f"Token savings ({queries} queries): "
                     f"{full_file:,} full-file baseline → {served:,} served "
-                    f"({full_pct}% saved)"
+                    f"({full_pct}% saved{cost_note})"
                 )
             else:
+                cost_note = self._fmt_cost_saved(saved)
                 status_parts.append(
                     f"Token savings ({queries} queries): {raw:,} raw → {served:,} served "
-                    f"({saved:,} saved, {pct}%)"
+                    f"({saved:,} saved, {pct}%{cost_note})"
                 )
         else:
             status_parts.append(
