@@ -23,6 +23,7 @@ from context_engine.integration.mcp_server import ContextEngineMCP
 from context_engine.integration.session_capture import SessionCapture
 from context_engine.retrieval.retriever import HybridRetriever
 from context_engine.storage.local_backend import LocalBackend
+from context_engine.utils import project_storage_dir
 
 
 def _build_server(project_dir: Path, storage_root: Path) -> ContextEngineMCP:
@@ -34,7 +35,7 @@ def _build_server(project_dir: Path, storage_root: Path) -> ContextEngineMCP:
     `__new__` bypass like the older test in test_mcp_server.py).
     """
     config = Config(storage_path=str(storage_root))
-    backend = LocalBackend(base_path=str(storage_root / project_dir.name))
+    backend = LocalBackend(base_path=str(project_storage_dir(config, project_dir)))
     embedder = Embedder(model_name=config.embedding_model)
     retriever = HybridRetriever(backend=backend, embedder=embedder)
     compressor = Compressor(model=config.compression_model, cache=backend)
@@ -75,7 +76,7 @@ async def test_decision_recorded_then_recalled_across_restart(project_and_storag
     assert "Decision recorded" in result[0].text
 
     # The decision should have been persisted to the per-session JSON. Locate it.
-    sessions_dir = storage_root / project_dir.name / "sessions"
+    sessions_dir = project_storage_dir(Config(storage_path=str(storage_root)), project_dir) / "sessions"
     session_files = [
         f for f in sessions_dir.glob("*.json") if f.name != "decisions_log.json"
     ]
@@ -207,7 +208,7 @@ async def test_session_recall_searches_decisions_log_archive(project_and_storage
     "Decisions remain searchable via session_recall after pruning"."""
     project_dir, storage_root = project_and_storage
 
-    sessions_dir = storage_root / project_dir.name / "sessions"
+    sessions_dir = project_storage_dir(Config(storage_path=str(storage_root)), project_dir) / "sessions"
     sessions_dir.mkdir(parents=True)
 
     # No on-disk per-session files — only the consolidated archive — so we

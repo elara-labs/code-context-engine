@@ -36,7 +36,8 @@ def project_with_existing_index(tmp_path):
 
 
 def _project_storage(config, project_dir: Path) -> Path:
-    return Path(config.storage_path) / project_dir.name
+    from context_engine.utils import project_storage_dir
+    return project_storage_dir(config, project_dir)
 
 
 def _count_chunks(config, project_dir: Path) -> int:
