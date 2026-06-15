@@ -17,7 +17,6 @@ Codex CLI is the only "user" scope today — it reads MCP servers from
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import tomllib
