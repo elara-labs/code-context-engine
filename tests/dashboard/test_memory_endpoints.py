@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from context_engine.config import Config
 from context_engine.dashboard.server import create_app
 from context_engine.memory import db as memory_db
+from context_engine.utils import project_storage_dir
 
 
 @pytest.fixture
@@ -18,18 +19,19 @@ def client(tmp_path: Path):
     project_dir.mkdir()
     storage_path = tmp_path / "storage"
     storage_path.mkdir()
-    project_storage = storage_path / "demo"
-    project_storage.mkdir()
+
+    config = Config(
+        storage_path=str(storage_path),
+        embedding_model="BAAI/bge-small-en-v1.5",
+    )
+    project_storage = project_storage_dir(config, project_dir)
+    project_storage.mkdir(parents=True, exist_ok=True)
 
     # Minimal manifest so /api/files / /api/status work.
     (project_storage / "manifest.json").write_text(
         json.dumps({"__schema_version": 2, "files": {}, "last_git_sha": None})
     )
 
-    config = Config(
-        storage_path=str(storage_path),
-        embedding_model="BAAI/bge-small-en-v1.5",
-    )
     app = create_app(config, project_dir)
     return TestClient(app), project_storage
 

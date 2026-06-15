@@ -22,6 +22,7 @@ from context_engine.indexer.git_indexer import index_commits
 from context_engine.indexer.manifest import Manifest
 from context_engine.models import ChunkType, GraphNode, GraphEdge, NodeType, EdgeType
 from context_engine.storage.local_backend import LocalBackend
+from context_engine.utils import project_storage_dir
 
 
 # Map a chunk's semantic type to its graph node type. Without this every
@@ -289,8 +290,7 @@ async def run_indexing(
     progress_fn is per-batch.
     """
     project_dir = Path(project_dir)
-    project_name = project_dir.name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, project_dir)
     storage_base.mkdir(parents=True, exist_ok=True)
 
     async with _pipeline_lock(str(storage_base)):
