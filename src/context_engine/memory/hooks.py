@@ -47,7 +47,9 @@ _RESUME_RECENT_DECISIONS = 5
 _RESUME_DECISION_REASON_CHARS = 200
 
 
-def _ensure_session(conn: sqlite3.Connection, session_id: str) -> None:
+def _ensure_session(
+    conn: sqlite3.Connection, session_id: str, project: str = ""
+) -> None:
     """Ensure a sessions row exists for the given session_id.
 
     Hooks can arrive out of order (UserPromptSubmit before SessionStart)
@@ -60,8 +62,8 @@ def _ensure_session(conn: sqlite3.Connection, session_id: str) -> None:
     conn.execute(
         "INSERT OR IGNORE INTO sessions "
         "(id, project, started_at_epoch, started_at, status) "
-        "VALUES (?, '', ?, ?, 'active')",
-        (session_id, epoch, _now_iso(epoch)),
+        "VALUES (?, ?, ?, ?, 'active')",
+        (session_id, project, epoch, _now_iso(epoch)),
     )
 
 
@@ -231,7 +233,7 @@ async def handle_user_prompt_submit(request: web.Request) -> web.Response:
 
     conn = _conn(request)
     try:
-        _ensure_session(conn, session_id)
+        _ensure_session(conn, session_id, request.app.get("project_name", ""))
 
         if prompt_number is None:
             row = conn.execute(
@@ -284,7 +286,7 @@ async def handle_post_tool_use(request: web.Request) -> web.Response:
 
     conn = _conn(request)
     try:
-        _ensure_session(conn, session_id)
+        _ensure_session(conn, session_id, request.app.get("project_name", ""))
 
         if prompt_number is None:
             row = conn.execute(
@@ -323,7 +325,7 @@ async def handle_stop(request: web.Request) -> web.Response:
 
     conn = _conn(request)
     try:
-        _ensure_session(conn, session_id)
+        _ensure_session(conn, session_id, request.app.get("project_name", ""))
 
         if prompt_number is None:
             row = conn.execute(
@@ -353,7 +355,7 @@ async def handle_session_end(request: web.Request) -> web.Response:
 
     conn = _conn(request)
     try:
-        _ensure_session(conn, session_id)
+        _ensure_session(conn, session_id, request.app.get("project_name", ""))
 
         epoch = _now_epoch()
         conn.execute(

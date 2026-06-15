@@ -436,10 +436,11 @@ async def test_prompt_without_session_start_backfills(hook_app, aiohttp_client):
     assert resp.status == 200
     data = await resp.json()
     assert data["ok"] is True
-    # Session row was backfilled
-    row = conn.execute("SELECT id, status FROM sessions WHERE id = ?", ("orphan",)).fetchone()
+    # Session row was backfilled with project name
+    row = conn.execute("SELECT id, status, project FROM sessions WHERE id = ?", ("orphan",)).fetchone()
     assert row is not None
     assert row["status"] == "active"
+    assert row["project"] == "demo"
 
 
 async def test_tool_use_without_session_start_backfills(hook_app, aiohttp_client):
@@ -458,8 +459,9 @@ async def test_tool_use_without_session_start_backfills(hook_app, aiohttp_client
     assert resp.status == 200
     data = await resp.json()
     assert data["ok"] is True
-    row = conn.execute("SELECT id FROM sessions WHERE id = ?", ("orphan2",)).fetchone()
+    row = conn.execute("SELECT id, project FROM sessions WHERE id = ?", ("orphan2",)).fetchone()
     assert row is not None
+    assert row["project"] == "demo"
 
 
 async def test_stop_without_session_start_does_not_crash(hook_app, aiohttp_client):
