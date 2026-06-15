@@ -250,15 +250,15 @@ def detect_editors(project_dir: Path) -> list[str]:
                 break
         else:
             # Secondary detection for Codex: VS Code extension installed
-            if key == "codex" and _has_vscode_codex_extension():
+            if key == "codex" and _has_vscode_openai_extension():
                 found.append(key)
     return found
 
 
-def _has_vscode_codex_extension() -> bool:
-    """Check if any OpenAI VS Code extension is installed by looking for
-    extension directories matching ``openai.*`` under ``~/.vscode/extensions``.
-    No subprocess needed, works cross-platform."""
+def _has_vscode_openai_extension() -> bool:
+    """Check if any OpenAI VS Code extension is installed (as a proxy for Codex)
+    by looking for extension directories matching ``openai.*`` under
+    ``~/.vscode/extensions``. No subprocess needed, works cross-platform."""
     ext_dir = Path.home() / ".vscode" / "extensions"
     if not ext_dir.is_dir():
         return False
