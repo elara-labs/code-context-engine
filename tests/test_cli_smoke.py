@@ -256,14 +256,20 @@ def test_pricing_fetch_and_fallback():
 
 
 def test_pricing_fallback_on_network_error():
-    """When fetch fails, fallback pricing is returned."""
-    from context_engine.pricing import get_model_pricing, _FALLBACK, _CACHE_PATH
+    """When fetch fails, static pricing for all providers is returned."""
+    from context_engine.pricing import get_model_pricing, _STATIC_PRICING, _CACHE_PATH
     # Clear cache so it tries to fetch
     if _CACHE_PATH.exists():
         _CACHE_PATH.unlink()
     with patch("context_engine.pricing._fetch", return_value=None):
         pricing = get_model_pricing()
-    assert pricing == _FALLBACK
+    assert pricing == _STATIC_PRICING
+    # Anthropic models present
+    assert "opus" in pricing
+    assert "sonnet" in pricing
+    # Non-Anthropic models present
+    assert "gpt-4o" in pricing
+    assert "gemini-2.5-pro" in pricing
 
 
 def test_pricing_shown_in_savings_output(runner, storage):

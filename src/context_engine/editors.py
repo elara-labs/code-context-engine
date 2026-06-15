@@ -17,7 +17,6 @@ Codex CLI is the only "user" scope today — it reads MCP servers from
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import tomllib
@@ -178,29 +177,12 @@ def _resolved_config_path(editor: dict, project_dir: Path) -> Path:
 
 
 def _project_slug(project_dir: Path) -> str:
-    """Stable per-directory slug used as the section name for user-scoped
-    editor configs. `<basename>-<6-hex>` so two projects sharing a
-    basename ("api", "web", "frontend") get distinct sections instead of
-    silently overwriting each other in ~/.codex/config.toml.
+    """Stable per-directory slug for user-scoped editor config sections.
 
-    Symlinks are resolved before hashing so two paths pointing at the
-    same on-disk directory map to the same slug (idempotent re-runs).
+    Delegates to utils._project_slug to keep the algorithm in one place.
     """
-    resolved = project_dir.resolve()
-    abs_path = str(resolved)
-    h = hashlib.sha256(abs_path.encode()).hexdigest()[:6]
-    # TOML bare-key chars here are restricted to ASCII A-Za-z0-9_-; replace
-    # anything else (spaces, unicode, punctuation) with `-` so the rendered
-    # section is always a syntactically valid bare key. Empty basename (root
-    # dir or trailing slash) falls back to "project" so the slug is never
-    # just "-a3f2".
-    # Use the resolved basename so symlink-vs-real-path produces the same
-    # slug — otherwise the hash would match but the basename would differ.
-    safe = "".join(
-        c if (c.isascii() and (c.isalnum() or c in "-_")) else "-"
-        for c in resolved.name
-    )
-    return f"{safe or 'project'}-{h}"
+    from context_engine.utils import _project_slug as _utils_slug
+    return _utils_slug(project_dir)
 
 
 def _editor_section(editor: dict, project_dir: Path) -> str | None:
@@ -235,7 +217,12 @@ def _toml_quote(s: str) -> str:
 
 def detect_editors(project_dir: Path) -> list[str]:
     """Return list of editor keys detected for this project. Markers are
-    looked up under each editor's scope root (project dir or home dir)."""
+    looked up under each editor's scope root (project dir or home dir).
+
+    For Codex, also checks for the VS Code extension directory
+    (``~/.vscode/extensions/openai.*``) since the extension doesn't
+    create ``~/.codex`` until the CLI is run separately.
+    """
     found = []
     for key, editor in EDITORS.items():
         root = _scope_root(editor, project_dir)
@@ -243,7 +230,21 @@ def detect_editors(project_dir: Path) -> list[str]:
             if (root / marker).exists():
                 found.append(key)
                 break
+        else:
+            # Secondary detection for Codex: VS Code extension installed
+            if key == "codex" and _has_vscode_openai_extension():
+                found.append(key)
     return found
+
+
+def _has_vscode_openai_extension() -> bool:
+    """Check if any OpenAI VS Code extension is installed (as a proxy for Codex)
+    by looking for extension directories matching ``openai.*`` under
+    ``~/.vscode/extensions``. No subprocess needed, works cross-platform."""
+    ext_dir = Path.home() / ".vscode" / "extensions"
+    if not ext_dir.is_dir():
+        return False
+    return any(ext_dir.glob("openai.*"))
 
 
 def _codex_toml_block(command: str, project_dir: str, *, section: str) -> str:

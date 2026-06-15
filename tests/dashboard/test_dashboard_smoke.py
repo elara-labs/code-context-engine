@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from context_engine.config import Config
 from context_engine.dashboard.server import create_app
 from context_engine.memory import db as memory_db
+from context_engine.utils import project_storage_dir
 
 
 def _setup(tmp_path: Path, *, with_stats: bool = False, with_memory: bool = False):
@@ -18,8 +19,9 @@ def _setup(tmp_path: Path, *, with_stats: bool = False, with_memory: bool = Fals
     project_name = "smoke-project"
     project_dir = tmp_path / "workspace" / project_name
     project_dir.mkdir(parents=True)
-    storage_base = tmp_path / "storage" / project_name
-    storage_base.mkdir(parents=True)
+    config = Config(storage_path=str(tmp_path / "storage"))
+    storage_base = project_storage_dir(config, project_dir)
+    storage_base.mkdir(parents=True, exist_ok=True)
 
     if with_stats:
         (storage_base / "stats.json").write_text(json.dumps({

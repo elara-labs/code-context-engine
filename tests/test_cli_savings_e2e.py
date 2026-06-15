@@ -13,6 +13,7 @@ from click.testing import CliRunner
 
 from context_engine.cli import main
 from context_engine.config import Config
+from context_engine.utils import project_storage_dir
 from context_engine.indexer.chunker import Chunker
 from context_engine.indexer.embedder import Embedder
 from context_engine.indexer.manifest import Manifest
@@ -97,9 +98,13 @@ def runner():
 def indexed_project(tmp_path):
     """Create a temp project, index it, return (storage_dir, project_dir)."""
     project_dir = tmp_path / "project"
-    storage_dir = tmp_path / "storage"
+    storage_root = tmp_path / "storage"
     project_dir.mkdir()
-    storage_dir.mkdir()
+    storage_root.mkdir()
+
+    config = Config(storage_path=str(storage_root))
+    storage_dir = project_storage_dir(config, project_dir)
+    storage_dir.mkdir(parents=True, exist_ok=True)
 
     # Write sample files
     for rel_path, content in SAMPLE_FILES.items():
@@ -201,14 +206,10 @@ async def test_query_and_savings(runner, indexed_project):
     # Run cce savings and verify output
     config = Config(storage_path=str(storage_dir.parent))
 
-    # storage_dir is tmp_path/storage, project name = "storage"
-    project_name = storage_dir.name
-    with runner.isolated_filesystem():
-        cwd = Path.cwd() / project_name
-        cwd.mkdir(parents=True, exist_ok=True)
-        with patch("context_engine.cli.load_config", return_value=config), \
-             patch("context_engine.cli.Path.cwd", return_value=cwd):
-            result = runner.invoke(main, ["savings"])
+    project_name = project_dir.name
+    with patch("context_engine.cli.load_config", return_value=config), \
+         patch("context_engine.cli._safe_cwd", return_value=project_dir):
+        result = runner.invoke(main, ["savings"])
 
     assert result.exit_code == 0, f"savings failed:\n{result.output}"
     out = result.output
@@ -233,12 +234,9 @@ async def test_query_and_savings(runner, indexed_project):
     assert "Total saved" in out
 
     # JSON output also works
-    with runner.isolated_filesystem():
-        cwd = Path.cwd() / project_name
-        cwd.mkdir(parents=True, exist_ok=True)
-        with patch("context_engine.cli.load_config", return_value=config), \
-             patch("context_engine.cli.Path.cwd", return_value=cwd):
-            json_result = runner.invoke(main, ["savings", "--json"])
+    with patch("context_engine.cli.load_config", return_value=config), \
+         patch("context_engine.cli._safe_cwd", return_value=project_dir):
+        json_result = runner.invoke(main, ["savings", "--json"])
 
     assert json_result.exit_code == 0
     data = json.loads(json_result.output)
