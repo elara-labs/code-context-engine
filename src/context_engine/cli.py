@@ -20,6 +20,7 @@ if sys.platform.startswith("win"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from context_engine.config import load_config, resolve_ollama_url, PROJECT_CONFIG_NAME
+from context_engine.utils import project_storage_dir
 
 
 def _safe_cwd() -> Path:
@@ -330,7 +331,7 @@ def _check_memory_capture_reachable(config, project_dir: Path) -> None:
     """
     import socket
     project_name = project_dir.name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, project_dir)
     # Try the storage-local file first (authoritative), then fall back to
     # the default-path rendezvous file `cce serve` writes for the hook
     # shell script. Either is sufficient for the probe.
@@ -443,7 +444,7 @@ def _show_welcome_banner(config) -> None:
 
     project_dir = _safe_cwd()
     project_name = project_dir.name
-    storage_dir = Path(config.storage_path) / project_name
+    storage_dir = project_storage_dir(config, project_dir)
 
     # Gather stats
     chunks = 0
@@ -873,8 +874,7 @@ def init(ctx: click.Context, agent: str) -> None:
     click.echo("")
 
     # 2. Storage
-    project_name = project_dir.name
-    storage_dir = Path(config.storage_path) / project_name
+    storage_dir = project_storage_dir(config, project_dir)
     storage_dir.mkdir(parents=True, exist_ok=True)
     meta_path = storage_dir / "meta.json"
     meta_path.write_text(json.dumps({"project_dir": str(project_dir.resolve())}))
@@ -993,7 +993,7 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
         except Exception:
             ver = "?"
         project_name = _safe_cwd().name
-        storage = Path(config.storage_path) / project_name
+        storage = project_storage_dir(config, _safe_cwd())
         stats_path = storage / "stats.json"
         chunks = 0
         savings = ""
@@ -1068,8 +1068,7 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
     lines.append(f"    {BULLET} {label('Compress')}      {value(compression_mode)}")
 
     # Token savings
-    project_name = _safe_cwd().name
-    stats_path = Path(config.storage_path) / project_name / "stats.json"
+    stats_path = project_storage_dir(config, _safe_cwd()) / "stats.json"
     lines.append("")
     lines.append(section("Token Savings"))
     lines.append("")
@@ -1090,7 +1089,7 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
         except (KeyError, _json.JSONDecodeError):
             lines.append(f"    {DOT} {dim('Error reading stats')}")
     else:
-        storage_dir = Path(config.storage_path) / _safe_cwd().name
+        storage_dir = project_storage_dir(config, _safe_cwd())
         vectors_dir = storage_dir / "vectors"
         if not vectors_dir.exists():
             lines.append(f"    {DOT} {dim('Project not indexed yet')}  {label('cce init')}")
@@ -1098,7 +1097,7 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
             lines.append(f"    {DOT} {dim('No usage recorded yet')}  {dim('run context_search via MCP')}")
 
     # Embedding cache stats — surfaces how much the cache is actually saving.
-    cache_db = Path(config.storage_path) / _safe_cwd().name / "embedding_cache.db"
+    cache_db = project_storage_dir(config, _safe_cwd()) / "embedding_cache.db"
     if cache_db.exists():
         try:
             from context_engine.indexer.embedding_cache import EmbeddingCache
@@ -1761,8 +1760,7 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             key=lambda d: d.name,
         )
     else:
-        project_name = _safe_cwd().name
-        project_dirs = [storage_root / project_name]
+        project_dirs = [project_storage_dir(config, _safe_cwd())]
 
     # Each report carries its bucket totals and level histogram alongside
     # the legacy stats.json so downstream renderers/JSON emitters can
@@ -1869,7 +1867,7 @@ def clear(ctx: click.Context, yes: bool) -> None:
 
     config = ctx.obj["config"]
     project_name = _safe_cwd().name
-    storage_dir = Path(config.storage_path) / project_name
+    storage_dir = project_storage_dir(config, _safe_cwd())
 
     if not storage_dir.exists():
         animate(["", f"  {DOT} {dim('No index data found for')} {value(project_name)}", ""])
@@ -1972,14 +1970,13 @@ def search(ctx: click.Context, query: str, top_k: int) -> None:
 
     config = ctx.obj["config"]
     project_dir = str(_safe_cwd())
-    project_name = _safe_cwd().name
 
     async def _search():
         from context_engine.storage.local_backend import LocalBackend
         from context_engine.indexer.embedder import Embedder
         from context_engine.retrieval.retriever import HybridRetriever
 
-        storage_dir = Path(config.storage_path) / project_name
+        storage_dir = project_storage_dir(config, _safe_cwd())
         if not (storage_dir / "vectors").exists():
             animate(["", f"  {DOT} {dim('Not indexed yet. Run:')} {label('cce init')}", ""])
             return
@@ -2213,7 +2210,7 @@ def uninstall(yes: bool) -> None:
 
     # Remove index data from ~/.cce/projects/<project>
     config = load_config()
-    index_dir = Path(config.storage_path) / project_name
+    index_dir = project_storage_dir(config, project_dir)
     if index_dir.exists():
         import shutil
         shutil.rmtree(index_dir)
@@ -2570,7 +2567,7 @@ def sessions_status(ctx: click.Context) -> None:
 
     config = ctx.obj["config"]
     project_name = _safe_cwd().name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, _safe_cwd())
     db_path = memory_db.memory_db_path(storage_base)
 
     click.echo(f"  project: {project_name}")
@@ -2705,8 +2702,7 @@ def sessions_prune(
     from context_engine.memory import db as memory_db
 
     config = ctx.obj["config"]
-    project_name = _safe_cwd().name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, _safe_cwd())
     sessions_dir = storage_base / "sessions"
 
     if sessions_dir.exists():
@@ -2789,7 +2785,7 @@ def sessions_export(
 
     config = ctx.obj["config"]
     project_name = _safe_cwd().name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, _safe_cwd())
     db_path = memory_db.memory_db_path(storage_base)
     if not db_path.exists():
         click.echo("  No memory.db for this project — nothing to export.")
@@ -2902,7 +2898,7 @@ def sessions_migrate(ctx: click.Context, no_archive: bool) -> None:
 
     config = ctx.obj["config"]
     project_name = _safe_cwd().name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, _safe_cwd())
     db_path = memory_db.memory_db_path(storage_base)
 
     conn = memory_db.connect(db_path)
@@ -3025,8 +3021,8 @@ async def _run_index(
     )
 
     # Update full_file_tokens baseline so cce savings shows codebase size
-    project_name = Path(project_dir).name
-    stats_path = Path(config.storage_path) / project_name / "stats.json"
+    _storage_dir = project_storage_dir(config, Path(project_dir))
+    stats_path = _storage_dir / "stats.json"
     try:
         stats = json.loads(stats_path.read_text()) if stats_path.exists() else {}
     except (json.JSONDecodeError, OSError):
@@ -3034,7 +3030,7 @@ async def _run_index(
     total_tokens = 0
     project_root = Path(project_dir)
     from context_engine.storage.local_backend import LocalBackend
-    backend = LocalBackend(base_path=str(Path(config.storage_path) / project_name))
+    backend = LocalBackend(base_path=str(_storage_dir))
     for rel_path in backend._vector_store.file_chunk_counts():
         fp = project_root / rel_path
         if fp.exists():
@@ -3072,7 +3068,7 @@ async def _run_serve(config) -> None:
 
     project_dir = str(_safe_cwd())
     project_name = _safe_cwd().name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, _safe_cwd())
     backend = LocalBackend(base_path=str(storage_base))
     embedder = Embedder(model_name=config.embedding_model)
     retriever = HybridRetriever(backend=backend, embedder=embedder)

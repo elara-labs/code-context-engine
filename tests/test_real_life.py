@@ -18,6 +18,7 @@ from context_engine.indexer.embedder import Embedder
 from context_engine.indexer.pipeline import run_indexing
 from context_engine.storage.local_backend import LocalBackend
 from context_engine.storage.vector_store import VectorStore, _to_list
+from context_engine.utils import project_storage_dir
 from context_engine.retrieval.retriever import HybridRetriever
 from context_engine.compression.compressor import Compressor
 from context_engine.integration.mcp_server import ContextEngineMCP
@@ -169,7 +170,7 @@ class TestFullPipeline:
         assert len(result.errors) == 0, f"Indexing errors: {result.errors}"
 
         # Search via retriever — use same path the pipeline wrote to
-        project_storage = storage_base / non_git_project.name
+        project_storage = project_storage_dir(config, non_git_project)
         backend = LocalBackend(base_path=str(project_storage))
         retriever = HybridRetriever(backend=backend, embedder=embedder)
         chunks = await retriever.retrieve("hello world", top_k=5)
@@ -187,7 +188,7 @@ class TestFullPipeline:
         assert result.total_chunks > 0
         assert len(result.errors) == 0
 
-        project_storage = storage_base / git_project.name
+        project_storage = project_storage_dir(config, git_project)
         backend = LocalBackend(base_path=str(project_storage))
         retriever = HybridRetriever(backend=backend, embedder=embedder)
         chunks = await retriever.retrieve("greet function", top_k=5)
@@ -248,7 +249,7 @@ class TestMCPSimulation:
 
         await run_indexing(config, str(git_project), full=True)
 
-        project_storage = storage_base / git_project.name
+        project_storage = project_storage_dir(config, git_project)
         backend = LocalBackend(base_path=str(project_storage))
         retriever = HybridRetriever(backend=backend, embedder=embedder)
         compressor = Compressor()
@@ -277,7 +278,7 @@ class TestMCPSimulation:
 
         await run_indexing(config, str(git_project), full=True)
 
-        project_storage = storage_base / git_project.name
+        project_storage = project_storage_dir(config, git_project)
         backend = LocalBackend(base_path=str(project_storage))
         retriever = HybridRetriever(backend=backend, embedder=embedder)
         compressor = Compressor()
@@ -334,7 +335,7 @@ class TestGraphExpansion:
 
         await run_indexing(config, str(linked_project), full=True)
 
-        project_storage = storage_base / linked_project.name
+        project_storage = project_storage_dir(config, linked_project)
         backend = LocalBackend(base_path=str(project_storage))
         retriever = HybridRetriever(backend=backend, embedder=embedder)
 

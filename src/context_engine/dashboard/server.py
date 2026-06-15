@@ -18,6 +18,7 @@ from context_engine.config import Config
 from context_engine.dashboard._page import PAGE_HTML
 from context_engine.indexer.pipeline import PathOutsideProjectError, run_indexing
 from context_engine.storage.local_backend import LocalBackend
+from context_engine.utils import project_storage_dir
 
 # Mutating HTTP methods require a same-origin browser request OR a non-browser
 # client (Sec-Fetch-Site absent). This blocks CSRF from a malicious local page
@@ -46,7 +47,7 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
     app is self-contained and trivial to test with TestClient.
     """
     project_name = project_dir.name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, project_dir)
 
     app = FastAPI(title="CCE Dashboard", docs_url=None, redoc_url=None)
 
