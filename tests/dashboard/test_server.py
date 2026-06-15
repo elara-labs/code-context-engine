@@ -153,7 +153,9 @@ def test_sessions_returns_persisted(tmp_path):
     assert len(data[0]["decisions"]) == 1
 
 
-def test_savings_no_data(tmp_path):
+@patch("context_engine.pricing._fetch", return_value=None)
+@patch("context_engine.pricing._load_cache", return_value=None)
+def test_savings_no_data(mock_cache, mock_fetch, tmp_path):
     client, _ = _make_client(tmp_path)
     r = client.get("/api/savings")
     assert r.status_code == 200
@@ -161,9 +163,14 @@ def test_savings_no_data(tmp_path):
     assert data["queries"] == 0
     assert data["tokens_saved"] == 0
     assert data["savings_pct"] == 0
+    assert "pricing_model" in data
+    assert "available_models" in data
+    assert isinstance(data["available_models"], list)
 
 
-def test_savings_with_data(tmp_path):
+@patch("context_engine.pricing._fetch", return_value=None)
+@patch("context_engine.pricing._load_cache", return_value=None)
+def test_savings_with_data(mock_cache, mock_fetch, tmp_path):
     client, storage_base = _make_client(tmp_path)
     stats = {"queries": 38, "full_file_tokens": 48000, "served_tokens": 14200, "raw_tokens": 14200}
     (storage_base / "stats.json").write_text(json.dumps(stats))
@@ -174,6 +181,8 @@ def test_savings_with_data(tmp_path):
     assert data["baseline_tokens"] == 48000
     assert data["tokens_saved"] == 33800
     assert data["savings_pct"] == 70
+    assert data["pricing_model"] == "opus"
+    assert data["cost_saved"] == round(33800 * 15.0 / 1_000_000, 2)
 
 
 def test_export_returns_combined(tmp_path):

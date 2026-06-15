@@ -331,12 +331,24 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
         baseline = full_file if full_file > 0 else raw
         saved = max(0, baseline - served)
         pct = int(saved / baseline * 100) if baseline > 0 else 0
+
+        from context_engine.pricing import resolve_pricing, list_available_models
+
+        label, model_pricing = resolve_pricing(config, fetch_live=False)
+        input_cost = saved * model_pricing["input"] / 1_000_000
+        cost_saved = input_cost
+
         return {
             "queries": stats.get("queries", 0),
             "baseline_tokens": baseline,
             "served_tokens": served,
             "tokens_saved": saved,
             "savings_pct": pct,
+            "pricing_model": label,
+            "input_price_per_m": model_pricing["input"],
+            "output_price_per_m": model_pricing["output"],
+            "cost_saved": round(cost_saved, 2),
+            "available_models": list_available_models(),
         }
 
     # ── action routes ──────────────────────────────────────────────────────
