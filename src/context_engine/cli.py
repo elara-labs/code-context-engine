@@ -1430,7 +1430,8 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
                     last_ts = None
                     try:
                         row = conn.execute(
-                            "SELECT MAX(ts) AS last_ts FROM savings_log"
+                            "SELECT MAX(ts) AS last_ts FROM savings_log "
+                            "WHERE bucket = 'retrieval'"
                         ).fetchone()
                         if row and row["last_ts"]:
                             last_ts = int(row["last_ts"])
