@@ -87,7 +87,7 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
     def _read_json(path: Path) -> dict:
         if path.exists():
             try:
-                return json.loads(path.read_text())
+                return json.loads(path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 pass
         return {}
@@ -119,7 +119,7 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
         result = []
         for f in files[:limit]:
             try:
-                result.append(json.loads(f.read_text()))
+                result.append(json.loads(f.read_text(encoding="utf-8")))
             except (json.JSONDecodeError, OSError):
                 pass
         return result
@@ -420,7 +420,7 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
     async def set_compression(req: CompressionRequest) -> dict:
         state = _read_state()
         state["output_level"] = req.level
-        (storage_base / "state.json").write_text(json.dumps(state))
+        (storage_base / "state.json").write_text(json.dumps(state), encoding="utf-8")
         return {"level": req.level}
 
     @app.get("/api/export")

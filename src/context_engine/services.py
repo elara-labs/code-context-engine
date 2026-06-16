@@ -41,13 +41,13 @@ def _pid_dir() -> Path:
 def _read_pid(name: str) -> int | None:
     p = _pid_dir() / f"{name}.pid"
     try:
-        return int(p.read_text().strip())
+        return int(p.read_text(encoding="utf-8").strip())
     except (FileNotFoundError, ValueError):
         return None
 
 
 def _write_pid(name: str, pid: int) -> None:
-    (_pid_dir() / f"{name}.pid").write_text(str(pid))
+    (_pid_dir() / f"{name}.pid").write_text(str(pid), encoding="utf-8")
 
 
 def _remove_pid(name: str) -> None:
@@ -165,7 +165,7 @@ def _is_remote_url(url: str) -> bool:
 def get_dashboard_status() -> dict:
     port_file = _pid_dir() / "dashboard.port"
     try:
-        port = int(port_file.read_text().strip())
+        port = int(port_file.read_text(encoding="utf-8").strip())
     except (FileNotFoundError, ValueError):
         port = None
 
@@ -266,7 +266,7 @@ def start_dashboard(port: int = _DASHBOARD_DEFAULT_PORT) -> tuple[bool, str]:
             start_new_session=True,
         )
         _write_pid("dashboard", proc.pid)
-        (_pid_dir() / "dashboard.port").write_text(str(port))
+        (_pid_dir() / "dashboard.port").write_text(str(port), encoding="utf-8")
         return True, f"Dashboard started at http://localhost:{port} (PID {proc.pid})"
     except Exception as exc:
         return False, f"Failed to start dashboard: {exc}"

@@ -138,7 +138,7 @@ def _load_cache() -> dict[str, ModelPricing] | None:
     try:
         if not _CACHE_PATH.exists():
             return None
-        data = json.loads(_CACHE_PATH.read_text())
+        data = json.loads(_CACHE_PATH.read_text(encoding="utf-8"))
         if time.time() - data.get("ts", 0) < _CACHE_TTL:
             raw = data.get("pricing")
             if not raw:
@@ -159,7 +159,7 @@ def _load_cache() -> dict[str, ModelPricing] | None:
 def _save_cache(pricing: dict[str, ModelPricing]) -> None:
     try:
         _CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _CACHE_PATH.write_text(json.dumps({"ts": time.time(), "pricing": pricing}))
+        _CACHE_PATH.write_text(json.dumps({"ts": time.time(), "pricing": pricing}), encoding="utf-8")
     except Exception:
         pass
 
