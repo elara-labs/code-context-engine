@@ -1408,11 +1408,12 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
         except (KeyError, _json.JSONDecodeError):
             return None
 
-    def _load_buckets(project_dir: Path) -> tuple[dict, dict]:
+    def _load_buckets(project_dir: Path) -> tuple[dict, dict, int | None]:
         """Open memory.db and pull per-bucket savings + the
         output_compression level histogram. Falls back to bucket data
         embedded in stats.json if memory.db is missing or empty.
-        Returns ({bucket: {baseline, served, calls}}, {level: count}).
+        Returns ({bucket: {baseline, served, calls}}, {level: count},
+        last_savings_epoch_or_None).
         """
         from context_engine.memory import db as _memory_db
         db_path = project_dir / "memory.db"
@@ -1425,10 +1426,20 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
                 try:
                     buckets = _memory_db.aggregate_savings(conn)
                     levels = _memory_db.aggregate_output_compression_levels(conn)
+                    # Last savings timestamp for freshness hint
+                    last_ts = None
+                    try:
+                        row = conn.execute(
+                            "SELECT MAX(ts) AS last_ts FROM savings_log"
+                        ).fetchone()
+                        if row and row["last_ts"]:
+                            last_ts = int(row["last_ts"])
+                    except Exception:
+                        pass
                     # Only use if there's actual data
                     total = sum(int(v.get("baseline", 0)) for v in buckets.values())
                     if total > 0:
-                        return buckets, levels
+                        return buckets, levels, last_ts
                 finally:
                     conn.close()
             except Exception:
@@ -1446,9 +1457,15 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
                 }
             total = sum(v["baseline"] for v in buckets.values())
             if total > 0:
-                return buckets, {}
+                # Use stats.json mtime as freshness hint
+                stats_mtime = None
+                try:
+                    stats_mtime = int((project_dir / "stats.json").stat().st_mtime)
+                except OSError:
+                    pass
+                return buckets, {}, stats_mtime
 
-        return empty, {}
+        return empty, {}, None
 
     from context_engine.cli_style import dim, bold
     from context_engine.pricing import resolve_pricing
@@ -1538,8 +1555,16 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
                 is_ += srv
         return ib, is_, ob, os_
 
-    def _print_project(name: str, stats: dict, buckets: dict, levels: dict) -> None:
-        queries = stats.get("queries", 0)
+    def _print_project(
+        name: str, stats: dict, buckets: dict, levels: dict,
+        last_ts: int | None = None,
+    ) -> None:
+        # Prefer query count from memory.db (retrieval calls) when available.
+        # stats.json queries can go stale if the file isn't updated (e.g.
+        # atomic write fails, or the MCP server writes to a different path).
+        retrieval_calls = int(buckets.get("retrieval", {}).get("calls", 0))
+        stats_queries = stats.get("queries", 0)
+        queries = max(retrieval_calls, stats_queries)
 
         # Prefer canonical bucket totals; fall back to legacy stats.json
         # fields if the project hasn't accumulated any bucket events yet.
@@ -1569,8 +1594,28 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
 
         q_label = "query" if queries == 1 else "queries"
 
+        # Freshness hint so users know when data was last updated
+        freshness = ""
+        if last_ts is not None:
+            import time as _time
+            age = int(_time.time()) - last_ts
+            if age < 60:
+                freshness = "just now"
+            elif age < 3600:
+                freshness = f"{age // 60}m ago"
+            elif age < 86400:
+                freshness = f"{age // 3600}h ago"
+            else:
+                freshness = f"{age // 86400}d ago"
+
         click.echo()
-        click.echo(f"  {bold(name)} {dim('·')} {value(str(queries))} {dim(q_label)}")
+        if freshness:
+            click.echo(
+                f"  {bold(name)} {dim('·')} {value(str(queries))} {dim(q_label)}"
+                f" {dim('·')} {dim(f'last query {freshness}')}"
+            )
+        else:
+            click.echo(f"  {bold(name)} {dim('·')} {value(str(queries))} {dim(q_label)}")
         click.echo()
 
         # Show friendly message when no searches have happened yet.
@@ -1749,9 +1794,11 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             if raw > 0 and served <= raw
             else 0
         )
+        retrieval_calls = int(buckets.get("retrieval", {}).get("calls", 0))
+        queries = max(retrieval_calls, stats.get("queries", 0))
         return {
             "project": name,
-            "queries": stats.get("queries", 0),
+            "queries": queries,
             "full_file_tokens": full_file,
             "raw_tokens": raw,
             "served_tokens": served,
@@ -1785,16 +1832,16 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
     # Each report carries its bucket totals and level histogram alongside
     # the legacy stats.json so downstream renderers/JSON emitters can
     # pick the canonical source.
-    reports: list[tuple[str, dict, dict, dict]] = []
+    reports: list[tuple[str, dict, dict, dict, int | None]] = []
     for pd in project_dirs:
         stats = _load_stats(pd)
-        buckets, levels = _load_buckets(pd)
+        buckets, levels, last_ts = _load_buckets(pd)
         bucket_baseline = sum(int(v.get("baseline", 0)) for v in buckets.values())
         if stats is not None or bucket_baseline > 0:
             reports.append((pd.name, stats or {
                 "queries": 0, "raw_tokens": 0, "served_tokens": 0,
                 "full_file_tokens": 0,
-            }, buckets, levels))
+            }, buckets, levels, last_ts))
 
     if not reports:
         if as_json:
@@ -1816,16 +1863,17 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
     if as_json:
         if all_projects:
             click.echo(_json.dumps(
-                {"projects": [_json_entry(n, s, b, lv) for n, s, b, lv in reports]},
+                {"projects": [_json_entry(n, s, b, lv) for n, s, b, lv, _ in reports]},
                 indent=2,
             ))
         else:
-            click.echo(_json.dumps(_json_entry(*reports[0]), indent=2))
+            n, s, b, lv, _ = reports[0]
+            click.echo(_json.dumps(_json_entry(n, s, b, lv), indent=2))
         return
 
     # Text output
-    for name, stats, buckets, levels in reports:
-        _print_project(name, stats, buckets, levels)
+    for name, stats, buckets, levels, last_ts in reports:
+        _print_project(name, stats, buckets, levels, last_ts)
         if len(reports) > 1:
             click.echo()
             click.echo("  " + "─" * 52)
@@ -1844,14 +1892,17 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             if bt > 0:
                 return bt
             return s.get("served_tokens", 0)
-        total_baseline = sum(_proj_baseline(s, b) for _, s, b, _ in reports)
-        total_served = sum(_proj_served(s, b) for _, s, b, _ in reports)
-        total_queries = sum(s.get("queries", 0) for _, s, _, _ in reports)
+        total_baseline = sum(_proj_baseline(s, b) for _, s, b, _, _ in reports)
+        total_served = sum(_proj_served(s, b) for _, s, b, _, _ in reports)
+        total_queries = sum(
+            max(int(b.get("retrieval", {}).get("calls", 0)), s.get("queries", 0))
+            for _, s, b, _, _ in reports
+        )
         total_saved = max(0, total_baseline - total_served)
         total_pct = int(total_saved / total_baseline * 100) if total_baseline > 0 else 0
         # Aggregate input/output across all projects
         all_in_saved = all_out_saved = 0
-        for _, stats, bkts, _ in reports:
+        for _, stats, bkts, _, _ in reports:
             ib, is_, ob, os_ = _split_io(bkts)
             all_in_saved += max(0, ib - is_)
             all_out_saved += max(0, ob - os_)
