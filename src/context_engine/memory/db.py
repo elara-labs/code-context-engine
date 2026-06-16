@@ -837,7 +837,7 @@ def prune_old_rows(
 
     if archive and archived and archive_path is not None:
         try:
-            archive_path.write_text(_json.dumps(archived, indent=2, default=str))
+            archive_path.write_text(_json.dumps(archived, indent=2, default=str), encoding="utf-8")
             log.info("memory: archived pruned rows to %s", archive_path)
         except OSError as exc:
             log.warning("memory: archive write failed (%s); rows still deleted", exc)

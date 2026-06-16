@@ -295,7 +295,7 @@ def configure_mcp(project_dir: Path, editor_key: str) -> bool | None:
 
     if config_path.exists():
         try:
-            data = json.loads(config_path.read_text())
+            data = json.loads(config_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             data = {}
     else:
@@ -334,7 +334,7 @@ def _configure_opencode(config_path: Path, command: str, project_dir: str) -> bo
 
     if config_path.exists():
         try:
-            content = config_path.read_text()
+            content = config_path.read_text(encoding="utf-8")
             # Strip JSONC comments for parsing
             data = json.loads(_strip_jsonc_comments(content))
         except (json.JSONDecodeError, OSError):
@@ -393,7 +393,7 @@ def _configure_toml(
             atomic_write_text(config_path, block)
             return True
 
-        original = config_path.read_text()
+        original = config_path.read_text(encoding="utf-8")
     except OSError:
         return None
 
@@ -533,13 +533,13 @@ def remove_mcp(project_dir: Path, editor_key: str) -> str | None:
 
     servers_key = editor["servers_key"]
     try:
-        data = json.loads(config_path.read_text())
+        data = json.loads(config_path.read_text(encoding="utf-8"))
         servers = data.get(servers_key, {})
         if "context-engine" not in servers:
             return None
         del servers["context-engine"]
         if servers:
-            config_path.write_text(json.dumps(data, indent=2) + "\n")
+            config_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
             return f"Removed context-engine from {editor['config_path']}"
         else:
             config_path.unlink()
@@ -557,7 +557,7 @@ def _remove_toml(config_path: Path, display_path: str, *, section: str) -> str |
     so it can never accidentally match a longer section that shares a prefix
     (e.g. removing `cce-api` won't touch `cce-api-staging`)."""
     try:
-        content = config_path.read_text()
+        content = config_path.read_text(encoding="utf-8")
     except OSError:
         return None
 
@@ -593,13 +593,13 @@ def write_instruction_file(
     instructions = _build_instructions(output_level)
 
     if path.exists():
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
         if marker in content:
             return False  # already has CCE block
         # Append
-        path.write_text(content.rstrip() + "\n\n" + instructions)
+        path.write_text(content.rstrip() + "\n\n" + instructions, encoding="utf-8")
     else:
-        path.write_text(instructions)
+        path.write_text(instructions, encoding="utf-8")
     return True
 
 
@@ -612,7 +612,7 @@ def remove_instruction_file(project_dir: Path, file_key: str) -> str | None:
     if not path.exists():
         return None
 
-    content = path.read_text()
+    content = path.read_text(encoding="utf-8")
     if marker not in content:
         return None
 
@@ -628,7 +628,7 @@ def remove_instruction_file(project_dir: Path, file_key: str) -> str | None:
 
     new_content = (content[:start] + content[end:]).strip()
     if new_content:
-        path.write_text(new_content + "\n")
+        path.write_text(new_content + "\n", encoding="utf-8")
         return f"Removed CCE block from {info['name']}"
     else:
         path.unlink()

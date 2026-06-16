@@ -122,7 +122,7 @@ class _ImportCounts:
 def _import_one(conn: sqlite3.Connection, source: Path) -> _ImportCounts:
     """Import a single legacy JSON file. Returns counts of imported rows."""
     counts = _ImportCounts()
-    data = json.loads(source.read_text())
+    data = json.loads(source.read_text(encoding="utf-8"))
 
     # decisions_log.json is a top-level list of decision dicts, not a session.
     if source.name == _DECISIONS_LOG_NAME and isinstance(data, list):

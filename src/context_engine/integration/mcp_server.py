@@ -477,7 +477,7 @@ class ContextEngineMCP:
         }
         if self._stats_path.exists():
             try:
-                data = json.loads(self._stats_path.read_text())
+                data = json.loads(self._stats_path.read_text(encoding="utf-8"))
                 # Backfill new keys for stats files written by older versions.
                 data.setdefault("queries", 0)
                 data.setdefault("raw_tokens", 0)
@@ -515,7 +515,7 @@ class ContextEngineMCP:
         import datetime
         try:
             # Verify the write actually landed
-            on_disk = self._stats_path.read_text() if self._stats_path.exists() else "missing"
+            on_disk = self._stats_path.read_text(encoding="utf-8") if self._stats_path.exists() else "missing"
             log_path = self._storage_base / "query.log"
             q = self._stats["queries"]
             entry = (
@@ -580,7 +580,7 @@ class ContextEngineMCP:
     def _load_state(self) -> dict:
         if self._state_path.exists():
             try:
-                return json.loads(self._state_path.read_text())
+                return json.loads(self._state_path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 pass
         return {}

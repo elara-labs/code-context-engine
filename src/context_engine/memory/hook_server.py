@@ -85,12 +85,12 @@ async def start_hook_server(
     await site.start()
 
     port_file.parent.mkdir(parents=True, exist_ok=True)
-    port_file.write_text(str(port))
+    port_file.write_text(str(port), encoding="utf-8")
 
     try:
         if default_rendezvous.resolve() != port_file.resolve():
             default_rendezvous.parent.mkdir(parents=True, exist_ok=True)
-            default_rendezvous.write_text(str(port))
+            default_rendezvous.write_text(str(port), encoding="utf-8")
     except OSError as exc:
         # Non-fatal — capture still works for users with default storage.
         log.warning("rendezvous port file write failed: %s", exc)
