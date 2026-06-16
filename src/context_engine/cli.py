@@ -966,10 +966,51 @@ def init(ctx: click.Context, agent: str) -> None:
         "  " + click.style("Indexing project", fg="cyan", bold=True) + "..."
     )
     asyncio.run(_run_index(config, str(project_dir), full=True))
+
+    # Show codebase size + estimated savings so the user sees the payoff
+    _storage = project_storage_dir(config, project_dir)
+    _stats_p = _storage / "stats.json"
+    try:
+        _st = json.loads(_stats_p.read_text(encoding="utf-8")) if _stats_p.exists() else {}
+        _full_tokens = _st.get("full_file_tokens", 0)
+    except (json.JSONDecodeError, OSError):
+        _full_tokens = 0
+
+    if _full_tokens > 0:
+        from context_engine.pricing import resolve_pricing
+        _, _pricing = resolve_pricing(config, fetch_live=False)
+        _full_cost = _full_tokens * _pricing["input"] / 1_000_000
+        # 94% is the benchmarked retrieval savings
+        _est_saved = _full_cost * 0.94
+
+        def _fmt_tok(n: int) -> str:
+            if n >= 1_000_000:
+                return f"{n / 1_000_000:.1f}M"
+            if n >= 1_000:
+                return f"{n / 1_000:.0f}k"
+            return str(n)
+
+        click.echo("")
+        click.echo(
+            f"  {_dim('Codebase:')} "
+            + click.style(f"{_fmt_tok(_full_tokens)} tokens", fg="white", bold=True)
+            + _dim(f" (${_full_cost:.2f} to read in full)")
+        )
+        click.echo(
+            f"  {_dim('Estimated savings per full read:')} "
+            + click.style(f"~${_est_saved:.2f}", fg="green", bold=True)
+            + _dim(" (94% retrieval savings)")
+        )
+
     click.echo("")
+    click.echo(click.style("  ✓ Ready!", fg="green", bold=True))
     click.echo(
-        click.style("  Done!", fg="green", bold=True) +
-        click.style("  Restart your AI coding agent to activate CCE.", fg="white")
+        _dim("  Restart your AI coding agent to activate CCE.")
+    )
+    click.echo(
+        _dim("  Run ") +
+        click.style("cce savings", fg="cyan") +
+        _dim(" after a few queries to see actual savings.")
     )
     click.echo("")
 
