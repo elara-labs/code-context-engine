@@ -424,6 +424,7 @@ All other text files are chunked by line range. Binary files are skipped.
 
 | Page | Content |
 |------|---------|
+| [How Much Are You Spending on AI Coding Tokens?](https://elara-labs.github.io/code-context-engine/blog/real-cost-of-ai-coding-tokens.html) | The math on input vs output tokens |
 | [What is CCE? (Complete Guide)](https://elara-labs.github.io/code-context-engine/blog/what-is-code-context-engine.html) | Setup, tools, how it works, FAQ |
 | [How to Save Claude Code Tokens](https://elara-labs.github.io/code-context-engine/blog/save-claude-code-tokens.html) | Cost breakdown and savings guide |
 | [Benchmark Deep Dive](https://elara-labs.github.io/code-context-engine/blog/benchmark-fastapi.html) | Full FastAPI benchmark methodology |
