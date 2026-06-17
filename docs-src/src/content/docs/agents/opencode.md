@@ -22,14 +22,14 @@ CCE adds its MCP server entry to the existing `opencode.json` (or creates one if
 {
   "mcp": {
     "context-engine": {
-      "command": "cce",
-      "args": ["serve", "--project-dir", "/path/to/your/project"]
+      "type": "local",
+      "command": ["cce", "serve", "--project-dir", "/path/to/your/project"]
     }
   }
 }
 ```
 
-Note: OpenCode uses `"mcp"` as the servers key.
+Note: OpenCode uses `"mcp"` as the servers key, with `"type": "local"` and `"command"` as an array (not a string with separate `"args"`).
 
 ## No instruction file
 

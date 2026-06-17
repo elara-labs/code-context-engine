@@ -66,7 +66,7 @@
 
 ## Quick start
 
-Two commands. 30 seconds.
+One command. 30 seconds.
 
 ```bash
 uvx --from "code-context-engine[local]" cce init    # install + index + configure, one shot
