@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>We Cut 94% of Our AI Coding Tokens — AI Engineer World's Fair 2026</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0b10;
+  --bg2: #0f1118;
+  --bg3: #161822;
+  --surface: #1a1d2e;
+  --surface2: #222640;
+  --border: #2a2e45;
+  --cyan: #00d4ff;
+  --green: #34d399;
+  --purple: #a78bfa;
+  --pink: #f472b6;
+  --orange: #fb923c;
+  --red: #f87171;
+  --yellow: #fbbf24;
+  --text: #f0f4ff;
+  --text2: #8b9dc3;
+  --text3: #4a5578;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Inter', -apple-system, sans-serif;
+  --glow-cyan: 0 0 40px rgba(0,212,255,.15), 0 0 80px rgba(0,212,255,.05);
+  --glow-green: 0 0 40px rgba(52,211,153,.15);
+  --glow-purple: 0 0 40px rgba(167,139,250,.15);
+}
+
+html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--sans); }
+
+/* ── Slide system ─────────────────────────────── */
+.deck { height: 100%; width: 100%; position: relative; }
+.slide {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  padding: 60px 80px;
+  opacity: 0; pointer-events: none;
+  transition: opacity .5s ease, transform .5s ease;
+  transform: translateX(40px);
+}
+.slide.active {
+  opacity: 1; pointer-events: auto;
+  transform: translateX(0);
+}
+.slide.prev {
+  transform: translateX(-40px);
+}
+
+/* ── Progress bar ─────────────────────────────── */
+.progress {
+  position: fixed; top: 0; left: 0; height: 3px; z-index: 100;
+  background: linear-gradient(90deg, var(--cyan), var(--purple));
+  transition: width .4s ease;
+}
+
+/* ── Nav ──────────────────────────────────────── */
+.nav {
+  position: fixed; bottom: 24px; right: 32px; z-index: 100;
+  display: flex; gap: 8px; align-items: center;
+}
+.nav button {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text2);
+  padding: 8px 16px; border-radius: 6px; cursor: pointer; font-family: var(--sans);
+  font-size: 13px; transition: all .2s;
+}
+.nav button:hover { background: var(--surface2); color: var(--text); }
+.nav .counter { font-family: var(--mono); font-size: 12px; color: var(--text3); padding: 0 8px; }
+
+/* ── Typography ───────────────────────────────── */
+h1 { font-size: 56px; font-weight: 900; line-height: 1.1; letter-spacing: -2px; }
+h2 { font-size: 42px; font-weight: 800; line-height: 1.15; letter-spacing: -1.5px; }
+h3 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+.subtitle { font-size: 22px; color: var(--text2); margin-top: 16px; font-weight: 400; line-height: 1.5; }
+.label { font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--cyan); margin-bottom: 12px; }
+p { font-size: 18px; color: var(--text2); line-height: 1.6; }
+
+/* ── Glow text ────────────────────────────────── */
+.glow { color: var(--cyan); text-shadow: 0 0 20px rgba(0,212,255,.3); }
+.glow-green { color: var(--green); text-shadow: 0 0 20px rgba(52,211,153,.3); }
+.glow-purple { color: var(--purple); text-shadow: 0 0 20px rgba(167,139,250,.3); }
+.glow-pink { color: var(--pink); text-shadow: 0 0 20px rgba(244,114,182,.3); }
+
+/* ── Big number ───────────────────────────────── */
+.big-num {
+  font-size: 140px; font-weight: 900; font-family: var(--mono);
+  letter-spacing: -8px; line-height: 1;
+  background: linear-gradient(135deg, var(--cyan), var(--green));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 40px rgba(0,212,255,.2));
+}
+.big-label { font-size: 24px; color: var(--text2); margin-top: 8px; font-weight: 500; }
+
+/* ── Cards ────────────────────────────────────── */
+.card-grid { display: grid; gap: 20px; width: 100%; max-width: 1100px; }
+.card-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+.card-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.card-grid.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 32px;
+  transition: transform .3s ease, box-shadow .3s ease;
+}
+.card:hover { transform: translateY(-4px); }
+.card.glow-border { border-color: rgba(0,212,255,.3); box-shadow: var(--glow-cyan); }
+.card.green-border { border-color: rgba(52,211,153,.3); box-shadow: var(--glow-green); }
+.card.purple-border { border-color: rgba(167,139,250,.3); box-shadow: var(--glow-purple); }
+
+.card-icon { font-size: 36px; margin-bottom: 16px; }
+.card h3 { font-size: 20px; margin-bottom: 8px; }
+.card p { font-size: 15px; color: var(--text2); }
+
+/* ── Comparison bars ──────────────────────────── */
+.bar-compare { width: 100%; max-width: 900px; }
+.bar-row { display: flex; align-items: center; margin-bottom: 24px; gap: 20px; }
+.bar-label { width: 140px; font-size: 14px; color: var(--text2); text-align: right; flex-shrink: 0; }
+.bar-track { flex: 1; height: 40px; background: var(--bg3); border-radius: 8px; overflow: hidden; position: relative; }
+.bar-fill {
+  height: 100%; border-radius: 8px;
+  display: flex; align-items: center; padding-left: 16px;
+  font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--bg);
+  transition: width 1.5s cubic-bezier(.22,1,.36,1);
+}
+.bar-fill.red { background: linear-gradient(90deg, #f87171, #ef4444); }
+.bar-fill.green { background: linear-gradient(90deg, #34d399, #10b981); }
+.bar-fill.cyan { background: linear-gradient(90deg, #00d4ff, #06b6d4); }
+.bar-fill.purple { background: linear-gradient(90deg, #a78bfa, #8b5cf6); }
+.bar-value { width: 100px; font-family: var(--mono); font-size: 14px; font-weight: 600; flex-shrink: 0; }
+
+/* ── Pipeline ─────────────────────────────────── */
+.pipeline { display: flex; align-items: center; gap: 0; width: 100%; max-width: 1000px; justify-content: center; }
+.pipe-node {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px 24px; text-align: center;
+  min-width: 160px; position: relative;
+}
+.pipe-node .pipe-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.pipe-node .pipe-detail { font-size: 12px; color: var(--text3); font-family: var(--mono); }
+.pipe-node .pipe-saving { font-size: 18px; font-weight: 800; margin-top: 8px; }
+.pipe-arrow { font-size: 24px; color: var(--text3); padding: 0 8px; flex-shrink: 0; }
+
+/* ── Code block ───────────────────────────────── */
+.code-block {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 28px 32px;
+  font-family: var(--mono); font-size: 15px; line-height: 1.8;
+  color: var(--text2); width: 100%; max-width: 800px;
+  text-align: left; white-space: pre;
+}
+.code-block .prompt { color: var(--green); }
+.code-block .comment { color: var(--text3); }
+.code-block .highlight { color: var(--cyan); }
+.code-block .string { color: var(--yellow); }
+.code-block .num { color: var(--orange); }
+
+/* ── Donut chart ──────────────────────────────── */
+.donut-container { display: flex; align-items: center; gap: 48px; }
+.donut { width: 220px; height: 220px; position: relative; }
+.donut svg { transform: rotate(-90deg); }
+.donut-center {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+.donut-center .pct { font-size: 42px; font-weight: 900; font-family: var(--mono); }
+.donut-center .lbl { font-size: 12px; color: var(--text3); margin-top: 2px; }
+.donut-legend { display: flex; flex-direction: column; gap: 12px; }
+.donut-legend-item { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.donut-legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Footer branding ──────────────────────────── */
+.slide-footer {
+  position: absolute; bottom: 24px; left: 32px;
+  font-size: 12px; color: var(--text3); font-family: var(--mono);
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* ── Animations ───────────────────────────────── */
+@keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.5; } }
+.fade-up { animation: fadeUp .8s ease both; }
+.delay-1 { animation-delay: .2s; }
+.delay-2 { animation-delay: .4s; }
+.delay-3 { animation-delay: .6s; }
+.delay-4 { animation-delay: .8s; }
+
+/* ── Stat row ─────────────────────────────────── */
+.stat-row { display: flex; gap: 40px; justify-content: center; margin-top: 32px; }
+.stat-item { text-align: center; }
+.stat-value { font-size: 36px; font-weight: 800; font-family: var(--mono); }
+.stat-label { font-size: 13px; color: var(--text3); margin-top: 4px; }
+
+/* ── Split layout ─────────────────────────────── */
+.split { display: flex; gap: 60px; align-items: center; width: 100%; max-width: 1100px; }
+.split-left, .split-right { flex: 1; }
+
+/* ── Background decoration ────────────────────── */
+.bg-grid {
+  position: fixed; inset: 0; z-index: -1;
+  background-image:
+    linear-gradient(rgba(42,46,69,.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(42,46,69,.3) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+.bg-glow {
+  position: fixed; z-index: -1;
+  width: 600px; height: 600px; border-radius: 50%;
+  filter: blur(120px); opacity: .08;
+}
+.bg-glow.cyan { background: var(--cyan); top: -200px; right: -200px; }
+.bg-glow.purple { background: var(--purple); bottom: -200px; left: -200px; }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="bg-glow cyan"></div>
+<div class="bg-glow purple"></div>
+
+<div class="progress" id="progress"></div>
+
+<div class="deck" id="deck">
+
+<!-- ═══════════════ SLIDE 1: TITLE ═══════════════ -->
+<div class="slide active" data-slide="0">
+  <div class="label fade-up">AI Engineer World's Fair 2026</div>
+  <h1 class="fade-up delay-1" style="text-align:center; max-width:900px;">
+    We Cut <span class="glow">94%</span> of Our AI Coding Tokens<br>With a Local Code Index
+  </h1>
+  <p class="subtitle fade-up delay-2" style="text-align:center; max-width:700px;">
+    The architecture behind Code Context Engine, and why input tokens are the real cost driver.
+  </p>
+  <div class="stat-row fade-up delay-3">
+    <div class="stat-item"><div class="stat-value glow">94%</div><div class="stat-label">Token Reduction</div></div>
+    <div class="stat-item"><div class="stat-value glow-green">0.4ms</div><div class="stat-label">Search Latency</div></div>
+    <div class="stat-item"><div class="stat-value glow-purple">0.90</div><div class="stat-label">Recall@10</div></div>
+  </div>
+  <div class="slide-footer">Rajkumar Sakthivel · github.com/elara-labs/code-context-engine</div>
+</div>
+
+<!-- ═══════════════ SLIDE 2: THE PROBLEM ═══════════════ -->
+<div class="slide" data-slide="1">
+  <div class="label">The Problem</div>
+  <h2 style="text-align:center; max-width:800px;">Your AI agent reads <span class="glow-pink">45,000 tokens</span><br>to answer a question that needs <span class="glow-green">800</span></h2>
+  <div class="bar-compare" style="margin-top:48px;">
+    <div class="bar-row">
+      <div class="bar-label">payments.py</div>
+      <div class="bar-track"><div class="bar-fill red" style="width:100%">12,000 tokens</div></div>
+      <div class="bar-value" style="color:var(--red);">full file</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">shipping.py</div>
+      <div class="bar-track"><div class="bar-fill red" style="width:75%">9,000 tokens</div></div>
+      <div class="bar-value" style="color:var(--red);">full file</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">models.py</div>
+      <div class="bar-track"><div class="bar-fill red" style="width:150%">18,000 tokens</div></div>
+      <div class="bar-value" style="color:var(--red);">full file</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">tests.py</div>
+      <div class="bar-track"><div class="bar-fill red" style="width:50%">6,000 tokens</div></div>
+      <div class="bar-value" style="color:var(--red);">full file</div>
+    </div>
+    <div class="bar-row" style="margin-top:8px; padding-top:16px; border-top:1px solid var(--border);">
+      <div class="bar-label" style="color:var(--green);">With CCE</div>
+      <div class="bar-track"><div class="bar-fill green" style="width:6.7%">800</div></div>
+      <div class="bar-value" style="color:var(--green);">2 chunks</div>
+    </div>
+  </div>
+  <div class="slide-footer">elara-labs/code-context-engine</div>
+</div>
+
+<!-- ═══════════════ SLIDE 3: INPUT VS OUTPUT ═══════════════ -->
+<div class="slide" data-slide="2">
+  <div class="label">The Insight</div>
+  <h2 style="text-align:center;">Most tools optimize the <span class="glow-pink">wrong side</span></h2>
+  <div class="split" style="margin-top:48px;">
+    <div class="split-left">
+      <div class="donut-container" style="flex-direction:column; align-items:center;">
+        <div class="donut">
+          <svg width="220" height="220" viewBox="0 0 220 220">
+            <circle cx="110" cy="110" r="90" fill="none" stroke="var(--border)" stroke-width="20"/>
+            <circle cx="110" cy="110" r="90" fill="none" stroke="var(--red)" stroke-width="20"
+              stroke-dasharray="510 565" stroke-linecap="round"/>
+            <circle cx="110" cy="110" r="90" fill="none" stroke="var(--cyan)" stroke-width="20"
+              stroke-dasharray="55 565" stroke-dashoffset="-510" stroke-linecap="round"/>
+          </svg>
+          <div class="donut-center">
+            <div class="pct" style="color:var(--red);">90%</div>
+            <div class="lbl">input tokens</div>
+          </div>
+        </div>
+        <div class="donut-legend" style="margin-top:20px;">
+          <div class="donut-legend-item"><div class="donut-legend-dot" style="background:var(--red);"></div> Input tokens (90%)</div>
+          <div class="donut-legend-item"><div class="donut-legend-dot" style="background:var(--cyan);"></div> Output tokens (10%)</div>
+        </div>
+      </div>
+    </div>
+    <div class="split-right">
+      <div class="card" style="margin-bottom:16px; border-color:rgba(248,113,113,.3);">
+        <h3 style="color:var(--red);">Output compression</h3>
+        <p>Saves 75% of output tokens</p>
+        <p style="font-family:var(--mono); font-size:20px; color:var(--text); margin-top:8px;">
+          = <span style="color:var(--yellow);">~8%</span> off total bill
+        </p>
+      </div>
+      <div class="card green-border">
+        <h3 style="color:var(--green);">Input retrieval (CCE)</h3>
+        <p>Saves 94% of input tokens</p>
+        <p style="font-family:var(--mono); font-size:20px; color:var(--text); margin-top:8px;">
+          = <span style="color:var(--green);">~61%</span> off total bill
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">elara-labs/code-context-engine</div>
+</div>
+
+<!-- ═══════════════ SLIDE 4: ARCHITECTURE ═══════════════ -->
+<div class="slide" data-slide="3">
+  <div class="label">Architecture</div>
+  <h2 style="text-align:center; margin-bottom:40px;">Five-stage compression pipeline</h2>
+  <div class="pipeline">
+    <div class="pipe-node" style="border-color:rgba(0,212,255,.4);">
+      <div class="pipe-title">Tree-sitter<br>Chunking</div>
+      <div class="pipe-detail">AST-aware splits</div>
+      <div class="pipe-saving glow">10 langs</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-node" style="border-color:rgba(52,211,153,.4);">
+      <div class="pipe-title">Hybrid<br>Retrieval</div>
+      <div class="pipe-detail">Vector + BM25 + RRF</div>
+      <div class="pipe-saving glow-green">94%</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-node" style="border-color:rgba(167,139,250,.4);">
+      <div class="pipe-title">Chunk<br>Compression</div>
+      <div class="pipe-detail">Signatures + docs</div>
+      <div class="pipe-saving glow-purple">89%</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-node" style="border-color:rgba(244,114,182,.4);">
+      <div class="pipe-title">Code<br>Graph</div>
+      <div class="pipe-detail">CALLS · IMPORTS</div>
+      <div class="pipe-saving glow-pink">related</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-node" style="border-color:rgba(251,146,60,.4);">
+      <div class="pipe-title">Output<br>Compression</div>
+      <div class="pipe-detail">Grammar rules</div>
+      <div class="pipe-saving" style="color:var(--orange);">25-75%</div>
+    </div>
+  </div>
+  <div style="margin-top:32px; text-align:center;">
+    <p style="font-size:15px;">Everything runs locally. No cloud, no API calls. Three SQLite files per project.</p>
+  </div>
+  <div class="slide-footer">elara-labs/code-context-engine</div>
+</div>
+
+<!-- ═══════════════ SLIDE 5: HYBRID RETRIEVAL ═══════════════ -->
+<div class="slide" data-slide="4">
+  <div class="label">Deep Dive</div>
+  <h2 style="text-align:center; margin-bottom:40px;">Hybrid retrieval: why not just vector search?</h2>
+  <div class="card-grid cols-3">
+    <div class="card glow-border">
+      <div class="card-icon">🎯</div>
+      <h3>Vector Search</h3>
+      <p>Semantic similarity via bge-small-en-v1.5 (384d). Finds conceptually related code even with different naming.</p>
+      <p style="font-family:var(--mono); color:var(--cyan); margin-top:12px;">cosine similarity</p>
+    </div>
+    <div class="card green-border">
+      <div class="card-icon">🔤</div>
+      <h3>FTS5 (BM25)</h3>
+      <p>Exact keyword matching via SQLite FTS5. Catches function names, class names, identifiers that vector search fuzzes over.</p>
+      <p style="font-family:var(--mono); color:var(--green); margin-top:12px;">term frequency</p>
+    </div>
+    <div class="card purple-border">
+      <div class="card-icon">⚡</div>
+      <h3>RRF Fusion</h3>
+      <p>Reciprocal Rank Fusion (k=60) merges both ranked lists. Confidence scorer blends similarity (50%), keywords (30%), recency (20%).</p>
+      <p style="font-family:var(--mono); color:var(--purple); margin-top:12px;">1/(k + rank)</p>
+    </div>
+  </div>
+  <div style="margin-top:24px; text-align:center;">
+    <p style="font-size:15px; color:var(--text3);">Vector alone: 0.78 recall. BM25 alone: 0.72 recall. <span style="color:var(--green);">Hybrid: 0.90 recall.</span></p>
+  </div>
+  <div class="slide-footer">elara-labs/code-context-engine</div>
+</div>
+
+<!-- ═══════════════ SLIDE 6: BENCHMARK ═══════════════ -->
+<div class="slide" data-slide="5">
+  <div class="label">Benchmark</div>
+  <h2 style="text-align:center; margin-bottom:40px;">FastAPI: 53 files, 20 real questions</h2>
+  <div class="split">
+    <div class="split-left">
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+          <span style="color:var(--text2);">Full file baseline</span>
+          <span style="font-family:var(--mono); font-size:20px; color:var(--red);">83,681 tok/query</span>
+        </div>
+      </div>
+      <div class="card green-border" style="margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+          <span style="color:var(--text2);">After retrieval</span>
+          <span style="font-family:var(--mono); font-size:20px; color:var(--green);">4,927 tok/query</span>
+        </div>
+      </div>
+      <div class="card purple-border" style="margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+          <span style="color:var(--text2);">After compression</span>
+          <span style="font-family:var(--mono); font-size:20px; color:var(--purple);">523 tok/query</span>
+        </div>
+      </div>
+      <div class="card" style="border-color:rgba(251,191,36,.3);">
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+          <span style="color:var(--text2);">Recall@10</span>
+          <span style="font-family:var(--mono); font-size:20px; color:var(--yellow);">0.90</span>
+        </div>
+      </div>
+    </div>
+    <div class="split-right" style="text-align:center;">
+      <div class="big-num" style="font-size:100px;">94%</div>
+      <div class="big-label">retrieval savings</div>
+      <p style="margin-top:24px; font-size:14px;">
+        No cherry-picking. No synthetic queries.<br>
+        <span style="color:var(--cyan);">Fully reproducible.</span>
+      </p>
+      <div class="code-block" style="font-size:12px; margin-top:16px; text-align:left; display:inline-block;">
+<span class="prompt">$</span> python benchmarks/run_benchmark.py \
+    --repo fastapi/fastapi --source-dir fastapi</div>
+    </div>
+  </div>
+  <div class="slide-footer">elara-labs/code-context-engine</div>
+</div>
+
+<!-- ═══════════════ SLIDE 7: MULTI-AGENT ═══════════════ -->
+<div class="slide" data-slide="6">
+  <div class="label">Multi-Agent</div>
+  <h2 style="text-align:center; margin-bottom:40px;">One index. Every agent.</h2>
+  <div class="card-grid cols-4" style="max-width:1000px;">
+    <div class="card" style="text-align:center; padding:24px;">
+      <div style="font-size:32px; margin-bottom:8px;">🟠</div>
+      <h3 style="font-size:15px;">Claude Code</h3>
+      <p style="font-size:12px; color:var(--text3);">.mcp.json<br>CLAUDE.md<br>5 hooks</p>
+    </div>
+    <div class="card" style="text-align:center; padding:24px;">
+      <div style="font-size:32px; margin-bottom:8px;">🔵</div>
+      <h3 style="font-size:15px;">VS Code / Copilot</h3>
+      <p style="font-size:12px; color:var(--text3);">.vscode/mcp.json<br>copilot-instructions.md</p>
+    </div>
+    <div class="card" style="text-align:center; padding:24px;">
+      <div style="font-size:32px; margin-bottom:8px;">⚫</div>
+      <h3 style="font-size:15px;">Cursor</h3>
+      <p style="font-size:12px; color:var(--text3);">.cursor/mcp.json<br>.cursorrules</p>
+    </div>
+    <div class="card" style="text-align:center; padding:24px;">
+      <div style="font-size:32px; margin-bottom:8px;">🟢</div>
+      <h3 style="font-size:15px;">Codex CLI</h3>
+      <p style="font-size:12px; color:var(--text3);">~/.codex/config.toml<br>AGENTS.md</p>
+    </div>
+  </div>
+  <div class="card-grid cols-3" style="max-width:750px; margin-top:20px;">
+    <div class="card" style="text-align:center; padding:20px;">
+      <div style="font-size:28px; margin-bottom:6px;">🔷</div>
+      <h3 style="font-size:14px;">Gemini CLI</h3>
+    </div>
+    <div class="card" style="text-align:center; padding:20px;">
+      <div style="font-size:28px; margin-bottom:6px;">🟣</div>
+      <h3 style="font-size:14px;">Tabnine</h3>
+    </div>
+    <div class="card" style="text-align:center; padding:20px;">
+      <div style="font-size:28px; margin-bottom:6px;">🟩</div>
+      <h3 style="font-size:14px;">OpenCode</h3>
+    </div>
+  </div>
+  <p style="text-align:center; margin-top:24px; font-size:15px; color:var(--text3);">
+    Cross-agent memory: decisions made in Claude Code surface in Codex. One <span style="font-family:var(--mono); color:var(--cyan);">cce init</span> configures everything.
+  </p>
+  <div class="slide-footer">elara-labs/code-context-engine</div>
+</div>
+
+<!-- ═══════════════ SLIDE 8: CROSS-SESSION MEMORY ═══════════════ -->
+<div class="slide" data-slide="7">
+  <div class="label">Memory</div>
+  <h2 style="text-align:center; margin-bottom:40px;">Your agent remembers <span class="glow-purple">last week</span></h2>
+  <div class="split">
+    <div class="split-left">
+      <div class="code-block" style="font-size:13px;">
+<span class="comment">## CCE memory · resuming my-project</span>
+
+<span class="highlight">**Previous session** (2026-06-14):</span>
+  Refactored auth: JWT with RS256,
+  refresh tokens rotate on use.
+
+<span class="highlight">**Recent decisions:**</span>
+  - Use JWT with RS256 (mesh issues keys)
+  - Risk limit at 2% per trade (Kelly)
+  - PostgreSQL for primary store (ACID)
+
+<span class="comment">Call session_recall("topic") to find more</span></div>
+    </div>
+    <div class="split-right">
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-icon">📝</div>
+        <h3>record_decision</h3>
+        <p>Save architectural choices with reasoning. Surfaces automatically at session start.</p>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-icon">🔍</div>
+        <h3>session_recall</h3>
+        <p>Semantic search over past decisions. Vector + FTS hybrid, same as code search.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">📊</div>
+        <h3>session_timeline</h3>
+        <p>Walk through a past session turn by turn. Drill into specific tool calls.</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">elara-labs/code-context-engine</div>
+</div>
+
+<!-- ═══════════════ SLIDE 9: REAL SAVINGS ═══════════════ -->
+<div class="slide" data-slide="8">
+  <div class="label">Real Numbers</div>
+  <h2 style="text-align:center; margin-bottom:40px;">Per-bucket savings tracking</h2>
+  <div class="code-block" style="font-size:14px; max-width:700px;">
+  my-project · <span class="num">247</span> queries · last query <span class="num">5m ago</span>
+
+  ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶  <span class="highlight">88% tokens saved</span>
+
+  Input savings   <span class="num">12.4M</span>  tokens   <span class="string">$186.00</span>
+  Output savings  <span class="num">48.2k</span>  tokens   <span class="string">$3.62</span>
+  ──────────────────────────────────────────
+  Total saved   <span class="num">12.4M</span>  tokens   <span class="string">$189.62</span>
+
+  Breakdown:
+    retrieval          <span class="num">84%</span>  ▰▰▰▰▰▰▰▰▰▰  <span class="num">10.4M</span>  <span class="string">$156.00</span>
+    chunk compression   <span class="num">3%</span>  ▰▱▱▱▱▱▱▱▱▱  <span class="num">421.5k</span>   <span class="string">$6.32</span>
+    output compress*   <span class="num">&lt;1%</span>  ▰▱▱▱▱▱▱▱▱▱   <span class="num">48.2k</span>   <span class="string">$3.62</span></div>
+  <p style="text-align:center; margin-top:20px; font-size:14px; color:var(--text3);">
+    7 buckets tracked: retrieval, chunk compression, output compression, memory recall, grammar, turn summarization, progressive disclosure
+  </p>
+  <div class="slide-footer">elara-labs/code-context-engine</div>
+</div>
+
+<!-- ═══════════════ SLIDE 10: LIVE DEMO ═══════════════ -->
+<div class="slide" data-slide="9">
+  <div class="label">Try It</div>
+  <h2 style="text-align:center; margin-bottom:40px;">One command. Zero config.</h2>
+  <div class="code-block" style="font-size:18px; max-width:750px; text-align:center;">
+<span class="prompt">$</span> uvx --from <span class="string">"code-context-engine[local]"</span> cce init</div>
+  <div class="card-grid cols-3" style="margin-top:40px;">
+    <div class="card glow-border" style="text-align:center;">
+      <div style="font-size:36px; font-weight:800; color:var(--cyan); font-family:var(--mono);">30s</div>
+      <p style="margin-top:8px;">Install + index</p>
+    </div>
+    <div class="card green-border" style="text-align:center;">
+      <div style="font-size:36px; font-weight:800; color:var(--green); font-family:var(--mono);">0</div>
+      <p style="margin-top:8px;">Cloud dependencies</p>
+    </div>
+    <div class="card purple-border" style="text-align:center;">
+      <div style="font-size:36px; font-weight:800; color:var(--purple); font-family:var(--mono);">9</div>
+      <p style="margin-top:8px;">MCP tools</p>
+    </div>
+  </div>
+  <div style="margin-top:32px; text-align:center;">
+    <p style="font-size:16px;">
+      Python 3.11+ · macOS · Linux · Windows<br>
+      <span style="color:var(--text3);">MIT licensed · 170+ stars · 2,300+ monthly installs</span>
+    </p>
+  </div>
+  <div class="slide-footer">elara-labs/code-context-engine</div>
+</div>
+
+<!-- ═══════════════ SLIDE 11: CTA ═══════════════ -->
+<div class="slide" data-slide="10">
+  <h1 style="text-align:center; max-width:800px;">
+    Stop paying for tokens<br>your agent <span class="glow-pink">doesn't need</span>
+  </h1>
+  <div class="stat-row" style="margin-top:48px;">
+    <div class="stat-item"><div class="stat-value glow">94%</div><div class="stat-label">fewer input tokens</div></div>
+    <div class="stat-item"><div class="stat-value glow-green">$0</div><div class="stat-label">cloud cost</div></div>
+    <div class="stat-item"><div class="stat-value glow-purple">7</div><div class="stat-label">agents supported</div></div>
+  </div>
+  <div class="code-block" style="font-size:18px; max-width:700px; margin-top:48px; text-align:center;">
+<span class="prompt">$</span> uvx --from <span class="string">"code-context-engine[local]"</span> cce init</div>
+  <p style="margin-top:32px; font-size:20px; text-align:center;">
+    <span style="color:var(--cyan);">github.com/elara-labs/code-context-engine</span>
+  </p>
+  <p style="margin-top:8px; font-size:14px; color:var(--text3); text-align:center;">
+    Free · Open Source · MIT License
+  </p>
+  <div class="slide-footer">Thank you · @rajkumarsakthivel</div>
+</div>
+
+</div>
+
+<!-- ── Navigation ── -->
+<div class="nav">
+  <button onclick="prev()">← Prev</button>
+  <span class="counter" id="counter">1 / 11</span>
+  <button onclick="next()">Next →</button>
+</div>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const total = slides.length;
+let current = 0;
+
+function show(n) {
+  slides.forEach((s, i) => {
+    s.classList.remove('active', 'prev');
+    if (i === n) s.classList.add('active');
+    else if (i < n) s.classList.add('prev');
+  });
+  current = n;
+  document.getElementById('counter').textContent = `${n + 1} / ${total}`;
+  document.getElementById('progress').style.width = `${((n + 1) / total) * 100}%`;
+}
+
+function next() { if (current < total - 1) show(current + 1); }
+function prev() { if (current > 0) show(current - 1); }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+  if (e.key === 'Home') { e.preventDefault(); show(0); }
+  if (e.key === 'End') { e.preventDefault(); show(total - 1); }
+});
+
+// Touch/swipe support
+let touchStartX = 0;
+document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+document.addEventListener('touchend', e => {
+  const diff = touchStartX - e.changedTouches[0].clientX;
+  if (Math.abs(diff) > 50) { diff > 0 ? next() : prev(); }
+});
+
+show(0);
+</script>
+
+</body>
+</html>
