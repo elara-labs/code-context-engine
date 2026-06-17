@@ -1427,11 +1427,147 @@ def commands_list() -> None:
 @main.command()
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.option("--all", "all_projects", is_flag=True, help="Show savings for all indexed projects")
+@click.option("--badge", "show_badge", is_flag=True, help="Output a shareable badge + social snippet")
 @click.pass_context
-def savings(ctx: click.Context, as_json: bool, all_projects: bool) -> None:
+def savings(ctx: click.Context, as_json: bool, all_projects: bool, show_badge: bool) -> None:
     """Show token savings report — how much CCE is saving you."""
     config = ctx.obj["config"]
+    if show_badge:
+        _print_savings_badge(config)
+        return
     _run_savings_report(config, as_json=as_json, all_projects=all_projects)
+
+
+def _print_savings_badge(config) -> None:
+    """Print shareable badge markdown + social snippet for current project."""
+    from urllib.parse import quote
+    from context_engine.pricing import resolve_pricing
+
+    storage = project_storage_dir(config, _safe_cwd())
+    stats_path = storage / "stats.json"
+    project_name = _safe_cwd().name
+
+    # Load stats
+    stats: dict = {}
+    if stats_path.exists():
+        try:
+            stats = json.loads(stats_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Load bucket data
+    from context_engine.memory import db as _memory_db
+    db_path = storage / "memory.db"
+    buckets: dict = {}
+    if db_path.exists():
+        try:
+            conn = _memory_db.connect(db_path)
+            try:
+                buckets = _memory_db.aggregate_savings(conn)
+            finally:
+                conn.close()
+        except Exception:
+            pass
+    if not buckets and "buckets" in stats:
+        buckets = stats["buckets"]
+
+    # Calculate totals
+    bucket_baseline = sum(int(v.get("baseline", 0)) for v in buckets.values())
+    bucket_served = sum(int(v.get("served", 0)) for v in buckets.values())
+    retrieval_calls = int(buckets.get("retrieval", {}).get("calls", 0))
+    queries = max(retrieval_calls, stats.get("queries", 0))
+
+    if bucket_baseline > 0:
+        baseline = bucket_baseline
+        served = bucket_served
+    else:
+        full_file = stats.get("full_file_tokens", 0)
+        raw = stats.get("raw_tokens", 0)
+        baseline = max(full_file, raw) if full_file > 0 else raw
+        served = stats.get("served_tokens", 0)
+
+    tokens_saved = max(0, baseline - served) if queries > 0 else 0
+    pct = int(tokens_saved / baseline * 100) if baseline > 0 else 0
+
+    # Cost
+    _, pricing = resolve_pricing(config, fetch_live=False)
+    in_base = sum(
+        int(v.get("baseline", 0)) for k, v in buckets.items()
+        if k != "output_compression"
+    )
+    in_srv = sum(
+        int(v.get("served", 0)) for k, v in buckets.items()
+        if k != "output_compression"
+    )
+    out_base = int(buckets.get("output_compression", {}).get("baseline", 0))
+    out_srv = int(buckets.get("output_compression", {}).get("served", 0))
+    in_saved = max(0, in_base - in_srv)
+    out_saved = max(0, out_base - out_srv)
+    cost_saved = (
+        in_saved * pricing["input"] / 1_000_000
+        + out_saved * pricing["output"] / 1_000_000
+    )
+
+    def _fmt_tok(n: int) -> str:
+        if n >= 1_000_000:
+            return f"{n / 1_000_000:.1f}M"
+        if n >= 1_000:
+            return f"{n / 1_000:.0f}k"
+        return str(n)
+
+    def _fmt_cost(c: float) -> str:
+        if c < 0.01:
+            return "<$0.01"
+        return f"${c:.2f}"
+
+    if queries == 0:
+        click.echo("No savings data yet. Run some context_search queries first.")
+        return
+
+    # Shields.io badge URL: /badge/LABEL-MESSAGE-COLOR
+    # In the message: spaces → %20, % → %25, $ stays as-is in URL encoding
+    badge_color = "brightgreen" if pct >= 80 else "green" if pct >= 50 else "yellowgreen"
+    cost_str = _fmt_cost(cost_saved)
+    badge_msg = f"{cost_str} saved | {pct}% tokens saved"
+    # shields.io requires: dashes as --, underscores as __, spaces as _ or %20
+    badge_msg_enc = quote(badge_msg, safe="|")
+    badge_url = (
+        f"https://img.shields.io/badge/"
+        f"CCE-{badge_msg_enc}-{badge_color}"
+        f"?style=flat-square"
+    )
+
+    # Markdown badge
+    badge_md = (
+        f"[![CCE Savings]({badge_url})]"
+        f"(https://github.com/elara-labs/code-context-engine)"
+    )
+
+    # Social share text
+    share_text = (
+        f"Code Context Engine saved me {_fmt_cost(cost_saved)} and "
+        f"{_fmt_tok(tokens_saved)} tokens ({pct}% reduction) "
+        f"across {queries} queries on {project_name}. "
+        f"Free, open source, local-first. "
+        f"https://github.com/elara-labs/code-context-engine"
+    )
+
+    click.echo()
+    click.echo(click.style("  Shareable badge", fg="cyan", bold=True))
+    click.echo(click.style("  " + "─" * 44, fg="bright_black"))
+    click.echo()
+    click.echo(click.style("  Markdown (for your README):", fg="bright_black"))
+    click.echo()
+    click.echo(f"  {badge_md}")
+    click.echo()
+    click.echo(click.style("  Social share:", fg="bright_black"))
+    click.echo()
+    click.echo(f"  {share_text}")
+    click.echo()
+    click.echo(click.style("  Raw badge URL:", fg="bright_black"))
+    click.echo()
+    click.echo(f"  {badge_url}")
+    click.echo()
 
 
 def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = False) -> None:
@@ -2493,10 +2629,14 @@ def savings_shortcut() -> None:
     @click.command()
     @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
     @click.option("--all", "all_projects", is_flag=True, help="Show all projects")
-    def _cmd(as_json: bool, all_projects: bool) -> None:
+    @click.option("--badge", "show_badge", is_flag=True, help="Output a shareable badge")
+    def _cmd(as_json: bool, all_projects: bool, show_badge: bool) -> None:
         """Show CCE token savings — how much context compression is saving you."""
         project_path = _safe_cwd() / PROJECT_CONFIG_NAME
         config = load_config(project_path=project_path if project_path.exists() else None)
+        if show_badge:
+            _print_savings_badge(config)
+            return
         _run_savings_report(config, as_json=as_json, all_projects=all_projects)
 
     _cmd()
