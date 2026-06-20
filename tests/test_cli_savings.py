@@ -190,7 +190,6 @@ def test_savings_badge_no_data(runner, tmp_path):
 
 def test_savings_shortcut_badge(runner, stats_dir):
     """cce-savings --badge shortcut also outputs a shields.io badge."""
-    from context_engine.cli import savings_shortcut
     from unittest.mock import patch
 
     storage_path, project_name = stats_dir
