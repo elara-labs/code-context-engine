@@ -7,13 +7,13 @@
     "url": "https://github.com/elara-labs/code-context-engine",
     "source": "github"
   },
-  "version": "0.4.23",
+  "version": "0.4.24",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "code-context-engine",
-      "version": "0.4.23",
+      "version": "0.4.24",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

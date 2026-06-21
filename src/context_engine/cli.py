@@ -1525,12 +1525,13 @@ def _print_savings_badge(config) -> None:
         return
 
     # Shields.io badge URL: /badge/LABEL-MESSAGE-COLOR
-    # In the message: spaces → %20, % → %25, $ stays as-is in URL encoding
+    # shields.io path-segment rules: - → --, _ → __, spaces → %20, $ is safe
     badge_color = "brightgreen" if pct >= 80 else "green" if pct >= 50 else "yellowgreen"
     cost_str = _fmt_cost(cost_saved)
     badge_msg = f"{cost_str} saved | {pct}% tokens saved"
-    # shields.io requires: dashes as --, underscores as __, spaces as _ or %20
-    badge_msg_enc = quote(badge_msg, safe="")
+    # Escape shields.io special chars before URL encoding
+    badge_msg_shields = badge_msg.replace("-", "--").replace("_", "__")
+    badge_msg_enc = quote(badge_msg_shields, safe="$")
     badge_url = (
         f"https://img.shields.io/badge/"
         f"CCE-{badge_msg_enc}-{badge_color}"
