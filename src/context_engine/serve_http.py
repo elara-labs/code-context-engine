@@ -27,6 +27,9 @@ except ImportError as e:
 
 
 _MAX_REQUEST_BYTES = 10 * 1024 * 1024  # 10 MB — generous for bulk ingest, not unbounded
+# Mirror the MCP server's guard (mcp_server._MAX_QUERY_CHARS) so a buggy or
+# malicious client can't submit a multi-MB query string for embedding.
+_MAX_QUERY_CHARS = 10_000
 _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
@@ -95,8 +98,24 @@ class ContextEngineHTTP:
         query = (data.get("query") or "").strip()
         if not query:
             return web.json_response({"error": "query cannot be empty"}, status=400)
-        top_k = int(data.get("top_k", 10))
-        confidence_threshold = float(data.get("confidence_threshold", 0.2))
+        if len(query) > _MAX_QUERY_CHARS:
+            return web.json_response(
+                {"error": f"query too long (max {_MAX_QUERY_CHARS} characters)"},
+                status=400,
+            )
+        # Validate + clamp: non-numeric input would otherwise raise ValueError and
+        # surface as a 400 "missing field" via the generic handler; clamp to the same
+        # ranges the MCP context_search handler uses.
+        try:
+            top_k = max(1, min(int(data.get("top_k", 10)), 100))
+            confidence_threshold = max(0.0, min(float(data.get("confidence_threshold", 0.2)), 1.0))
+        except (TypeError, ValueError):
+            return web.json_response(
+                {"error": "top_k must be an int and confidence_threshold a float"},
+                status=400,
+            )
+        # NOTE: unlike the MCP context_search handler, this endpoint does not call
+        # _record(), so queries via /search are not reflected in `cce savings`.
         chunks = await self.retriever.retrieve(
             query,
             top_k=top_k,
