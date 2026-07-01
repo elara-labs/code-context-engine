@@ -358,7 +358,7 @@ wheels = [
 
 [[package]]
 name = "code-context-engine"
-version = "0.4.20"
+version = "0.4.24"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -422,7 +422,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.13" },
     { name = "sqlite-vec", specifier = ">=0.1.6" },
-    { name = "tree-sitter", specifier = ">=0.22" },
+    { name = "tree-sitter", specifier = ">=0.22,<0.26" },
     { name = "tree-sitter-go", specifier = ">=0.23" },
     { name = "tree-sitter-java", specifier = ">=0.23" },
     { name = "tree-sitter-javascript", specifier = ">=0.21" },

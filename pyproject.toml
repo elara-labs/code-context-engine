@@ -24,7 +24,14 @@ dependencies = [
     "pyyaml>=6.0",
     "sqlite-vec>=0.1.6",
     "numpy>=1.24",
-    "tree-sitter>=0.22",
+    # Cap below 0.26: the tree-sitter 0.26 core changed the Node/Point ABI,
+    # and the tree-sitter-* grammar wheels below are still built against the
+    # 0.25.x ABI. Mixing 0.26 core with 0.25 grammars corrupts memory when
+    # reading Node.start_point/end_point, crashing `cce init` with
+    # SIGSEGV/SIGBUS (issues #113, #114). `uv tool install` resolves this
+    # fresh from PyPI (ignoring uv.lock), so the cap must live here. Lift it
+    # only when all grammar packages ship 0.26-ABI releases.
+    "tree-sitter>=0.22,<0.26",
     "tree-sitter-python>=0.21",
     "tree-sitter-javascript>=0.21",
     "tree-sitter-typescript>=0.21",
