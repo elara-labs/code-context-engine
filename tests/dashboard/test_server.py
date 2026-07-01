@@ -258,6 +258,53 @@ def test_set_compression(tmp_path):
     r = client.post("/api/compression", json={"level": "max"})
     assert r.status_code == 200
     assert r.json()["level"] == "max"
+
+
+def test_get_format_config_defaults(tmp_path):
+    client, _ = _make_client(tmp_path)
+    r = client.get("/api/format")
+    assert r.status_code == 200
+    assert r.json() == {
+        "input_preset": "balanced",
+        "top_k": 10,
+        "max_tokens": 8000,
+        "output_level": "standard",
+    }
+
+
+def test_set_format_config_preset_persists_state(tmp_path):
+    client, storage_base = _make_client(tmp_path)
+    r = client.post("/api/format", json={
+        "input_preset": "compact",
+        "top_k": 99,
+        "max_tokens": 50000,
+        "output_level": "lite",
+    })
+    assert r.status_code == 200
+    assert r.json() == {
+        "input_preset": "compact",
+        "top_k": 5,
+        "max_tokens": 4000,
+        "output_level": "lite",
+    }
+    state = json.loads((storage_base / "state.json").read_text())
+    assert state["context_top_k"] == 5
+    assert state["context_max_tokens"] == 4000
+    assert state["output_level"] == "lite"
+
+
+def test_set_format_config_custom_clamps(tmp_path):
+    client, storage_base = _make_client(tmp_path)
+    r = client.post("/api/format", json={
+        "input_preset": "custom",
+        "top_k": 250,
+        "max_tokens": 100000,
+        "output_level": "max",
+    })
+    assert r.status_code == 200
+    assert r.json()["top_k"] == 100
+    assert r.json()["max_tokens"] == 50000
+    assert client.get("/api/status").json()["format_config"]["output_level"] == "max"
     assert json.loads((storage_base / "state.json").read_text())["output_level"] == "max"
 
 

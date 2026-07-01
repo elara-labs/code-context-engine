@@ -40,6 +40,69 @@ class CompressionRequest(BaseModel):
     level: Literal["off", "lite", "standard", "max"]
 
 
+class FormatConfigRequest(BaseModel):
+    input_preset: Literal["compact", "balanced", "deep", "custom"]
+    top_k: int
+    max_tokens: int
+    output_level: Literal["off", "lite", "standard", "max"]
+
+
+_INPUT_PRESETS = {
+    "compact": {"top_k": 5, "max_tokens": 4000},
+    "balanced": {"top_k": 10, "max_tokens": 8000},
+    "deep": {"top_k": 20, "max_tokens": 12000},
+}
+_DEFAULT_FORMAT_CONFIG = {
+    "input_preset": "balanced",
+    "top_k": 10,
+    "max_tokens": 8000,
+    "output_level": "standard",
+}
+
+
+def _format_config_from_state(state: dict, config: Config) -> dict:
+    """Return validated dashboard/MCP format defaults from state.json."""
+    output_level = state.get("output_level", config.output_compression)
+    if output_level not in {"off", "lite", "standard", "max"}:
+        output_level = config.output_compression
+    if output_level not in {"off", "lite", "standard", "max"}:
+        output_level = _DEFAULT_FORMAT_CONFIG["output_level"]
+
+    preset = state.get("input_preset", _DEFAULT_FORMAT_CONFIG["input_preset"])
+    if preset not in {"compact", "balanced", "deep", "custom"}:
+        preset = _DEFAULT_FORMAT_CONFIG["input_preset"]
+
+    defaults = _INPUT_PRESETS.get(preset, _DEFAULT_FORMAT_CONFIG)
+    top_k = state.get("context_top_k", defaults["top_k"])
+    max_tokens = state.get("context_max_tokens", defaults["max_tokens"])
+    try:
+        top_k = int(top_k)
+    except (TypeError, ValueError):
+        top_k = defaults["top_k"]
+    try:
+        max_tokens = int(max_tokens)
+    except (TypeError, ValueError):
+        max_tokens = defaults["max_tokens"]
+
+    return {
+        "input_preset": preset,
+        "top_k": max(1, min(top_k, 100)),
+        "max_tokens": max(500, min(max_tokens, 50000)),
+        "output_level": output_level,
+    }
+
+
+def _normalize_format_config(req: FormatConfigRequest) -> dict:
+    """Clamp user-provided dashboard format settings before persisting."""
+    data = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+    if data["input_preset"] in _INPUT_PRESETS:
+        data.update(_INPUT_PRESETS[data["input_preset"]])
+    else:
+        data["top_k"] = max(1, min(int(data["top_k"]), 100))
+        data["max_tokens"] = max(500, min(int(data["max_tokens"]), 50000))
+    return data
+
+
 def create_app(config: Config, project_dir: Path) -> FastAPI:
     """Build and return the FastAPI application.
 
@@ -147,7 +210,7 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
         baseline = full_file if full_file > 0 else stats.get("raw_tokens", 0)
         saved_pct = max(0, int((1 - served / baseline) * 100)) if baseline > 0 and queries > 0 else 0
 
-        output_level = state.get("output_level", config.output_compression)
+        format_config = _format_config_from_state(state, config)
 
         return {
             "project": project_name,
@@ -156,7 +219,8 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
             "files": len(manifest),
             "queries": stats.get("queries", 0),
             "tokens_saved_pct": saved_pct,
-            "output_level": output_level,
+            "output_level": format_config["output_level"],
+            "format_config": format_config,
         }
 
     @app.get("/api/files")
@@ -422,6 +486,21 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
         state["output_level"] = req.level
         (storage_base / "state.json").write_text(json.dumps(state), encoding="utf-8")
         return {"level": req.level}
+
+    @app.get("/api/format")
+    async def get_format_config() -> dict:
+        return _format_config_from_state(_read_state(), config)
+
+    @app.post("/api/format")
+    async def set_format_config(req: FormatConfigRequest) -> dict:
+        settings = _normalize_format_config(req)
+        state = _read_state()
+        state["input_preset"] = settings["input_preset"]
+        state["context_top_k"] = settings["top_k"]
+        state["context_max_tokens"] = settings["max_tokens"]
+        state["output_level"] = settings["output_level"]
+        (storage_base / "state.json").write_text(json.dumps(state), encoding="utf-8")
+        return settings
 
     @app.get("/api/export")
     async def export_data():
