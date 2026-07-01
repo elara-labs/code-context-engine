@@ -804,6 +804,47 @@ body { background: var(--bg2); color: var(--text); font-family: var(--sans); fon
         </div>
       </div>
 
+      <!-- Format configuration panel -->
+      <div class="panel" style="margin-bottom:10px">
+        <div class="panel-head">
+          <div class="panel-title">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h7"/></svg>
+            Input / Output Format
+          </div>
+        </div>
+        <div class="panel-body">
+          <p class="comp-label">Choose context-search input presets and output verbosity without editing config files. Presets set the default context_search result count and token budget; custom values are clamped to safe limits.</p>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end">
+            <label style="font-size:11px;color:var(--text3);font-family:var(--mono)">input preset<br>
+              <select id="fmt-input-preset" onchange="applyInputPreset()" style="width:100%;margin-top:5px;padding:7px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:4px">
+                <option value="compact">compact — 5 / 4k</option>
+                <option value="balanced">balanced — 10 / 8k</option>
+                <option value="deep">deep — 20 / 12k</option>
+                <option value="custom">custom</option>
+              </select>
+            </label>
+            <label style="font-size:11px;color:var(--text3);font-family:var(--mono)">top_k<br>
+              <input id="fmt-top-k" type="number" min="1" max="100" value="10" onchange="markCustomPreset()" style="width:100%;margin-top:5px;padding:7px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:4px">
+            </label>
+            <label style="font-size:11px;color:var(--text3);font-family:var(--mono)">max tokens<br>
+              <input id="fmt-max-tokens" type="number" min="500" max="50000" value="8000" onchange="markCustomPreset()" style="width:100%;margin-top:5px;padding:7px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:4px">
+            </label>
+            <label style="font-size:11px;color:var(--text3);font-family:var(--mono)">output preset<br>
+              <select id="fmt-output-level" style="width:100%;margin-top:5px;padding:7px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:4px">
+                <option value="off">off</option>
+                <option value="lite">lite</option>
+                <option value="standard">standard</option>
+                <option value="max">max</option>
+              </select>
+            </label>
+          </div>
+          <div class="btn-row" style="margin-top:10px">
+            <button class="btn btn-primary" onclick="saveFormatConfig()">Save format settings</button>
+            <button class="btn btn-ghost" onclick="loadFormatConfig()">Reset</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Compression panel -->
       <div class="panel">
         <div class="panel-head">
@@ -813,7 +854,7 @@ body { background: var(--bg2); color: var(--text); font-family: var(--sans); fon
           </div>
         </div>
         <div class="panel-body">
-          <p class="comp-label">Controls how Claude compresses its responses. Higher levels reduce output token usage at the cost of verbosity.</p>
+          <p class="comp-label">Quick output-only presets. Higher levels reduce output token usage at the cost of verbosity.</p>
           <div class="comp-grid" id="comp-buttons">
             <button class="comp-btn" onclick="setCompression('off')">off</button>
             <button class="comp-btn" onclick="setCompression('lite')">lite</button>
@@ -1420,6 +1461,7 @@ function toggleSession(i) {
 
 async function loadSavings() {
   try {
+    loadFormatConfig();
     var r = await fetch(API+'/api/savings');
     var d = await r.json();
 
@@ -1494,6 +1536,58 @@ function refreshCompButtons(level) {
   });
 }
 
+var INPUT_PRESETS = {
+  compact:  {top_k: 5,  max_tokens: 4000},
+  balanced: {top_k: 10, max_tokens: 8000},
+  deep:     {top_k: 20, max_tokens: 12000}
+};
+
+function applyInputPreset() {
+  var preset = document.getElementById('fmt-input-preset').value;
+  if (INPUT_PRESETS[preset]) {
+    document.getElementById('fmt-top-k').value = INPUT_PRESETS[preset].top_k;
+    document.getElementById('fmt-max-tokens').value = INPUT_PRESETS[preset].max_tokens;
+  }
+}
+
+function markCustomPreset() {
+  document.getElementById('fmt-input-preset').value = 'custom';
+}
+
+async function loadFormatConfig() {
+  try {
+    var r = await fetch(API+'/api/format');
+    var d = await r.json();
+    document.getElementById('fmt-input-preset').value = d.input_preset || 'balanced';
+    document.getElementById('fmt-top-k').value = d.top_k || 10;
+    document.getElementById('fmt-max-tokens').value = d.max_tokens || 8000;
+    document.getElementById('fmt-output-level').value = d.output_level || currentLevel || 'standard';
+  } catch(e) {}
+}
+
+async function saveFormatConfig() {
+  try {
+    var payload = {
+      input_preset: document.getElementById('fmt-input-preset').value,
+      top_k: parseInt(document.getElementById('fmt-top-k').value || '10', 10),
+      max_tokens: parseInt(document.getElementById('fmt-max-tokens').value || '8000', 10),
+      output_level: document.getElementById('fmt-output-level').value
+    };
+    var r = await fetch(API+'/api/format', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    var d = await r.json();
+    currentLevel = d.output_level;
+    refreshCompButtons(d.output_level);
+    document.getElementById('fmt-input-preset').value = d.input_preset;
+    document.getElementById('fmt-top-k').value = d.top_k;
+    document.getElementById('fmt-max-tokens').value = d.max_tokens;
+    document.getElementById('fmt-output-level').value = d.output_level;
+    toast('Format settings saved');
+  } catch(e) { toast('Failed'); }
+}
+
 // ── Actions ───────────────────────────────────────
 
 async function doReindex(full) {
@@ -1551,6 +1645,8 @@ async function setCompression(level) {
     });
     currentLevel = level;
     refreshCompButtons(level);
+    var out = document.getElementById('fmt-output-level');
+    if (out) out.value = level;
     toast('Compression: '+level);
   } catch(e) { toast('Failed'); }
 }
