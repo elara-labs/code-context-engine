@@ -41,6 +41,7 @@ coverage.xml
 *.log
 
 CLAUDE.md
+AGENTS.md
 .mcp.json
 
 *.lance/
