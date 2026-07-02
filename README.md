@@ -123,7 +123,7 @@ section per project so multiple projects coexist; `cce uninstall` removes only
 the section for the current project.
 
 **Pi note:** Pi does not support MCP natively. To use CCE with Pi, you need a
-pi MCP adapter extension (e.g. [pi-mcp-adapter](https://github.com/user/pi-mcp-adapter))
+pi MCP adapter extension (e.g. [pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter))
 that consumes the `.mcp.json` config and exposes CCE's tools to the Pi agent.
 `cce init` sets up both `.mcp.json` and `AGENTS.md` — Pi loads the latter
 automatically for startup instructions.
