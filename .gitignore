@@ -54,3 +54,12 @@ docs/superpowers/
 
 # Local project review notes
 review/
+
+# CCE (code-context-engine)
+# CCE local cache (per-machine, not for version control)
+.cce/
+# Claude Code local settings written by cce init
+.claude/settings.local.json
+
+# Pi project config (per-machine, not for version control)
+.pi/

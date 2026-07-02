@@ -36,7 +36,8 @@
   <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Gemini_CLI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Gemini CLI"></a>&nbsp;
   <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Codex_CLI-412991?style=for-the-badge" alt="Codex CLI"></a>&nbsp;
   <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/OpenCode-22C55E?style=for-the-badge&logo=gnometerminal&logoColor=white" alt="OpenCode"></a>&nbsp;
-  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Tabnine-4B32C3?style=for-the-badge&logo=tabnine&logoColor=white" alt="Tabnine"></a>
+  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Tabnine-4B32C3?style=for-the-badge&logo=tabnine&logoColor=white" alt="Tabnine"></a>&nbsp;
+  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Pi-000?style=for-the-badge" alt="Pi"></a>
 </p>
 
 <p align="center">

@@ -800,11 +800,12 @@ def _after_command(ctx: click.Context, *_args, **_kwargs) -> None:
     _show_update_notice()
 
 
-_INIT_AGENT_CHOICES = ("auto", "claude", "codex", "copilot", "all")
+_INIT_AGENT_CHOICES = ("auto", "claude", "codex", "copilot", "pi", "all")
 _INIT_AGENT_TO_EDITORS = {
     "claude": {"claude"},
     "codex": {"codex"},
     "copilot": {"vscode"},
+    "pi": {"pi"},
 }
 # Editor key → instruction-file key. `claude` is omitted because CLAUDE.md is
 # written by `_ensure_claude_md`, not via the generic instruction-file path.
@@ -815,6 +816,7 @@ _INIT_EDITOR_TO_INSTRUCTIONS = {
     "cursor": "cursorrules",
     "gemini": "gemini",
     "tabnine": "tabnine",
+    "pi": "pi",
 }
 
 

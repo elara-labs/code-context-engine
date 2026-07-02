@@ -86,6 +86,13 @@ EDITORS: dict[str, dict] = {
         "format": "json",
         "detect": [".tabnine"],
     },
+    "pi": {
+        "name": "Pi",
+        "config_path": ".mcp.json",
+        "servers_key": "mcpServers",
+        "format": "json",
+        "detect": [".pi"],
+    },
 }
 
 # ── Instruction file definitions ──────────────────────────────────────
@@ -159,6 +166,11 @@ INSTRUCTION_FILES: dict[str, dict] = {
         "name": "TABNINE.md",
         "path": "TABNINE.md",
         "detect": [".tabnine", "TABNINE.md"],
+    },
+    "pi": {
+        "name": "AGENTS.md",
+        "path": "AGENTS.md",
+        "detect": [".pi"],
     },
 }
 
