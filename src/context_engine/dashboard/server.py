@@ -18,6 +18,7 @@ from context_engine.config import Config
 from context_engine.dashboard._page import PAGE_HTML
 from context_engine.indexer.pipeline import PathOutsideProjectError, run_indexing
 from context_engine.storage.local_backend import LocalBackend
+from context_engine.utils import project_storage_dir
 
 # Mutating HTTP methods require a same-origin browser request OR a non-browser
 # client (Sec-Fetch-Site absent). This blocks CSRF from a malicious local page
@@ -46,7 +47,7 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
     app is self-contained and trivial to test with TestClient.
     """
     project_name = project_dir.name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, project_dir)
 
     app = FastAPI(title="CCE Dashboard", docs_url=None, redoc_url=None)
 
@@ -86,7 +87,7 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
     def _read_json(path: Path) -> dict:
         if path.exists():
             try:
-                return json.loads(path.read_text())
+                return json.loads(path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 pass
         return {}
@@ -118,7 +119,7 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
         result = []
         for f in files[:limit]:
             try:
-                result.append(json.loads(f.read_text()))
+                result.append(json.loads(f.read_text(encoding="utf-8")))
             except (json.JSONDecodeError, OSError):
                 pass
         return result
@@ -330,12 +331,24 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
         baseline = full_file if full_file > 0 else raw
         saved = max(0, baseline - served)
         pct = int(saved / baseline * 100) if baseline > 0 else 0
+
+        from context_engine.pricing import resolve_pricing, list_available_models
+
+        label, model_pricing = resolve_pricing(config, fetch_live=False)
+        input_cost = saved * model_pricing["input"] / 1_000_000
+        cost_saved = input_cost
+
         return {
             "queries": stats.get("queries", 0),
             "baseline_tokens": baseline,
             "served_tokens": served,
             "tokens_saved": saved,
             "savings_pct": pct,
+            "pricing_model": label,
+            "input_price_per_m": model_pricing["input"],
+            "output_price_per_m": model_pricing["output"],
+            "cost_saved": round(cost_saved, 2),
+            "available_models": list_available_models(),
         }
 
     # ── action routes ──────────────────────────────────────────────────────
@@ -407,7 +420,7 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
     async def set_compression(req: CompressionRequest) -> dict:
         state = _read_state()
         state["output_level"] = req.level
-        (storage_base / "state.json").write_text(json.dumps(state))
+        (storage_base / "state.json").write_text(json.dumps(state), encoding="utf-8")
         return {"level": req.level}
 
     @app.get("/api/export")

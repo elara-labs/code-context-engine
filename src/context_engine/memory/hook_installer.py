@@ -190,10 +190,10 @@ def install_hook_script(target: Path = HOOK_PATH) -> bool:
     """
     target.parent.mkdir(parents=True, exist_ok=True)
     body = _hook_script_body()
-    existing = target.read_text() if target.exists() else None
+    existing = target.read_text(encoding="utf-8") if target.exists() else None
     if existing == body:
         return False
-    target.write_text(body)
+    target.write_text(body, encoding="utf-8")
     if not _is_windows():
         target.chmod(
             target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
@@ -215,7 +215,7 @@ def install_settings(project_dir: Path) -> dict:
     data: dict = {}
     if settings_path.exists():
         try:
-            data = json.loads(settings_path.read_text() or "{}")
+            data = json.loads(settings_path.read_text(encoding="utf-8") or "{}")
             if not isinstance(data, dict):
                 data = {}
         except json.JSONDecodeError:
@@ -246,7 +246,7 @@ def install_settings(project_dir: Path) -> dict:
         })
         added.append(hook_name)
 
-    settings_path.write_text(json.dumps(data, indent=2) + "\n")
+    settings_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return {"added": added, "skipped": skipped, "settings_path": str(settings_path)}
 
 
@@ -256,7 +256,7 @@ def uninstall_settings(project_dir: Path) -> dict:
     if not settings_path.exists():
         return {"removed": [], "settings_path": str(settings_path)}
     try:
-        data = json.loads(settings_path.read_text() or "{}")
+        data = json.loads(settings_path.read_text(encoding="utf-8") or "{}")
     except json.JSONDecodeError:
         return {"removed": [], "settings_path": str(settings_path)}
     if not isinstance(data, dict):
@@ -279,7 +279,7 @@ def uninstall_settings(project_dir: Path) -> dict:
     if removed:
         if not hooks:
             data.pop("hooks", None)
-        settings_path.write_text(json.dumps(data, indent=2) + "\n")
+        settings_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return {"removed": removed, "settings_path": str(settings_path)}
 
 

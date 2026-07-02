@@ -67,13 +67,13 @@ def install_hooks(project_dir: str) -> list[str]:
 def _install_single_hook(hook_path: Path) -> None:
     script = _hook_script()
     if hook_path.exists():
-        existing = hook_path.read_text()
+        existing = hook_path.read_text(encoding="utf-8")
         if HOOK_MARKER in existing:
             return
         new_content = existing.rstrip() + "\n\n" + script
     else:
         new_content = "#!/bin/sh\n\n" + script
-    hook_path.write_text(new_content)
+    hook_path.write_text(new_content, encoding="utf-8")
     hook_path.chmod(hook_path.stat().st_mode | stat.S_IEXEC)
 
 

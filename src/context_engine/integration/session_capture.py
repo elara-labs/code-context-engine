@@ -190,7 +190,7 @@ class SessionCapture:
         existing: list[dict] = []
         if log_path.exists():
             try:
-                existing = json.loads(log_path.read_text())
+                existing = json.loads(log_path.read_text(encoding="utf-8"))
                 if not isinstance(existing, list):
                     existing = []
             except (json.JSONDecodeError, OSError):
@@ -201,7 +201,7 @@ class SessionCapture:
             if f == log_path:
                 continue
             try:
-                data = json.loads(f.read_text())
+                data = json.loads(f.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError) as exc:
                 log.warning("Skipping unreadable session file %s: %s", f, exc)
                 continue
@@ -244,7 +244,7 @@ class SessionCapture:
         if not log_path.exists():
             return []
         try:
-            data = json.loads(log_path.read_text())
+            data = json.loads(log_path.read_text(encoding="utf-8"))
             return data if isinstance(data, list) else []
         except (json.JSONDecodeError, OSError):
             return []

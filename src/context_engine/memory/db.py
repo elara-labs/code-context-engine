@@ -309,6 +309,11 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
     # WAL gives concurrent readers (the dashboard) decent isolation while the
     # MCP server writes; no impact on single-process use.
     conn.execute("PRAGMA journal_mode = WAL")
+    # Explicitly set the SQLite busy timeout so concurrent writers (hooks +
+    # auto-prune) wait up to 5s for the write lock before raising
+    # "database is locked". This is the SQLite-level PRAGMA, separate from
+    # Python's sqlite3.connect(timeout=...) parameter.
+    conn.execute("PRAGMA busy_timeout = 5000")
     has_vec = _try_load_vec(conn)
     _ensure_schema(conn, has_vec=has_vec)
     return conn
@@ -832,7 +837,7 @@ def prune_old_rows(
 
     if archive and archived and archive_path is not None:
         try:
-            archive_path.write_text(_json.dumps(archived, indent=2, default=str))
+            archive_path.write_text(_json.dumps(archived, indent=2, default=str), encoding="utf-8")
             log.info("memory: archived pruned rows to %s", archive_path)
         except OSError as exc:
             log.warning("memory: archive write failed (%s); rows still deleted", exc)

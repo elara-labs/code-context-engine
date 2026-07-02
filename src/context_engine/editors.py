@@ -17,7 +17,6 @@ Codex CLI is the only "user" scope today — it reads MCP servers from
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import tomllib
@@ -178,29 +177,12 @@ def _resolved_config_path(editor: dict, project_dir: Path) -> Path:
 
 
 def _project_slug(project_dir: Path) -> str:
-    """Stable per-directory slug used as the section name for user-scoped
-    editor configs. `<basename>-<6-hex>` so two projects sharing a
-    basename ("api", "web", "frontend") get distinct sections instead of
-    silently overwriting each other in ~/.codex/config.toml.
+    """Stable per-directory slug for user-scoped editor config sections.
 
-    Symlinks are resolved before hashing so two paths pointing at the
-    same on-disk directory map to the same slug (idempotent re-runs).
+    Delegates to utils._project_slug to keep the algorithm in one place.
     """
-    resolved = project_dir.resolve()
-    abs_path = str(resolved)
-    h = hashlib.sha256(abs_path.encode()).hexdigest()[:6]
-    # TOML bare-key chars here are restricted to ASCII A-Za-z0-9_-; replace
-    # anything else (spaces, unicode, punctuation) with `-` so the rendered
-    # section is always a syntactically valid bare key. Empty basename (root
-    # dir or trailing slash) falls back to "project" so the slug is never
-    # just "-a3f2".
-    # Use the resolved basename so symlink-vs-real-path produces the same
-    # slug — otherwise the hash would match but the basename would differ.
-    safe = "".join(
-        c if (c.isascii() and (c.isalnum() or c in "-_")) else "-"
-        for c in resolved.name
-    )
-    return f"{safe or 'project'}-{h}"
+    from context_engine.utils import _project_slug as _utils_slug
+    return _utils_slug(project_dir)
 
 
 def _editor_section(editor: dict, project_dir: Path) -> str | None:
@@ -235,7 +217,12 @@ def _toml_quote(s: str) -> str:
 
 def detect_editors(project_dir: Path) -> list[str]:
     """Return list of editor keys detected for this project. Markers are
-    looked up under each editor's scope root (project dir or home dir)."""
+    looked up under each editor's scope root (project dir or home dir).
+
+    For Codex, also checks for the VS Code extension directory
+    (``~/.vscode/extensions/openai.*``) since the extension doesn't
+    create ``~/.codex`` until the CLI is run separately.
+    """
     found = []
     for key, editor in EDITORS.items():
         root = _scope_root(editor, project_dir)
@@ -243,7 +230,21 @@ def detect_editors(project_dir: Path) -> list[str]:
             if (root / marker).exists():
                 found.append(key)
                 break
+        else:
+            # Secondary detection for Codex: VS Code extension installed
+            if key == "codex" and _has_vscode_openai_extension():
+                found.append(key)
     return found
+
+
+def _has_vscode_openai_extension() -> bool:
+    """Check if any OpenAI VS Code extension is installed (as a proxy for Codex)
+    by looking for extension directories matching ``openai.*`` under
+    ``~/.vscode/extensions``. No subprocess needed, works cross-platform."""
+    ext_dir = Path.home() / ".vscode" / "extensions"
+    if not ext_dir.is_dir():
+        return False
+    return any(ext_dir.glob("openai.*"))
 
 
 def _codex_toml_block(command: str, project_dir: str, *, section: str) -> str:
@@ -294,7 +295,7 @@ def configure_mcp(project_dir: Path, editor_key: str) -> bool | None:
 
     if config_path.exists():
         try:
-            data = json.loads(config_path.read_text())
+            data = json.loads(config_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             data = {}
     else:
@@ -333,7 +334,7 @@ def _configure_opencode(config_path: Path, command: str, project_dir: str) -> bo
 
     if config_path.exists():
         try:
-            content = config_path.read_text()
+            content = config_path.read_text(encoding="utf-8")
             # Strip JSONC comments for parsing
             data = json.loads(_strip_jsonc_comments(content))
         except (json.JSONDecodeError, OSError):
@@ -392,7 +393,7 @@ def _configure_toml(
             atomic_write_text(config_path, block)
             return True
 
-        original = config_path.read_text()
+        original = config_path.read_text(encoding="utf-8")
     except OSError:
         return None
 
@@ -532,13 +533,13 @@ def remove_mcp(project_dir: Path, editor_key: str) -> str | None:
 
     servers_key = editor["servers_key"]
     try:
-        data = json.loads(config_path.read_text())
+        data = json.loads(config_path.read_text(encoding="utf-8"))
         servers = data.get(servers_key, {})
         if "context-engine" not in servers:
             return None
         del servers["context-engine"]
         if servers:
-            config_path.write_text(json.dumps(data, indent=2) + "\n")
+            config_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
             return f"Removed context-engine from {editor['config_path']}"
         else:
             config_path.unlink()
@@ -556,7 +557,7 @@ def _remove_toml(config_path: Path, display_path: str, *, section: str) -> str |
     so it can never accidentally match a longer section that shares a prefix
     (e.g. removing `cce-api` won't touch `cce-api-staging`)."""
     try:
-        content = config_path.read_text()
+        content = config_path.read_text(encoding="utf-8")
     except OSError:
         return None
 
@@ -592,13 +593,13 @@ def write_instruction_file(
     instructions = _build_instructions(output_level)
 
     if path.exists():
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
         if marker in content:
             return False  # already has CCE block
         # Append
-        path.write_text(content.rstrip() + "\n\n" + instructions)
+        path.write_text(content.rstrip() + "\n\n" + instructions, encoding="utf-8")
     else:
-        path.write_text(instructions)
+        path.write_text(instructions, encoding="utf-8")
     return True
 
 
@@ -611,7 +612,7 @@ def remove_instruction_file(project_dir: Path, file_key: str) -> str | None:
     if not path.exists():
         return None
 
-    content = path.read_text()
+    content = path.read_text(encoding="utf-8")
     if marker not in content:
         return None
 
@@ -627,7 +628,7 @@ def remove_instruction_file(project_dir: Path, file_key: str) -> str | None:
 
     new_content = (content[:start] + content[end:]).strip()
     if new_content:
-        path.write_text(new_content + "\n")
+        path.write_text(new_content + "\n", encoding="utf-8")
         return f"Removed CCE block from {info['name']}"
     else:
         path.unlink()

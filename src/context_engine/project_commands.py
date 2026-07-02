@@ -50,7 +50,7 @@ def _load_yaml(path: Path) -> dict:
     if not path.exists():
         return {}
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except (yaml.YAMLError, OSError) as exc:
         log.warning("Failed to parse %s: %s", path, exc)
         return {}
@@ -125,7 +125,7 @@ def save_commands(project_dir: str, commands: dict) -> None:
     """Save project commands to .cce/commands.yaml."""
     path = _commands_path(project_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.dump(commands, default_flow_style=False, sort_keys=False))
+    path.write_text(yaml.dump(commands, default_flow_style=False, sort_keys=False), encoding="utf-8")
 
 
 def add_command(project_dir: str, hook: str, command: str) -> None:
@@ -244,7 +244,7 @@ _GITIGNORE_ENTRIES = [
 def ensure_gitignore(project_dir: str) -> None:
     """Add CCE-related entries to .gitignore if not already present."""
     gitignore = Path(project_dir) / ".gitignore"
-    content = gitignore.read_text() if gitignore.exists() else ""
+    content = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
 
     additions = []
     for entry, comment in _GITIGNORE_ENTRIES:
@@ -255,7 +255,7 @@ def ensure_gitignore(project_dir: str) -> None:
         return
 
     block = "\n\n# CCE (code-context-engine)\n" + "\n".join(additions) + "\n"
-    gitignore.write_text(content.rstrip() + block)
+    gitignore.write_text(content.rstrip() + block, encoding="utf-8")
 
 
 def format_for_prompt(commands: dict, label: str = "Project") -> str:

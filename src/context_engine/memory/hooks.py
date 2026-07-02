@@ -47,6 +47,26 @@ _RESUME_RECENT_DECISIONS = 5
 _RESUME_DECISION_REASON_CHARS = 200
 
 
+def _ensure_session(
+    conn: sqlite3.Connection, session_id: str, project: str = ""
+) -> None:
+    """Ensure a sessions row exists for the given session_id.
+
+    Hooks can arrive out of order (UserPromptSubmit before SessionStart)
+    when cce serve starts mid-session or SessionStart is dropped. Without
+    this, the FOREIGN KEY constraint on prompts/tool_events crashes every
+    subsequent insert for that session. INSERT OR IGNORE is a no-op if the
+    row already exists.
+    """
+    epoch = _now_epoch()
+    conn.execute(
+        "INSERT OR IGNORE INTO sessions "
+        "(id, project, started_at_epoch, started_at, status) "
+        "VALUES (?, ?, ?, ?, 'active')",
+        (session_id, project, epoch, _now_iso(epoch)),
+    )
+
+
 def _build_savings_line(conn: sqlite3.Connection) -> str:
     """One-line savings summary from the savings_log table.
 
@@ -76,7 +96,11 @@ def _build_savings_line(conn: sqlite3.Connection) -> str:
     if total_baseline <= 0 or total_queries <= 0:
         return ""
 
-    saved_pct = (1 - total_served / total_baseline) * 100
+    tokens_saved = max(0, total_baseline - total_served)
+    if tokens_saved == 0:
+        return ""
+
+    saved_pct = tokens_saved / total_baseline * 100
 
     def _fmt_k(n: int) -> str:
         if n >= 1_000_000:
@@ -85,9 +109,20 @@ def _build_savings_line(conn: sqlite3.Connection) -> str:
             return f"{n / 1_000:.1f}k"
         return str(n)
 
+    cost_str = ""
+    try:
+        from context_engine.pricing import _STATIC_PRICING
+        # Use static opus pricing to avoid network fetch on session start
+        rate = _STATIC_PRICING.get("opus", {"input": 15.0})["input"]
+        cost = tokens_saved * rate / 1_000_000
+        if cost >= 0.01:
+            cost_str = f", ${cost:.2f} saved"
+    except Exception:
+        pass
+
     return (
         f"CCE saved {saved_pct:.0f}% of input tokens across {total_queries} queries "
-        f"({_fmt_k(total_baseline)} baseline, {_fmt_k(total_served)} served)"
+        f"({_fmt_k(total_baseline)} baseline, {_fmt_k(total_served)} served{cost_str})"
     )
 
 
@@ -213,6 +248,8 @@ async def handle_user_prompt_submit(request: web.Request) -> web.Response:
 
     conn = _conn(request)
     try:
+        _ensure_session(conn, session_id, request.app.get("project_name", ""))
+
         if prompt_number is None:
             row = conn.execute(
                 "SELECT COALESCE(MAX(prompt_number), 0) + 1 AS next "
@@ -264,6 +301,8 @@ async def handle_post_tool_use(request: web.Request) -> web.Response:
 
     conn = _conn(request)
     try:
+        _ensure_session(conn, session_id, request.app.get("project_name", ""))
+
         if prompt_number is None:
             row = conn.execute(
                 "SELECT COALESCE(MAX(prompt_number), 0) AS cur FROM prompts "
@@ -301,6 +340,8 @@ async def handle_stop(request: web.Request) -> web.Response:
 
     conn = _conn(request)
     try:
+        _ensure_session(conn, session_id, request.app.get("project_name", ""))
+
         if prompt_number is None:
             row = conn.execute(
                 "SELECT COALESCE(MAX(prompt_number), 0) AS cur FROM prompts "
@@ -329,6 +370,8 @@ async def handle_session_end(request: web.Request) -> web.Response:
 
     conn = _conn(request)
     try:
+        _ensure_session(conn, session_id, request.app.get("project_name", ""))
+
         epoch = _now_epoch()
         conn.execute(
             "UPDATE sessions SET status = 'completed', exit_reason = ?, "

@@ -1,5 +1,6 @@
 """AST-aware code chunking using tree-sitter."""
 import hashlib
+import threading
 
 import tree_sitter_python as tspython
 import tree_sitter_javascript as tsjavascript
@@ -42,16 +43,29 @@ _LANGUAGES = {
 
 
 class Chunker:
+    # A single Chunker is shared across the indexing run, and the pipeline
+    # fans chunk_with_imports() out over asyncio.to_thread — up to 50 files
+    # of the same language parse concurrently. tree_sitter.Parser holds
+    # mutable C parse state and is documented as unsafe to use from multiple
+    # threads at once; sharing one Parser per language raced on that state
+    # and corrupted memory (SIGSEGV/SIGBUS, issue #113). Parsers are cheap to
+    # build, so cache them per worker thread via threading.local instead —
+    # each thread gets its own Parser and never contends with another.
     def __init__(self) -> None:
-        self._parsers: dict[str, Parser] = {}
+        self._local = threading.local()
 
     def _get_parser(self, language: str) -> Parser | None:
         if language not in _LANGUAGES:
             return None
-        if language not in self._parsers:
+        parsers = getattr(self._local, "parsers", None)
+        if parsers is None:
+            parsers = {}
+            self._local.parsers = parsers
+        parser = parsers.get(language)
+        if parser is None:
             parser = Parser(_LANGUAGES[language])
-            self._parsers[language] = parser
-        return self._parsers[language]
+            parsers[language] = parser
+        return parser
 
     def chunk(self, source: str, file_path: str, language: str) -> list[Chunk]:
         parser = self._get_parser(language)

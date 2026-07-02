@@ -31,7 +31,8 @@ async def test_markdown_fallback_chunk_is_module_not_class(tmp_path):
     result = await run_indexing(config, str(project_dir), full=True)
     assert "README.md" in result.indexed_files
 
-    graph = GraphStore(db_path=str(storage_base / project_dir.name / "graph"))
+    from context_engine.utils import project_storage_dir
+    graph = GraphStore(db_path=str(project_storage_dir(config, project_dir) / "graph"))
     classes = await graph.get_nodes_by_type(NodeType.CLASS)
     # No real classes in a markdown file — anything here is a misclassified
     # fallback chunk from the regression.

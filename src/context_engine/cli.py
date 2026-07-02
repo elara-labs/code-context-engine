@@ -20,6 +20,7 @@ if sys.platform.startswith("win"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from context_engine.config import load_config, resolve_ollama_url, PROJECT_CONFIG_NAME
+from context_engine.utils import project_storage_dir
 
 
 def _safe_cwd() -> Path:
@@ -83,7 +84,7 @@ def _check_for_update() -> str | None:
     # Read cache
     try:
         if _UPDATE_CACHE.exists():
-            data = json.loads(_UPDATE_CACHE.read_text())
+            data = json.loads(_UPDATE_CACHE.read_text(encoding="utf-8"))
             if time.time() - data.get("ts", 0) < _UPDATE_CHECK_TTL:
                 latest = data.get("latest", "")
                 if latest and _version_tuple(latest) > _version_tuple(current):
@@ -109,7 +110,7 @@ def _check_for_update() -> str | None:
     # Cache result
     try:
         _CCE_HOME.mkdir(parents=True, exist_ok=True)
-        _UPDATE_CACHE.write_text(json.dumps({"ts": time.time(), "latest": latest or ""}))
+        _UPDATE_CACHE.write_text(json.dumps({"ts": time.time(), "latest": latest or ""}), encoding="utf-8")
     except Exception:
         pass
 
@@ -157,7 +158,7 @@ def _configure_mcp(project_dir: Path) -> bool:
 
     if mcp_path.exists():
         try:
-            data = json.loads(mcp_path.read_text())
+            data = json.loads(mcp_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             data = {}
     else:
@@ -330,7 +331,7 @@ def _check_memory_capture_reachable(config, project_dir: Path) -> None:
     """
     import socket
     project_name = project_dir.name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, project_dir)
     # Try the storage-local file first (authoritative), then fall back to
     # the default-path rendezvous file `cce serve` writes for the hook
     # shell script. Either is sufficient for the probe.
@@ -355,7 +356,7 @@ def _check_memory_capture_reachable(config, project_dir: Path) -> None:
         )
         return
     try:
-        port = int(port_file.read_text().strip())
+        port = int(port_file.read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
         _warn(f"Memory capture port file unreadable at {port_file}")
         return
@@ -387,7 +388,7 @@ def _ensure_session_hook(project_dir: Path) -> None:
 
     if settings_path.exists():
         try:
-            data = json.loads(settings_path.read_text())
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             data = {}
     else:
@@ -407,7 +408,7 @@ def _ensure_session_hook(project_dir: Path) -> None:
         changed = True
 
     if changed:
-        settings_path.write_text(json.dumps(data, indent=2) + "\n")
+        settings_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         _ok("SessionStart hook installed for CCE status")
 
 
@@ -443,7 +444,7 @@ def _show_welcome_banner(config) -> None:
 
     project_dir = _safe_cwd()
     project_name = project_dir.name
-    storage_dir = Path(config.storage_path) / project_name
+    storage_dir = project_storage_dir(config, project_dir)
 
     # Gather stats
     chunks = 0
@@ -460,7 +461,7 @@ def _show_welcome_banner(config) -> None:
     stats_path = storage_dir / "stats.json"
     if stats_path.exists():
         try:
-            stats = _json.loads(stats_path.read_text())
+            stats = _json.loads(stats_path.read_text(encoding="utf-8"))
             queries = stats.get("queries", 0)
             full_file = stats.get("full_file_tokens", 0)
             served = stats.get("served_tokens", 0)
@@ -722,7 +723,7 @@ def _ensure_claude_md(project_dir: Path, output_level: str = "standard") -> None
         _ok("CLAUDE.md created with CCE instructions")
         return
 
-    existing = claude_md.read_text()
+    existing = claude_md.read_text(encoding="utf-8")
 
     # Already on the current version — nothing to do.
     if _CCE_CLAUDE_MD_VERSION_TAG in existing:
@@ -873,11 +874,10 @@ def init(ctx: click.Context, agent: str) -> None:
     click.echo("")
 
     # 2. Storage
-    project_name = project_dir.name
-    storage_dir = Path(config.storage_path) / project_name
+    storage_dir = project_storage_dir(config, project_dir)
     storage_dir.mkdir(parents=True, exist_ok=True)
     meta_path = storage_dir / "meta.json"
-    meta_path.write_text(json.dumps({"project_dir": str(project_dir.resolve())}))
+    meta_path.write_text(json.dumps({"project_dir": str(project_dir.resolve())}), encoding="utf-8")
 
     # 3. Git hooks
     is_git_repo = (project_dir / ".git").exists()
@@ -922,6 +922,19 @@ def init(ctx: click.Context, agent: str) -> None:
             section = _editor_section(editor, project_dir)
             click.echo(_dim(f"    ~/{editor['config_path']}  →  [{section}]"))
 
+    # In auto mode, show which agents weren't detected so the user knows
+    # they can use --agent <name> to force configuration.
+    if agent == "auto":
+        # Only mention agents that can be forced via --agent <name>
+        configurable_keys = set()
+        for _agent_name, editor_keys in _INIT_AGENT_TO_EDITORS.items():
+            configurable_keys.update(editor_keys)
+        skipped = configurable_keys - editor_targets
+        if skipped:
+            agent_names = [a for a, keys in _INIT_AGENT_TO_EDITORS.items() if keys & skipped]
+            names = ", ".join(sorted(agent_names))
+            click.echo(_dim(f"    Not detected: {names}. Use --agent <name> to configure manually."))
+
     # Write instruction files for the selected editors. In `auto` mode, also
     # pick up instruction files whose marker exists even if the editor itself
     # wasn't detected (e.g. an `AGENTS.md` checked in without a `~/.codex/`).
@@ -953,10 +966,51 @@ def init(ctx: click.Context, agent: str) -> None:
         "  " + click.style("Indexing project", fg="cyan", bold=True) + "..."
     )
     asyncio.run(_run_index(config, str(project_dir), full=True))
+
+    # Show codebase size + estimated savings so the user sees the payoff
+    _storage = project_storage_dir(config, project_dir)
+    _stats_p = _storage / "stats.json"
+    try:
+        _st = json.loads(_stats_p.read_text(encoding="utf-8")) if _stats_p.exists() else {}
+        _full_tokens = _st.get("full_file_tokens", 0)
+    except (json.JSONDecodeError, OSError):
+        _full_tokens = 0
+
+    if _full_tokens > 0:
+        from context_engine.pricing import resolve_pricing
+        _, _pricing = resolve_pricing(config, fetch_live=False)
+        _full_cost = _full_tokens * _pricing["input"] / 1_000_000
+        # 94% is the benchmarked retrieval savings
+        _est_saved = _full_cost * 0.94
+
+        def _fmt_tok(n: int) -> str:
+            if n >= 1_000_000:
+                return f"{n / 1_000_000:.1f}M"
+            if n >= 1_000:
+                return f"{n / 1_000:.0f}k"
+            return str(n)
+
+        click.echo("")
+        click.echo(
+            f"  {_dim('Codebase:')} "
+            + click.style(f"{_fmt_tok(_full_tokens)} tokens", fg="white", bold=True)
+            + _dim(f" (${_full_cost:.2f} to read in full)")
+        )
+        click.echo(
+            f"  {_dim('Estimated savings per full read:')} "
+            + click.style(f"~${_est_saved:.2f}", fg="green", bold=True)
+            + _dim(" (94% retrieval savings)")
+        )
+
     click.echo("")
+    click.echo(click.style("  ✓ Ready!", fg="green", bold=True))
     click.echo(
-        click.style("  Done!", fg="green", bold=True) +
-        click.style("  Restart your AI coding agent to activate CCE.", fg="white")
+        _dim("  Restart your AI coding agent to activate CCE.")
+    )
+    click.echo(
+        _dim("  Run ") +
+        click.style("cce savings", fg="cyan") +
+        _dim(" after a few queries to see actual savings.")
     )
     click.echo("")
 
@@ -993,7 +1047,7 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
         except Exception:
             ver = "?"
         project_name = _safe_cwd().name
-        storage = Path(config.storage_path) / project_name
+        storage = project_storage_dir(config, _safe_cwd())
         stats_path = storage / "stats.json"
         chunks = 0
         savings = ""
@@ -1005,13 +1059,20 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
             pass
         if stats_path.exists():
             try:
-                stats = _json.loads(stats_path.read_text())
+                stats = _json.loads(stats_path.read_text(encoding="utf-8"))
                 q = stats.get("queries", 0)
                 full = stats.get("full_file_tokens", 0)
                 served = stats.get("served_tokens", 0)
                 if q > 0 and full > 0:
-                    pct = int((full - served) / full * 100)
-                    savings = f" · {pct}% saved over {q} queries"
+                    tokens_saved = max(0, full - served)
+                    if tokens_saved > 0:
+                        pct = int(tokens_saved / full * 100)
+                        from context_engine.pricing import _STATIC_PRICING
+                        model = config.pricing_model.lower()
+                        rate = _STATIC_PRICING.get(model, _STATIC_PRICING.get("opus", {"input": 15.0}))
+                        cost = tokens_saved * rate["input"] / 1_000_000
+                        cost_str = f"${cost:.2f}" if cost >= 0.01 else "<$0.01"
+                        savings = f" · {pct}% saved over {q} queries ({cost_str} saved)"
             except Exception:
                 pass
         click.echo(
@@ -1068,14 +1129,13 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
     lines.append(f"    {BULLET} {label('Compress')}      {value(compression_mode)}")
 
     # Token savings
-    project_name = _safe_cwd().name
-    stats_path = Path(config.storage_path) / project_name / "stats.json"
+    stats_path = project_storage_dir(config, _safe_cwd()) / "stats.json"
     lines.append("")
     lines.append(section("Token Savings"))
     lines.append("")
     if stats_path.exists():
         try:
-            stats = _json.loads(stats_path.read_text())
+            stats = _json.loads(stats_path.read_text(encoding="utf-8"))
             raw = stats.get("raw_tokens", 0)
             full = stats.get("full_file_tokens", 0)
             served = stats.get("served_tokens", 0)
@@ -1090,7 +1150,7 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
         except (KeyError, _json.JSONDecodeError):
             lines.append(f"    {DOT} {dim('Error reading stats')}")
     else:
-        storage_dir = Path(config.storage_path) / _safe_cwd().name
+        storage_dir = project_storage_dir(config, _safe_cwd())
         vectors_dir = storage_dir / "vectors"
         if not vectors_dir.exists():
             lines.append(f"    {DOT} {dim('Project not indexed yet')}  {label('cce init')}")
@@ -1098,7 +1158,7 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
             lines.append(f"    {DOT} {dim('No usage recorded yet')}  {dim('run context_search via MCP')}")
 
     # Embedding cache stats — surfaces how much the cache is actually saving.
-    cache_db = Path(config.storage_path) / _safe_cwd().name / "embedding_cache.db"
+    cache_db = project_storage_dir(config, _safe_cwd()) / "embedding_cache.db"
     if cache_db.exists():
         try:
             from context_engine.indexer.embedding_cache import EmbeddingCache
@@ -1367,11 +1427,148 @@ def commands_list() -> None:
 @main.command()
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.option("--all", "all_projects", is_flag=True, help="Show savings for all indexed projects")
+@click.option("--badge", "show_badge", is_flag=True, help="Output a shareable badge + social snippet")
 @click.pass_context
-def savings(ctx: click.Context, as_json: bool, all_projects: bool) -> None:
+def savings(ctx: click.Context, as_json: bool, all_projects: bool, show_badge: bool) -> None:
     """Show token savings report — how much CCE is saving you."""
     config = ctx.obj["config"]
+    if show_badge:
+        _print_savings_badge(config)
+        return
     _run_savings_report(config, as_json=as_json, all_projects=all_projects)
+
+
+def _print_savings_badge(config) -> None:
+    """Print shareable badge markdown + social snippet for current project."""
+    from urllib.parse import quote
+    from context_engine.pricing import resolve_pricing
+
+    storage = project_storage_dir(config, _safe_cwd())
+    stats_path = storage / "stats.json"
+    project_name = _safe_cwd().name
+
+    # Load stats
+    stats: dict = {}
+    if stats_path.exists():
+        try:
+            stats = json.loads(stats_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Load bucket data
+    from context_engine.memory import db as _memory_db
+    db_path = storage / "memory.db"
+    buckets: dict = {}
+    if db_path.exists():
+        try:
+            conn = _memory_db.connect(db_path)
+            try:
+                buckets = _memory_db.aggregate_savings(conn)
+            finally:
+                conn.close()
+        except Exception:
+            pass
+    if not buckets and "buckets" in stats:
+        buckets = stats["buckets"]
+
+    # Calculate totals
+    bucket_baseline = sum(int(v.get("baseline", 0)) for v in buckets.values())
+    bucket_served = sum(int(v.get("served", 0)) for v in buckets.values())
+    retrieval_calls = int(buckets.get("retrieval", {}).get("calls", 0))
+    queries = max(retrieval_calls, stats.get("queries", 0))
+
+    if bucket_baseline > 0:
+        baseline = bucket_baseline
+        served = bucket_served
+    else:
+        full_file = stats.get("full_file_tokens", 0)
+        raw = stats.get("raw_tokens", 0)
+        baseline = max(full_file, raw) if full_file > 0 else raw
+        served = stats.get("served_tokens", 0)
+
+    tokens_saved = max(0, baseline - served) if queries > 0 else 0
+    pct = int(tokens_saved / baseline * 100) if baseline > 0 else 0
+
+    # Cost
+    _, pricing = resolve_pricing(config, fetch_live=False)
+    in_base = sum(
+        int(v.get("baseline", 0)) for k, v in buckets.items()
+        if k != "output_compression"
+    )
+    in_srv = sum(
+        int(v.get("served", 0)) for k, v in buckets.items()
+        if k != "output_compression"
+    )
+    out_base = int(buckets.get("output_compression", {}).get("baseline", 0))
+    out_srv = int(buckets.get("output_compression", {}).get("served", 0))
+    in_saved = max(0, in_base - in_srv)
+    out_saved = max(0, out_base - out_srv)
+    cost_saved = (
+        in_saved * pricing["input"] / 1_000_000
+        + out_saved * pricing["output"] / 1_000_000
+    )
+
+    def _fmt_tok(n: int) -> str:
+        if n >= 1_000_000:
+            return f"{n / 1_000_000:.1f}M"
+        if n >= 1_000:
+            return f"{n / 1_000:.0f}k"
+        return str(n)
+
+    def _fmt_cost(c: float) -> str:
+        if c < 0.01:
+            return "<$0.01"
+        return f"${c:.2f}"
+
+    if queries == 0:
+        click.echo("No savings data yet. Run some context_search queries first.")
+        return
+
+    # Shields.io badge URL: /badge/LABEL-MESSAGE-COLOR
+    # shields.io path-segment rules: - → --, _ → __, spaces → %20, $ is safe
+    badge_color = "brightgreen" if pct >= 80 else "green" if pct >= 50 else "yellowgreen"
+    cost_str = _fmt_cost(cost_saved)
+    badge_msg = f"{cost_str} saved | {pct}% tokens saved"
+    # Escape shields.io special chars before URL encoding
+    badge_msg_shields = badge_msg.replace("-", "--").replace("_", "__")
+    badge_msg_enc = quote(badge_msg_shields, safe="$")
+    badge_url = (
+        f"https://img.shields.io/badge/"
+        f"CCE-{badge_msg_enc}-{badge_color}"
+        f"?style=flat-square"
+    )
+
+    # Markdown badge
+    badge_md = (
+        f"[![CCE Savings]({badge_url})]"
+        f"(https://github.com/elara-labs/code-context-engine)"
+    )
+
+    # Social share text
+    share_text = (
+        f"Code Context Engine saved me {_fmt_cost(cost_saved)} and "
+        f"{_fmt_tok(tokens_saved)} tokens ({pct}% reduction) "
+        f"across {queries} queries on {project_name}. "
+        f"Free, open source, local-first. "
+        f"https://github.com/elara-labs/code-context-engine"
+    )
+
+    click.echo()
+    click.echo(click.style("  Shareable badge", fg="cyan", bold=True))
+    click.echo(click.style("  " + "─" * 44, fg="bright_black"))
+    click.echo()
+    click.echo(click.style("  Markdown (for your README):", fg="bright_black"))
+    click.echo()
+    click.echo(f"  {badge_md}")
+    click.echo()
+    click.echo(click.style("  Social share:", fg="bright_black"))
+    click.echo()
+    click.echo(f"  {share_text}")
+    click.echo()
+    click.echo(click.style("  Raw badge URL:", fg="bright_black"))
+    click.echo()
+    click.echo(f"  {badge_url}")
+    click.echo()
 
 
 def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = False) -> None:
@@ -1385,15 +1582,16 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
         if not stats_path.exists():
             return None
         try:
-            return _json.loads(stats_path.read_text())
+            return _json.loads(stats_path.read_text(encoding="utf-8"))
         except (KeyError, _json.JSONDecodeError):
             return None
 
-    def _load_buckets(project_dir: Path) -> tuple[dict, dict]:
+    def _load_buckets(project_dir: Path) -> tuple[dict, dict, int | None]:
         """Open memory.db and pull per-bucket savings + the
         output_compression level histogram. Falls back to bucket data
         embedded in stats.json if memory.db is missing or empty.
-        Returns ({bucket: {baseline, served, calls}}, {level: count}).
+        Returns ({bucket: {baseline, served, calls}}, {level: count},
+        last_savings_epoch_or_None).
         """
         from context_engine.memory import db as _memory_db
         db_path = project_dir / "memory.db"
@@ -1406,10 +1604,21 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
                 try:
                     buckets = _memory_db.aggregate_savings(conn)
                     levels = _memory_db.aggregate_output_compression_levels(conn)
+                    # Last savings timestamp for freshness hint
+                    last_ts = None
+                    try:
+                        row = conn.execute(
+                            "SELECT MAX(ts) AS last_ts FROM savings_log "
+                            "WHERE bucket = 'retrieval'"
+                        ).fetchone()
+                        if row and row["last_ts"]:
+                            last_ts = int(row["last_ts"])
+                    except Exception:
+                        pass
                     # Only use if there's actual data
                     total = sum(int(v.get("baseline", 0)) for v in buckets.values())
                     if total > 0:
-                        return buckets, levels
+                        return buckets, levels, last_ts
                 finally:
                     conn.close()
             except Exception:
@@ -1427,22 +1636,25 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
                 }
             total = sum(v["baseline"] for v in buckets.values())
             if total > 0:
-                return buckets, {}
+                # Use stats.json mtime as freshness hint
+                stats_mtime = None
+                try:
+                    stats_mtime = int((project_dir / "stats.json").stat().st_mtime)
+                except OSError:
+                    pass
+                return buckets, {}, stats_mtime
 
-        return empty, {}
+        return empty, {}, None
 
     from context_engine.cli_style import dim, bold
-    from context_engine.pricing import get_model_pricing
+    from context_engine.pricing import resolve_pricing
 
-    _all_pricing = get_model_pricing()
-    _pricing_model = config.pricing_model.lower()
-    _default = _all_pricing.get("opus", {"input": 15.0, "output": 75.0})
-    _model_pricing = _all_pricing.get(_pricing_model, _default)
+    _model_label, _model_pricing = resolve_pricing(config)
     _input_price_per_m = _model_pricing["input"]
     _output_price_per_m = _model_pricing["output"]
     _INPUT_COST = _input_price_per_m / 1_000_000
     _OUTPUT_COST = _output_price_per_m / 1_000_000
-    _model_label = _pricing_model.capitalize()
+    _model_label = _model_label.capitalize()
     _GRID_COLS = 10
     _FILLED = "⛁"
     _EMPTY = "⛶"
@@ -1522,8 +1734,16 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
                 is_ += srv
         return ib, is_, ob, os_
 
-    def _print_project(name: str, stats: dict, buckets: dict, levels: dict) -> None:
-        queries = stats.get("queries", 0)
+    def _print_project(
+        name: str, stats: dict, buckets: dict, levels: dict,
+        last_ts: int | None = None,
+    ) -> None:
+        # Prefer query count from memory.db (retrieval calls) when available.
+        # stats.json queries can go stale if the file isn't updated (e.g.
+        # atomic write fails, or the MCP server writes to a different path).
+        retrieval_calls = int(buckets.get("retrieval", {}).get("calls", 0))
+        stats_queries = stats.get("queries", 0)
+        queries = max(retrieval_calls, stats_queries)
 
         # Prefer canonical bucket totals; fall back to legacy stats.json
         # fields if the project hasn't accumulated any bucket events yet.
@@ -1553,8 +1773,28 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
 
         q_label = "query" if queries == 1 else "queries"
 
+        # Freshness hint so users know when data was last updated
+        freshness = ""
+        if last_ts is not None:
+            import time as _time
+            age = int(_time.time()) - last_ts
+            if age < 60:
+                freshness = "just now"
+            elif age < 3600:
+                freshness = f"{age // 60}m ago"
+            elif age < 86400:
+                freshness = f"{age // 3600}h ago"
+            else:
+                freshness = f"{age // 86400}d ago"
+
         click.echo()
-        click.echo(f"  {bold(name)} {dim('·')} {value(str(queries))} {dim(q_label)}")
+        if freshness:
+            click.echo(
+                f"  {bold(name)} {dim('·')} {value(str(queries))} {dim(q_label)}"
+                f" {dim('·')} {dim(f'last query {freshness}')}"
+            )
+        else:
+            click.echo(f"  {bold(name)} {dim('·')} {value(str(queries))} {dim(q_label)}")
         click.echo()
 
         # Show friendly message when no searches have happened yet.
@@ -1733,9 +1973,11 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             if raw > 0 and served <= raw
             else 0
         )
+        retrieval_calls = int(buckets.get("retrieval", {}).get("calls", 0))
+        queries = max(retrieval_calls, stats.get("queries", 0))
         return {
             "project": name,
-            "queries": stats.get("queries", 0),
+            "queries": queries,
             "full_file_tokens": full_file,
             "raw_tokens": raw,
             "served_tokens": served,
@@ -1764,22 +2006,21 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             key=lambda d: d.name,
         )
     else:
-        project_name = _safe_cwd().name
-        project_dirs = [storage_root / project_name]
+        project_dirs = [project_storage_dir(config, _safe_cwd())]
 
     # Each report carries its bucket totals and level histogram alongside
     # the legacy stats.json so downstream renderers/JSON emitters can
     # pick the canonical source.
-    reports: list[tuple[str, dict, dict, dict]] = []
+    reports: list[tuple[str, dict, dict, dict, int | None]] = []
     for pd in project_dirs:
         stats = _load_stats(pd)
-        buckets, levels = _load_buckets(pd)
+        buckets, levels, last_ts = _load_buckets(pd)
         bucket_baseline = sum(int(v.get("baseline", 0)) for v in buckets.values())
         if stats is not None or bucket_baseline > 0:
             reports.append((pd.name, stats or {
                 "queries": 0, "raw_tokens": 0, "served_tokens": 0,
                 "full_file_tokens": 0,
-            }, buckets, levels))
+            }, buckets, levels, last_ts))
 
     if not reports:
         if as_json:
@@ -1801,16 +2042,17 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
     if as_json:
         if all_projects:
             click.echo(_json.dumps(
-                {"projects": [_json_entry(n, s, b, lv) for n, s, b, lv in reports]},
+                {"projects": [_json_entry(n, s, b, lv) for n, s, b, lv, _ in reports]},
                 indent=2,
             ))
         else:
-            click.echo(_json.dumps(_json_entry(*reports[0]), indent=2))
+            n, s, b, lv, _ = reports[0]
+            click.echo(_json.dumps(_json_entry(n, s, b, lv), indent=2))
         return
 
     # Text output
-    for name, stats, buckets, levels in reports:
-        _print_project(name, stats, buckets, levels)
+    for name, stats, buckets, levels, last_ts in reports:
+        _print_project(name, stats, buckets, levels, last_ts)
         if len(reports) > 1:
             click.echo()
             click.echo("  " + "─" * 52)
@@ -1829,14 +2071,17 @@ def _run_savings_report(config, *, as_json: bool = False, all_projects: bool = F
             if bt > 0:
                 return bt
             return s.get("served_tokens", 0)
-        total_baseline = sum(_proj_baseline(s, b) for _, s, b, _ in reports)
-        total_served = sum(_proj_served(s, b) for _, s, b, _ in reports)
-        total_queries = sum(s.get("queries", 0) for _, s, _, _ in reports)
+        total_baseline = sum(_proj_baseline(s, b) for _, s, b, _, _ in reports)
+        total_served = sum(_proj_served(s, b) for _, s, b, _, _ in reports)
+        total_queries = sum(
+            max(int(b.get("retrieval", {}).get("calls", 0)), s.get("queries", 0))
+            for _, s, b, _, _ in reports
+        )
         total_saved = max(0, total_baseline - total_served)
         total_pct = int(total_saved / total_baseline * 100) if total_baseline > 0 else 0
         # Aggregate input/output across all projects
         all_in_saved = all_out_saved = 0
-        for _, stats, bkts, _ in reports:
+        for _, stats, bkts, _, _ in reports:
             ib, is_, ob, os_ = _split_io(bkts)
             all_in_saved += max(0, ib - is_)
             all_out_saved += max(0, ob - os_)
@@ -1872,7 +2117,7 @@ def clear(ctx: click.Context, yes: bool) -> None:
 
     config = ctx.obj["config"]
     project_name = _safe_cwd().name
-    storage_dir = Path(config.storage_path) / project_name
+    storage_dir = project_storage_dir(config, _safe_cwd())
 
     if not storage_dir.exists():
         animate(["", f"  {DOT} {dim('No index data found for')} {value(project_name)}", ""])
@@ -1889,10 +2134,10 @@ def clear(ctx: click.Context, yes: bool) -> None:
 
     manifest_path = storage_dir / "manifest.json"
     if manifest_path.exists():
-        manifest_path.write_text(json.dumps({"__schema_version": 2, "files": {}}))
+        manifest_path.write_text(json.dumps({"__schema_version": 2, "files": {}}), encoding="utf-8")
 
     stats_path = storage_dir / "stats.json"
-    stats_path.write_text(json.dumps({"queries": 0, "raw_tokens": 0, "served_tokens": 0, "full_file_tokens": 0}))
+    stats_path.write_text(json.dumps({"queries": 0, "raw_tokens": 0, "served_tokens": 0, "full_file_tokens": 0}), encoding="utf-8")
 
     animate([
         "",
@@ -1926,7 +2171,7 @@ def prune(ctx: click.Context, dry_run: bool) -> None:
             kept.append((project_dir.name, "(no meta.json)"))
             continue
         try:
-            meta = json.loads(meta_path.read_text())
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
             source_path = Path(meta.get("project_dir", ""))
         except (json.JSONDecodeError, OSError):
             kept.append((project_dir.name, "(unreadable meta.json)"))
@@ -1975,14 +2220,13 @@ def search(ctx: click.Context, query: str, top_k: int) -> None:
 
     config = ctx.obj["config"]
     project_dir = str(_safe_cwd())
-    project_name = _safe_cwd().name
 
     async def _search():
         from context_engine.storage.local_backend import LocalBackend
         from context_engine.indexer.embedder import Embedder
         from context_engine.retrieval.retriever import HybridRetriever
 
-        storage_dir = Path(config.storage_path) / project_name
+        storage_dir = project_storage_dir(config, _safe_cwd())
         if not (storage_dir / "vectors").exists():
             animate(["", f"  {DOT} {dim('Not indexed yet. Run:')} {label('cce init')}", ""])
             return
@@ -2038,13 +2282,13 @@ def search(ctx: click.Context, query: str, top_k: int) -> None:
             # Update stats
             stats_path = storage_dir / "stats.json"
             try:
-                stats = json.loads(stats_path.read_text()) if stats_path.exists() else {}
+                stats = json.loads(stats_path.read_text(encoding="utf-8")) if stats_path.exists() else {}
             except (json.JSONDecodeError, OSError):
                 stats = {}
             stats["queries"] = stats.get("queries", 0) + 1
             stats["full_file_tokens"] = stats.get("full_file_tokens", 0) + full_file_tokens
             stats["served_tokens"] = stats.get("served_tokens", 0) + served_tokens
-            stats_path.write_text(json.dumps(stats))
+            stats_path.write_text(json.dumps(stats), encoding="utf-8")
 
         lines.append("")
         animate(lines)
@@ -2078,7 +2322,7 @@ def uninstall(yes: bool) -> None:
         for hook_name in ["post-commit", "post-checkout", "post-merge"]:
             hook_file = hooks_dir / hook_name
             if hook_file.exists():
-                content = hook_file.read_text()
+                content = hook_file.read_text(encoding="utf-8")
                 if "cce" in content.lower() or "context-engine" in content.lower():
                     hook_file.unlink()
                     removed_hooks += 1
@@ -2108,14 +2352,14 @@ def uninstall(yes: bool) -> None:
     # so the routing instructions don't get left behind.
     claude_md = project_dir / "CLAUDE.md"
     if claude_md.exists():
-        content = claude_md.read_text()
+        content = claude_md.read_text(encoding="utf-8")
         block = _extract_existing_cce_block(content)
         legacy_begin = "<!-- CCE:BEGIN -->"
         legacy_end = "<!-- CCE:END -->"
         if block is not None:
             new_content = content.replace(block, "", 1).strip()
             if new_content:
-                claude_md.write_text(new_content + "\n")
+                claude_md.write_text(new_content + "\n", encoding="utf-8")
             else:
                 claude_md.unlink()
             lines.append(f"    {CROSS} {warn('Removed')} CCE block from CLAUDE.md")
@@ -2128,7 +2372,7 @@ def uninstall(yes: bool) -> None:
             )
             new_content = (content[:start] + content[end:]).strip()
             if new_content:
-                claude_md.write_text(new_content + "\n")
+                claude_md.write_text(new_content + "\n", encoding="utf-8")
             else:
                 claude_md.unlink()
             lines.append(f"    {CROSS} {warn('Removed')} CCE block from CLAUDE.md")
@@ -2160,7 +2404,7 @@ def uninstall(yes: bool) -> None:
         if not settings_path.exists():
             continue
         try:
-            data = json.loads(settings_path.read_text())
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
             hooks = data.get("hooks", {})
             changed = False
             for event in list(hooks.keys()):
@@ -2183,7 +2427,7 @@ def uninstall(yes: bool) -> None:
                 if not hooks:
                     del data["hooks"]
                 if data:
-                    settings_path.write_text(json.dumps(data, indent=2) + "\n")
+                    settings_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
                 else:
                     settings_path.unlink()
                 # Remove empty .claude directory
@@ -2197,7 +2441,7 @@ def uninstall(yes: bool) -> None:
     # Remove CCE entries from .gitignore (including comment lines)
     gitignore = project_dir / ".gitignore"
     if gitignore.exists():
-        content = gitignore.read_text()
+        content = gitignore.read_text(encoding="utf-8")
         if ".cce" in content or "context-engine" in content.lower() or "cce" in content.lower() or ".claude/settings.local.json" in content:
             # These are the exact entries CCE adds (see project_commands._GITIGNORE_ENTRIES)
             cce_lines = {".cce/", ".claude/settings.local.json"}
@@ -2209,14 +2453,14 @@ def uninstall(yes: bool) -> None:
             ]
             new_content = "\n".join(new_lines).strip()
             if new_content:
-                gitignore.write_text(new_content + "\n")
+                gitignore.write_text(new_content + "\n", encoding="utf-8")
             else:
                 gitignore.unlink()
             lines.append(f"    {CROSS} {warn('Removed')} CCE entries from .gitignore")
 
     # Remove index data from ~/.cce/projects/<project>
     config = load_config()
-    index_dir = Path(config.storage_path) / project_name
+    index_dir = project_storage_dir(config, project_dir)
     if index_dir.exists():
         import shutil
         shutil.rmtree(index_dir)
@@ -2386,10 +2630,14 @@ def savings_shortcut() -> None:
     @click.command()
     @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
     @click.option("--all", "all_projects", is_flag=True, help="Show all projects")
-    def _cmd(as_json: bool, all_projects: bool) -> None:
+    @click.option("--badge", "show_badge", is_flag=True, help="Output a shareable badge")
+    def _cmd(as_json: bool, all_projects: bool, show_badge: bool) -> None:
         """Show CCE token savings — how much context compression is saving you."""
         project_path = _safe_cwd() / PROJECT_CONFIG_NAME
         config = load_config(project_path=project_path if project_path.exists() else None)
+        if show_badge:
+            _print_savings_badge(config)
+            return
         _run_savings_report(config, as_json=as_json, all_projects=all_projects)
 
     _cmd()
@@ -2573,7 +2821,7 @@ def sessions_status(ctx: click.Context) -> None:
 
     config = ctx.obj["config"]
     project_name = _safe_cwd().name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, _safe_cwd())
     db_path = memory_db.memory_db_path(storage_base)
 
     click.echo(f"  project: {project_name}")
@@ -2708,8 +2956,7 @@ def sessions_prune(
     from context_engine.memory import db as memory_db
 
     config = ctx.obj["config"]
-    project_name = _safe_cwd().name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, _safe_cwd())
     sessions_dir = storage_base / "sessions"
 
     if sessions_dir.exists():
@@ -2792,7 +3039,7 @@ def sessions_export(
 
     config = ctx.obj["config"]
     project_name = _safe_cwd().name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, _safe_cwd())
     db_path = memory_db.memory_db_path(storage_base)
     if not db_path.exists():
         click.echo("  No memory.db for this project — nothing to export.")
@@ -2905,7 +3152,7 @@ def sessions_migrate(ctx: click.Context, no_archive: bool) -> None:
 
     config = ctx.obj["config"]
     project_name = _safe_cwd().name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, _safe_cwd())
     db_path = memory_db.memory_db_path(storage_base)
 
     conn = memory_db.connect(db_path)
@@ -3028,16 +3275,16 @@ async def _run_index(
     )
 
     # Update full_file_tokens baseline so cce savings shows codebase size
-    project_name = Path(project_dir).name
-    stats_path = Path(config.storage_path) / project_name / "stats.json"
+    _storage_dir = project_storage_dir(config, Path(project_dir))
+    stats_path = _storage_dir / "stats.json"
     try:
-        stats = json.loads(stats_path.read_text()) if stats_path.exists() else {}
+        stats = json.loads(stats_path.read_text(encoding="utf-8")) if stats_path.exists() else {}
     except (json.JSONDecodeError, OSError):
         stats = {}
     total_tokens = 0
     project_root = Path(project_dir)
     from context_engine.storage.local_backend import LocalBackend
-    backend = LocalBackend(base_path=str(Path(config.storage_path) / project_name))
+    backend = LocalBackend(base_path=str(_storage_dir))
     for rel_path in backend._vector_store.file_chunk_counts():
         fp = project_root / rel_path
         if fp.exists():
@@ -3047,7 +3294,7 @@ async def _run_index(
                 pass
     stats["full_file_tokens"] = total_tokens
     stats_path.parent.mkdir(parents=True, exist_ok=True)
-    stats_path.write_text(json.dumps(stats))
+    stats_path.write_text(json.dumps(stats), encoding="utf-8")
 
 
 async def _run_serve(config) -> None:
@@ -3075,7 +3322,7 @@ async def _run_serve(config) -> None:
 
     project_dir = str(_safe_cwd())
     project_name = _safe_cwd().name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, _safe_cwd())
     backend = LocalBackend(base_path=str(storage_base))
     embedder = Embedder(model_name=config.embedding_model)
     retriever = HybridRetriever(backend=backend, embedder=embedder)

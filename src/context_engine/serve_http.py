@@ -12,6 +12,7 @@ from pathlib import Path
 
 from context_engine.config import load_config, resolve_ollama_url, PROJECT_CONFIG_NAME
 from context_engine.storage.local_backend import LocalBackend
+from context_engine.utils import project_storage_dir
 from context_engine.indexer.embedder import Embedder
 from context_engine.compression.compressor import Compressor
 from context_engine.retrieval.retriever import HybridRetriever
@@ -237,8 +238,7 @@ def run_http_server(config=None, host: str = "127.0.0.1", port: int = 8765) -> N
         project_path = Path.cwd() / PROJECT_CONFIG_NAME
         config = load_config(project_path=project_path if project_path.exists() else None)
 
-    project_name = Path.cwd().name
-    storage_base = Path(config.storage_path) / project_name
+    storage_base = project_storage_dir(config, Path.cwd())
     storage_base.mkdir(parents=True, exist_ok=True)
 
     backend = LocalBackend(base_path=str(storage_base))

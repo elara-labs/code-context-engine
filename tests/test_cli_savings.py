@@ -162,3 +162,57 @@ def test_savings_all_projects_empty(runner, tmp_path):
             result = runner.invoke(main, ["savings", "--all"])
     assert result.exit_code == 0
     assert "No usage recorded" in result.output
+
+
+def test_savings_badge_with_data(runner, stats_dir):
+    """--badge outputs Markdown badge and shields.io URL."""
+    storage_path, project_name = stats_dir
+    result = _invoke_savings(runner, storage_path, project_name, "--badge")
+    assert result.exit_code == 0
+    assert "shields.io" in result.output
+    assert "![" in result.output  # Markdown badge syntax
+    assert "CCE" in result.output
+
+
+def test_savings_badge_no_data(runner, tmp_path):
+    """--badge with no data prints a helpful message instead of a badge."""
+    config = Config(storage_path=str(tmp_path))
+    from unittest.mock import patch
+    with runner.isolated_filesystem():
+        cwd = Path.cwd() / "empty-project"
+        cwd.mkdir()
+        with patch("context_engine.cli.load_config", return_value=config), \
+             patch("context_engine.cli.Path.cwd", return_value=cwd):
+            result = runner.invoke(main, ["savings", "--badge"])
+    assert result.exit_code == 0
+    assert "No savings data" in result.output
+
+
+def test_savings_shortcut_badge(runner, stats_dir):
+    """cce-savings --badge shortcut also outputs a shields.io badge."""
+    from unittest.mock import patch
+
+    storage_path, project_name = stats_dir
+    config = Config(storage_path=str(storage_path))
+
+    import click
+    with runner.isolated_filesystem():
+        cwd_path = Path.cwd() / project_name
+        cwd_path.mkdir(parents=True, exist_ok=True)
+
+        @click.command()
+        @click.option("--json", "as_json", is_flag=True)
+        @click.option("--all", "all_projects", is_flag=True)
+        @click.option("--badge", "show_badge", is_flag=True)
+        def _cmd(as_json, all_projects, show_badge):
+            from context_engine.cli import _print_savings_badge, _run_savings_report
+            if show_badge:
+                _print_savings_badge(config)
+                return
+            _run_savings_report(config, as_json=as_json, all_projects=all_projects)
+
+        with patch("context_engine.cli.Path.cwd", return_value=cwd_path):
+            result = runner.invoke(_cmd, ["--badge"])
+
+    assert result.exit_code == 0
+    assert "shields.io" in result.output

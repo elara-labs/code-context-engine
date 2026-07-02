@@ -66,49 +66,38 @@
 
 ## Quick start
 
+One command. 30 seconds.
+
+```bash
+uvx --from "code-context-engine[local]" cce init    # install + index + configure, one shot
+```
+
+Or if you prefer a persistent install:
+
 ```bash
 uv tool install "code-context-engine[local]"    # or: pipx install "code-context-engine[local]"
 cd /path/to/your/project
-cce init                                        # or: cce init --agent all
-```
-
-That's it. Your AI coding agent now searches your index instead of reading entire files.
-
-> **Already have Ollama?** You can skip `[local]` and use `uv tool install code-context-engine` instead. CCE auto-detects Ollama at localhost:11434 and uses `nomic-embed-text`.
-
----
-
-## System requirements
-
-- Python 3.11+ (tested on 3.11, 3.12, 3.13)
-- A C compiler and `cmake` (needed to build tree-sitter grammars)
-
-| Platform | Setup |
-|----------|-------|
-| **macOS** | `xcode-select --install` (provides compiler and cmake) |
-| **Ubuntu/Debian** | `sudo apt install build-essential cmake` |
-| **Fedora/RHEL** | `sudo dnf install gcc gcc-c++ cmake` |
-| **Windows** | Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (C++ workload) and [CMake](https://cmake.org/download/) |
-
-Tested on all three platforms in CI (macOS, Linux, Windows × Python 3.11/3.12/3.13).
-
-## Install and see savings in 60 seconds
-
-You need an embedding backend to index code. Pick one:
-
-| Option | Install command | Size | Requires |
-|--------|----------------|------|----------|
-| **Local (recommended)** | `uv tool install "code-context-engine[local]"` | +60 MB | Nothing else |
-| **Ollama** | `uv tool install code-context-engine` | Core only | Ollama running + `nomic-embed-text` pulled |
-
-Then:
-
-```bash
-cd /path/to/your/project
-cce init                              # index, install hooks, register MCP server
+cce init
 ```
 
 Restart your editor. Done. Every question now hits the index instead of re-reading files.
+
+> **Already have Ollama?** Skip `[local]` and use `uv tool install code-context-engine` instead. CCE auto-detects Ollama at localhost:11434 and uses `nomic-embed-text`.
+
+<details>
+<summary><strong>System requirements</strong></summary>
+
+Python 3.11+ and a C compiler (for tree-sitter grammars).
+
+| Platform | Setup |
+|----------|-------|
+| **macOS** | `xcode-select --install` |
+| **Ubuntu/Debian** | `sudo apt install build-essential cmake` |
+| **Fedora/RHEL** | `sudo dnf install gcc gcc-c++ cmake` |
+| **Windows** | [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (C++ workload) + [CMake](https://cmake.org/download/) |
+
+Tested on macOS, Linux, Windows with Python 3.11/3.12/3.13.
+</details>
 
 `cce init` auto-detects your editor and writes the right config. To target a
 specific agent, use `--agent claude`, `--agent codex`, `--agent copilot`, or
@@ -132,17 +121,24 @@ section per project so multiple projects coexist; `cce uninstall` removes only
 the section for the current project.
 
 ```
-  my-project · 38 queries
+  my-project · 38 queries · last query 5m ago
 
-  ⛁ ⛁ ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶  94% tokens saved
+  ⛁ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶  88% tokens saved
 
-  Without CCE   48.0k  tokens   $0.14
-  With CCE       3.4k  tokens   $0.01
+  Input savings   1.9M  tokens   $27.78
+  Output savings  4.8k  tokens   $0.36
   ──────────────────────────────────────────
-  Saved         44.6k  tokens   $0.13
+  Total saved   1.9M  tokens   $28.15
 
-  Cost estimate based on Sonnet input pricing ($3/1M tokens)
+  Breakdown:
+    retrieval              84%  ▰▰▰▰▰▰▰▰▰▰    1.8M   $26.76 · 12 calls
+    chunk compression       3%  ▰▱▱▱▱▱▱▱▱▱   68.5k    $1.03 · 12 calls
+    output compression*    <1%  ▰▱▱▱▱▱▱▱▱▱    4.8k    $0.36 · 12 calls
+
+  Cost estimate based on Opus pricing (input $15.0/1M, output $75.0/1M)
 ```
+
+Supports Anthropic, OpenAI, and Google model pricing. Configure via `pricing.model` in `~/.cce/config.yaml`.
 
 ---
 
@@ -236,7 +232,7 @@ cce dashboard
 
 ![CCE Dashboard](https://raw.githubusercontent.com/elara-labs/code-context-engine/main/docs/dashboard.png)
 
-**Dollar estimates** fetched from live Anthropic pricing:
+**Dollar estimates** with multi-provider pricing (Anthropic, OpenAI, Google):
 
 ```bash
 cce savings --all    # see savings across all projects
@@ -244,15 +240,7 @@ cce savings --all    # see savings across all projects
 
 ---
 
-## How is CCE different?
-
-CCE is editor-agnostic, local-first, and gives you measurable token savings. Your code never leaves your machine. Unlike built-in indexing (Cursor, Continue), CCE works across Claude Code, VS Code, Cursor, Gemini CLI, and Codex with a single index. Unlike cloud tools (Greptile), it's free and private.
-
-See the [full comparison with alternatives](docs/comparison.md) for an honest look at trade-offs.
-
----
-
-## How it works (the short version)
+## How it works
 
 1. **Index:** Tree-sitter parses your code into semantic chunks (functions, classes, modules). Stored as vector embeddings locally.
 2. **Search:** Claude calls `context_search`. Hybrid vector + BM25 retrieval finds the right chunks. Code graph adds related files automatically.
@@ -317,9 +305,9 @@ Memory entries compressed without LLM calls. Drops articles, fillers, pronouns. 
 </details>
 
 <details>
-<summary><strong>Dynamic Pricing</strong></summary>
+<summary><strong>Multi-Provider Pricing</strong></summary>
 
-Dollar estimates in `cce savings` come from live Anthropic pricing (HTML table parsed, cached 7 days, offline fallback). No manual updates when rates change.
+Dollar estimates in `cce savings` support 15+ models across Anthropic, OpenAI, and Google. Static pricing ships with CCE, live Anthropic pricing is fetched and cached 7 days. Configure `pricing.model` (e.g. `gpt-4o`, `gemini-2.5-pro`, `sonnet`) or override with `pricing.input` / `pricing.output` for custom rates.
 </details>
 
 <details>
@@ -364,7 +352,9 @@ retrieval:
   confidence_threshold: 0.5
 
 pricing:
-  model: sonnet            # sonnet | opus | haiku
+  model: opus              # opus | sonnet | haiku | gpt-4o | gemini-2.5-pro | ...
+  # input: 15.0            # override $/1M input tokens
+  # output: 75.0           # override $/1M output tokens
 ```
 
 **Remote Ollama:** If you run Ollama on another machine in your network, set `compression.ollama_url` (e.g. `http://nas.local:11434`) or export `CCE_OLLAMA_URL` — the env var wins. CCE probes the endpoint and falls back to truncation-only compression when it's unreachable, so a flaky link won't break indexing.
@@ -434,6 +424,7 @@ All other text files are chunked by line range. Binary files are skipped.
 
 | Page | Content |
 |------|---------|
+| [How Much Are You Spending on AI Coding Tokens?](https://elara-labs.github.io/code-context-engine/blog/real-cost-of-ai-coding-tokens.html) | The math on input vs output tokens |
 | [What is CCE? (Complete Guide)](https://elara-labs.github.io/code-context-engine/blog/what-is-code-context-engine.html) | Setup, tools, how it works, FAQ |
 | [How to Save Claude Code Tokens](https://elara-labs.github.io/code-context-engine/blog/save-claude-code-tokens.html) | Cost breakdown and savings guide |
 | [Benchmark Deep Dive](https://elara-labs.github.io/code-context-engine/blog/benchmark-fastapi.html) | Full FastAPI benchmark methodology |
@@ -457,7 +448,7 @@ CCE replaces "dump the entire file" with "search for the relevant function." The
 
 CCE writes output compression rules directly into your agent's instruction files (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, etc.) during `cce init`. These rules apply to the **entire session**, not just CCE tool responses, so every reply from the agent follows them.
 
-Set the level in `cce.yaml`:
+Set the level in `~/.cce/config.yaml` or `.context-engine.yaml`:
 
 ```yaml
 compression:

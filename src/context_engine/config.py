@@ -95,6 +95,8 @@ class Config:
 
     # Pricing (for savings estimates)
     pricing_model: str = "opus"
+    pricing_input: float | None = None   # $/1M input tokens override
+    pricing_output: float | None = None  # $/1M output tokens override
 
     # Storage
     storage_path: str = str(_CCE_HOME / "projects")
@@ -137,6 +139,8 @@ _EXPECTED_TYPES: dict[str, type | tuple[type, ...]] = {
     "audit_log_enabled": bool,
     "storage_path": str,
     "pricing_model": str,
+    "pricing_input": (int, float, type(None)),
+    "pricing_output": (int, float, type(None)),
 }
 
 
@@ -159,6 +163,8 @@ def _apply_dict_to_config(config: Config, data: dict) -> None:
         ("audit", "enabled"): "audit_log_enabled",
         ("storage", "path"): "storage_path",
         ("pricing", "model"): "pricing_model",
+        ("pricing", "input"): "pricing_input",
+        ("pricing", "output"): "pricing_output",
     }
     for (section, key), attr in mapping.items():
         if section in data and isinstance(data[section], dict) and key in data[section]:

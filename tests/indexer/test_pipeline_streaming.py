@@ -9,7 +9,6 @@ ingested before the next batch is read.
 """
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -81,7 +80,8 @@ async def test_streaming_preserves_total_chunk_count(many_file_project):
 
     result = await run_indexing(config, str(project_dir), full=True)
 
-    storage = Path(config.storage_path) / project_dir.name
+    from context_engine.utils import project_storage_dir
+    storage = project_storage_dir(config, project_dir)
     backend = LocalBackend(base_path=str(storage))
     assert backend.count_chunks() == result.total_chunks
     # 120 single-function files → 120 function chunks (plus possibly module
