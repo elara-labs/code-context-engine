@@ -8,6 +8,7 @@ coexistence, legacy migration, and Windows-path TOML escaping.
 from __future__ import annotations
 
 import json
+import sys
 import tomllib
 from unittest.mock import patch
 
@@ -83,11 +84,13 @@ def test_slug_resolves_symlinks(tmp_path):
     link = tmp_path / "link"
     try:
         link.symlink_to(real)
-    except OSError:
-        pytest.fail(
-            "symlink_to failed — enable Windows Developer Mode or run as admin "
-            "to test symlink resolution"
-        )
+    except OSError as e:
+        if sys.platform == "win32" and getattr(e, "winerror", None) == 1314:
+            pytest.fail(
+                "symlink_to failed — enable Windows Developer Mode or run as admin "
+                "to test symlink resolution"
+            )
+        raise
     assert _project_slug(real) == _project_slug(link)
 
 
