@@ -7,6 +7,8 @@ coexistence, legacy migration, and Windows-path TOML escaping.
 """
 from __future__ import annotations
 
+import json
+import sys
 import tomllib
 from unittest.mock import patch
 
@@ -73,6 +75,7 @@ def test_slug_differs_for_same_basename_in_different_paths(tmp_path):
     assert _project_slug(a) != _project_slug(b)
 
 
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="symlink requires Developer Mode or admin on Windows")
 def test_slug_resolves_symlinks(tmp_path):
     """Two paths pointing at the same on-disk directory (one via symlink)
     should produce the same slug — so re-running cce init via a symlinked
@@ -274,7 +277,7 @@ def test_legacy_section_is_migrated_to_per_project(fake_home, project_dir):
     user_config.write_text(
         '[mcp_servers.context-engine]\n'
         'command = "/old/cce"\n'
-        f'args = ["serve", "--project-dir", "{project_dir}"]\n'
+        f'args = {json.dumps(["serve", "--project-dir", str(project_dir)])}\n'
     )
     with patch("context_engine.editors.resolve_cce_binary", return_value="/usr/bin/cce"):
         configure_mcp(project_dir, "codex")
@@ -392,7 +395,8 @@ def test_configure_preserves_user_header_comment(fake_home, project_dir):
         "\n"
         '[mcp_servers.linear]\n'
         'command = "linear-mcp"\n'
-        'args = []\n'
+        'args = []\n',
+        encoding="utf-8"
     )
     with patch("context_engine.editors.resolve_cce_binary", return_value="/usr/bin/cce"):
         configure_mcp(project_dir, "codex")
