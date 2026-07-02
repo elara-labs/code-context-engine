@@ -15,6 +15,7 @@ from context_engine.storage.local_backend import LocalBackend
 from context_engine.utils import project_storage_dir
 from context_engine.indexer.embedder import Embedder
 from context_engine.compression.compressor import Compressor
+from context_engine.retrieval.retriever import HybridRetriever
 from context_engine.models import Chunk, ChunkType, GraphNode, GraphEdge, NodeType, EdgeType
 
 try:
@@ -27,6 +28,9 @@ except ImportError as e:
 
 
 _MAX_REQUEST_BYTES = 10 * 1024 * 1024  # 10 MB — generous for bulk ingest, not unbounded
+# Mirror the MCP server's guard (mcp_server._MAX_QUERY_CHARS) so a buggy or
+# malicious client can't submit a multi-MB query string for embedding.
+_MAX_QUERY_CHARS = 10_000
 _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
@@ -35,6 +39,7 @@ class ContextEngineHTTP:
         self.backend = backend
         self.embedder = embedder
         self.compressor = compressor
+        self.retriever = HybridRetriever(backend=backend, embedder=embedder)
 
     async def handle_vector_search(self, request: web.Request) -> web.Response:
         data = await _read_json(request)
@@ -88,6 +93,51 @@ class ContextEngineHTTP:
             return web.json_response({"error": "invalid file_path"}, status=400)
         await self.backend.delete_by_file(file_path)
         return web.json_response({"ok": True})
+
+    async def handle_search(self, request: web.Request) -> web.Response:
+        data = await _read_json(request)
+        query = (data.get("query") or "").strip()
+        if not query:
+            return web.json_response({"error": "query cannot be empty"}, status=400)
+        if len(query) > _MAX_QUERY_CHARS:
+            return web.json_response(
+                {"error": f"query too long (max {_MAX_QUERY_CHARS} characters)"},
+                status=400,
+            )
+        # Validate + clamp: non-numeric input would otherwise raise ValueError and
+        # surface as a 400 "missing field" via the generic handler; clamp to the same
+        # ranges the MCP context_search handler uses.
+        try:
+            top_k = max(1, min(int(data.get("top_k", 10)), 100))
+            confidence_threshold = max(0.0, min(float(data.get("confidence_threshold", 0.2)), 1.0))
+        except (TypeError, ValueError):
+            return web.json_response(
+                {"error": "top_k must be an int and confidence_threshold a float"},
+                status=400,
+            )
+        # NOTE: unlike the MCP context_search handler, this endpoint does not call
+        # _record(), so queries via /search are not reflected in `cce savings`.
+        chunks = await self.retriever.retrieve(
+            query,
+            top_k=top_k,
+            confidence_threshold=confidence_threshold,
+        )
+        return web.json_response({
+            "results": [
+                {
+                    "id": c.id,
+                    "file_path": c.file_path,
+                    "start_line": c.start_line,
+                    "end_line": c.end_line,
+                    "content": c.content,
+                    "chunk_type": c.chunk_type.value,
+                    "language": c.language,
+                    "confidence_score": getattr(c, "confidence_score", None),
+                    "metadata": c.metadata,
+                }
+                for c in chunks
+            ]
+        })
 
     async def handle_health(self, request: web.Request) -> web.Response:
         return web.json_response({"status": "ok"})
@@ -172,6 +222,7 @@ def create_app(backend, embedder, compressor, *, api_token: str | None = None) -
         middlewares=[_make_auth_middleware(api_token), _error_middleware],
     )
     app.router.add_get("/health", handler.handle_health)
+    app.router.add_post("/search", handler.handle_search)
     app.router.add_post("/vector_search", handler.handle_vector_search)
     app.router.add_post("/fts_search", handler.handle_fts_search)
     app.router.add_post("/chunks_by_ids", handler.handle_chunks_by_ids)
