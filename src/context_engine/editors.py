@@ -167,11 +167,6 @@ INSTRUCTION_FILES: dict[str, dict] = {
         "path": "TABNINE.md",
         "detect": [".tabnine", "TABNINE.md"],
     },
-    "pi": {
-        "name": "AGENTS.md",
-        "path": "AGENTS.md",
-        "detect": [".pi"],
-    },
 }
 
 

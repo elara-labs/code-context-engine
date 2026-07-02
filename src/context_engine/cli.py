@@ -816,7 +816,7 @@ _INIT_EDITOR_TO_INSTRUCTIONS = {
     "cursor": "cursorrules",
     "gemini": "gemini",
     "tabnine": "tabnine",
-    "pi": "pi",
+    "pi": "agents",
 }
 
 
@@ -826,7 +826,7 @@ def _init_editor_targets(project_dir: Path, agent: str) -> set[str]:
     - `all`: every editor in EDITORS (computed at call time so the set never
       drifts when new editors are added).
     - `auto`: Claude plus any editor whose project/home markers exist.
-    - explicit (`claude`/`codex`/`copilot`): exactly the editors that flag
+    - explicit (`claude`/`codex`/`copilot`/`pi`): exactly the editors that flag
       maps to.
     """
     from context_engine.editors import EDITORS, detect_editors
@@ -853,7 +853,7 @@ def _init_instruction_targets(editor_targets: set[str]) -> set[str]:
     type=click.Choice(_INIT_AGENT_CHOICES),
     default="auto",
     show_default=True,
-    help="Agent/editor target: auto, claude, codex, copilot, or all.",
+    help="Agent/editor target: auto, claude, codex, copilot, pi, or all.",
 )
 @click.pass_context
 def init(ctx: click.Context, agent: str) -> None:
