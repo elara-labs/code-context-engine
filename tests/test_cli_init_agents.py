@@ -16,6 +16,131 @@ async def _noop_index(*args, **kwargs):
     return None
 
 
+def test_init_pi_writes_config_and_agents_md(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.setattr("context_engine.cli._preflight_check", lambda config: None)
+    monkeypatch.setattr("context_engine.cli._run_index", _noop_index)
+    monkeypatch.chdir(project)
+
+    runner = CliRunner()
+    with patch("context_engine.editors.resolve_cce_binary", return_value="/usr/bin/cce"):
+        result = runner.invoke(main, ["init", "--agent", "pi"], catch_exceptions=False, obj={})
+
+    assert result.exit_code == 0
+
+    # MCP config: uses same .mcp.json / mcpServers format as Claude Code
+    mcp = json.loads((project / ".mcp.json").read_text())
+    assert mcp["mcpServers"]["context-engine"]["command"] == "/usr/bin/cce"
+    assert mcp["mcpServers"]["context-engine"]["args"] == ["serve", "--project-dir", str(project)]
+
+    # Instruction file: AGENTS.md (which pi auto-loads)
+    assert (project / "AGENTS.md").exists()
+    assert "Context Engine (CCE)" in (project / "AGENTS.md").read_text()
+
+    # No CLAUDE.md or other editor-specific instruction files
+    assert not (project / "CLAUDE.md").exists()
+    assert not (project / ".github" / "copilot-instructions.md").exists()
+    assert not (project / ".cursorrules").exists()
+    assert not (project / "opencode.json").exists()
+
+
+def test_init_pi_does_not_write_claude_specific_content(tmp_path, monkeypatch):
+    """`--agent pi` must NOT write CLAUDE.md or install Claude-specific
+    session hooks / memory hooks — those are Claude-only features."""
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.setattr("context_engine.cli._preflight_check", lambda config: None)
+    monkeypatch.setattr("context_engine.cli._run_index", _noop_index)
+    monkeypatch.chdir(project)
+
+    runner = CliRunner()
+    with patch("context_engine.editors.resolve_cce_binary", return_value="/usr/bin/cce"):
+        result = runner.invoke(main, ["init", "--agent", "pi"], catch_exceptions=False, obj={})
+
+    assert result.exit_code == 0
+    assert not (project / "CLAUDE.md").exists()
+    assert not (project / ".claude" / "settings.local.json").exists()
+
+
+def test_init_pi_target_resolves_to_pi_only():
+    assert _init_editor_targets(Path("/tmp/anywhere"), "pi") == {"pi"}
+
+
+def test_init_auto_detects_pi_dir(tmp_path, monkeypatch):
+    """`cce init` in auto mode with `.pi/` present must detect Pi and
+    write both `.mcp.json` and `AGENTS.md`."""
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / ".pi").mkdir()
+    (project / ".mcp.json").write_text("{}")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.setattr("context_engine.cli._preflight_check", lambda config: None)
+    monkeypatch.setattr("context_engine.cli._run_index", _noop_index)
+    monkeypatch.setattr("context_engine.cli._check_memory_capture_reachable", lambda config, project: None)
+    monkeypatch.setattr("context_engine.cli._ensure_session_hook", lambda project: None)
+    monkeypatch.setattr("context_engine.cli._install_memory_hooks", lambda project: None)
+    monkeypatch.chdir(project)
+
+    runner = CliRunner()
+    with patch("context_engine.editors.resolve_cce_binary", return_value="/usr/bin/cce"), patch(
+        "context_engine.utils.resolve_cce_binary", return_value="/usr/bin/cce"
+    ):
+        result = runner.invoke(main, ["init"], catch_exceptions=False, obj={})
+
+    assert result.exit_code == 0
+    assert (project / ".mcp.json").exists()
+    assert (project / "AGENTS.md").exists()
+    assert "Context Engine (CCE)" in (project / "AGENTS.md").read_text()
+
+
+def test_init_pi_then_uninstall_cleans_up(tmp_path, monkeypatch):
+    """After `cce init --agent pi`, running `cce uninstall --yes` must
+    remove `.mcp.json` and the CCE block from `AGENTS.md`."""
+    from context_engine.config import Config
+    from click.testing import CliRunner
+
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / ".pi").mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.setattr("context_engine.cli._preflight_check", lambda config: None)
+    monkeypatch.setattr("context_engine.cli._run_index", _noop_index)
+    monkeypatch.chdir(project)
+
+    # Init pi
+    runner = CliRunner()
+    with patch("context_engine.editors.resolve_cce_binary", return_value="/usr/bin/cce"):
+        result = runner.invoke(main, ["init", "--agent", "pi"], catch_exceptions=False, obj={})
+    assert result.exit_code == 0
+    assert (project / ".mcp.json").exists()
+    assert (project / "AGENTS.md").exists()
+    assert "Context Engine (CCE)" in (project / "AGENTS.md").read_text()
+
+    # Uninstall
+    config = Config(storage_path=str(tmp_path / "storage"))
+    with patch("context_engine.cli.load_config", return_value=config), patch(
+        "context_engine.editors.resolve_cce_binary", return_value="/usr/bin/cce"
+    ):
+        result = runner.invoke(main, ["uninstall", "--yes"], catch_exceptions=False, obj={})
+
+    assert result.exit_code == 0
+    # AGENTS.md is removed when it contained only the CCE block
+    assert not (project / "AGENTS.md").exists()
+    # .mcp.json is removed when it contained only the CCE entry
+    assert not (project / ".mcp.json").exists()
+
+
 def test_init_all_targets_every_known_editor():
     from context_engine.editors import EDITORS
     assert _init_editor_targets(Path("/tmp/anywhere"), "all") == set(EDITORS.keys())
