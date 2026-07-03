@@ -40,6 +40,7 @@ class HybridRetriever:
         top_k: int = 10,
         confidence_threshold: float = 0.0,
         max_tokens: int | None = None,
+        marginal_ratio: float = 0.0,
     ) -> list[Chunk]:
         parsed = self._parser.parse(query)
         query_embedding = self._embedder.embed_query(query)
@@ -144,18 +145,27 @@ class HybridRetriever:
             final_score = self._apply_path_penalty(chunk.file_path, final_score)
             chunk.confidence_score = final_score
 
-            if final_score >= confidence_threshold:
-                scored.append((chunk, final_score))
+            scored.append((chunk, final_score))
 
         scored.sort(key=lambda x: x[1], reverse=True)
         scored = self._dedupe_overlaps(scored)
 
+        # Confidence cutoff with a top-1 guarantee: an over-tight threshold
+        # must never turn a matching query into an empty result.
+        filtered = [(c, s) for c, s in scored if s >= confidence_threshold]
+        if not filtered and scored:
+            filtered = scored[:1]
+        scored = filtered
+
         # File diversity: cap chunks per file so one large file doesn't
         # dominate the result set. This improves precision by letting
         # chunks from more files surface into the top-k.
+        top_score = scored[0][1] if scored else 0.0
         file_counts: dict[str, int] = {}
         diverse: list[Chunk] = []
-        for chunk, _ in scored:
+        for chunk, score in scored:
+            if diverse and marginal_ratio > 0 and score < marginal_ratio * top_score:
+                break
             count = file_counts.get(chunk.file_path, 0)
             if count < _MAX_CHUNKS_PER_FILE:
                 diverse.append(chunk)

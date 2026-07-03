@@ -193,3 +193,52 @@ def test_dedupe_overlaps_keeps_disjoint_ranges():
     ]
     kept = HybridRetriever._dedupe_overlaps(scored)
     assert len(kept) == 2
+
+
+# ---------------------------------------------------------------------------
+# Marginal-utility stop + top-1 guarantee
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def retriever_factory():
+    """Stub retriever whose last chunk is vector-only (not in FTS).
+
+    That creates a meaningful RRF gap: the top chunks appear in both vector
+    and FTS (doubling their RRF score) while the tail chunk only gets half
+    the RRF credit, driving its final blended score below 0.5 * top_score
+    when combined with a high cosine distance.
+    """
+    def make(distances):
+        chunks = [_mk_chunk(f"cm{i}", distance=d) for i, d in enumerate(distances)]
+        # All but the last chunk appear in FTS — gives them a 2x RRF boost
+        # relative to the last chunk, which is vector-only.
+        fts_results = [(c.id, -float(i)) for i, c in enumerate(chunks[:-1])]
+        backend = _StubBackend(
+            vector_chunks=chunks,
+            fts_results=fts_results,
+            hydrated={},
+        )
+        return HybridRetriever(backend=backend, embedder=_StubEmbedder()), chunks
+    return make
+
+
+@pytest.mark.asyncio
+async def test_marginal_ratio_stops_low_value_tail(retriever_factory):
+    # Three vector hits: first two appear in both vector+FTS (high RRF),
+    # third is vector-only with high distance (low conf + low RRF).
+    # With marginal_ratio=0.5 the third (score < 0.5 * top) is dropped.
+    retriever, chunks = retriever_factory(distances=[0.1, 0.3, 1.8])
+    results = await retriever.retrieve("query", top_k=10, marginal_ratio=0.5)
+    assert len(results) == 2
+
+    all_results = await retriever.retrieve("query", top_k=10, marginal_ratio=0.0)
+    assert len(all_results) == 3  # 0 disables the stop
+
+
+@pytest.mark.asyncio
+async def test_top1_guarantee_when_threshold_filters_everything(retriever_factory):
+    retriever, chunks = retriever_factory(distances=[1.6, 1.8])
+    results = await retriever.retrieve(
+        "query", top_k=10, confidence_threshold=0.99
+    )
+    assert len(results) == 1  # best candidate survives an over-tight threshold

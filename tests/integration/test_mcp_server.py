@@ -141,3 +141,43 @@ async def test_index_status_with_tracked_stats(tmp_path):
     assert "400" in text     # served
     assert "600" in text     # saved
     assert "60%" in text
+
+
+@pytest.mark.asyncio
+async def test_context_search_appends_omitted_note_when_results_below_top_k(tmp_path):
+    """When retrieve() returns fewer results than retrieval_top_k, a note is appended."""
+    from unittest.mock import AsyncMock
+    from context_engine.models import Chunk, ChunkType
+
+    server = _make_server(tmp_path)
+
+    stub_chunk = Chunk(
+        id="c1", content="def foo(): pass",
+        chunk_type=ChunkType.FUNCTION, file_path="src/foo.py",
+        start_line=1, end_line=1, language="python",
+    )
+    stub_chunk.confidence_score = 0.8
+
+    server._retriever = MagicMock()
+    server._retriever.retrieve = AsyncMock(return_value=[stub_chunk])
+    server._compressor = MagicMock()
+    server._compressor.compress = AsyncMock(return_value=[stub_chunk])
+    server._session_capture = MagicMock()
+    server._session_capture.touch_files = MagicMock()
+    server._persist_current_session = MagicMock()
+    server._record = MagicMock()
+    server._append_audit_log = MagicMock()
+    server._ensure_indexed = AsyncMock(return_value=True)
+
+    # retrieval_top_k=5, but only 1 chunk returned → note should appear
+    server._config.retrieval_top_k = 5
+    server._config.retrieval_confidence_threshold = 0.99
+    server._config.retrieval_marginal_ratio = 0.5
+    server._config.output_compression = "off"
+    server._output_level = "off"
+    server._project_name = "test-project"
+    server._session_id = "test-session"
+
+    result = await server._handle_context_search({"query": "find something", "top_k": 5})
+    text = result[0].text
+    assert "lower-confidence results omitted" in text

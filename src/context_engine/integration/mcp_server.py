@@ -976,6 +976,7 @@ class ContextEngineMCP:
             query,
             top_k=top_k * 2,
             confidence_threshold=self._config.retrieval_confidence_threshold,
+            marginal_ratio=self._config.retrieval_marginal_ratio,
             max_tokens=None,
         )
         all_chunks = await self._compressor.compress(all_chunks, self._config.compression_level)
@@ -1026,6 +1027,12 @@ class ContextEngineMCP:
 
         body = _format_results_with_overflow(inline_chunks, overflow_chunks)
         body = self._apply_output_compression(body)
+        if len(all_chunks) < self._config.retrieval_top_k:
+            note = (
+                "[note: lower-confidence results omitted — raise top_k or "
+                "lower retrieval.confidence_threshold to include them]"
+            )
+            body = body + "\n" + note
         self._record(raw_tokens, served_tokens, full_file_tokens)
         # Compliance audit log — file:line refs of every served chunk + the
         # score range. Off by default; enable via config.audit_log_enabled.
