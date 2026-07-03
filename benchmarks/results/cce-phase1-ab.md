@@ -54,6 +54,23 @@
 - `marginal_ratio=0.75` is the minimum value that clears the 25% gate. `0.80` provides more reduction (37.6%) with the same hit rate, but `0.75` was chosen as the conservative minimum-passing value.
 - The brief's tuning ladder (tries 0.5, 0.6) did not cover the actual operating range of this corpus (needed 0.75+). Extended ladder runs (0.70, 0.75, 0.80) were added to find the gate-passing threshold.
 
+### Limitations of this evidence
+
+- **The 0.75 default sits on a cliff, not a plateau.** The reduction curve is
+  0.70 → 5.2%, 0.75 → 26.1%, 0.80 → 37.6% — a 21-point jump across one step.
+  Because the marginal stop cuts relative to the corpus's score distribution,
+  a project whose score floor sits slightly higher (e.g. 0.77 instead of
+  0.70) would see little or no reduction at 0.75, and one with a wider spread
+  could see much more. Treat 0.75 as a starting default, not stable guidance;
+  it is tunable per project via `retrieval.marginal_ratio`.
+- **Sample size: 8 queries, one corpus (this repo).** The gate verdict is
+  real but narrow. Re-validate on at least one external corpus (the existing
+  `fastapi`/`chi`/`fiber` query sets) before citing these numbers in docs or
+  README.
+- Run 1's baseline total (32,026) differs from later runs (32,138) by 112
+  tokens — the index was rebuilt between runs 1 and 2. The winning run's
+  numbers are internally consistent (per-row sums verified).
+
 ## Config Changes Applied
 
 - `src/context_engine/config.py`: `retrieval_marginal_ratio` updated `0.5 → 0.75`
