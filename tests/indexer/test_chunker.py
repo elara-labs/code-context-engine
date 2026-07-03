@@ -34,6 +34,44 @@ class Animal {
 }
 '''
 
+CSHARP_CODE = '''
+using System;
+using System.Collections.Generic;
+
+namespace Shop.Payments
+{
+    public interface IPaymentGateway
+    {
+        Receipt Charge(decimal amount);
+    }
+
+    public record Receipt(string Id, decimal Amount);
+
+    public enum PaymentStatus
+    {
+        Pending,
+        Completed
+    }
+
+    public struct Money
+    {
+        public decimal Amount;
+    }
+
+    public class StripeGateway : IPaymentGateway
+    {
+        public Receipt Charge(decimal amount)
+        {
+            decimal ApplyFee(decimal baseAmount)
+            {
+                return baseAmount * 1.029m;
+            }
+            return new Receipt(Guid.NewGuid().ToString(), ApplyFee(amount));
+        }
+    }
+}
+'''
+
 def test_chunk_python_functions(chunker):
     chunks = chunker.chunk(PYTHON_CODE, file_path="calc.py", language="python")
     function_chunks = [c for c in chunks if c.chunk_type == ChunkType.FUNCTION]
@@ -60,6 +98,24 @@ def test_chunk_javascript(chunker):
     function_chunks = [c for c in chunks if c.chunk_type == ChunkType.FUNCTION]
     assert len(function_chunks) >= 1
 
+def test_chunk_csharp_functions(chunker):
+    chunks = chunker.chunk(CSHARP_CODE, file_path="Payments.cs", language="csharp")
+    function_chunks = [c for c in chunks if c.chunk_type == ChunkType.FUNCTION]
+    # Charge method, interface method signature, and ApplyFee local function
+    assert len(function_chunks) >= 3
+
+def test_chunk_csharp_types(chunker):
+    chunks = chunker.chunk(CSHARP_CODE, file_path="Payments.cs", language="csharp")
+    class_chunks = [c for c in chunks if c.chunk_type == ChunkType.CLASS]
+    # class, interface, record, enum, struct each become their own chunk
+    assert len(class_chunks) >= 5
+    contents = " ".join(c.content for c in class_chunks)
+    assert "interface IPaymentGateway" in contents
+    assert "record Receipt" in contents
+    assert "enum PaymentStatus" in contents
+    assert "struct Money" in contents
+    assert "class StripeGateway" in contents
+
 def test_chunk_unsupported_language_falls_back(chunker):
     chunks = chunker.chunk("some content here", file_path="data.txt", language="plaintext")
     assert len(chunks) == 1
@@ -81,6 +137,14 @@ def test_extract_imports_javascript():
     chunks, imports = chunker.chunk_with_imports(source, file_path="App.js", language="javascript")
     assert len(chunks) > 0
     assert "react" in imports
+
+
+def test_extract_imports_csharp():
+    chunker = Chunker()
+    chunks, imports = chunker.chunk_with_imports(CSHARP_CODE, file_path="Payments.cs", language="csharp")
+    assert len(chunks) > 0
+    # Both using directives resolve to their root namespace and deduplicate
+    assert imports == ["System"]
 
 
 def test_chunk_still_works_without_imports():

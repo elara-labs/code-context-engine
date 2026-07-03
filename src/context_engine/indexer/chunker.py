@@ -9,25 +9,30 @@ import tree_sitter_php as tsphp
 import tree_sitter_go as tsgo
 import tree_sitter_rust as tsrust
 import tree_sitter_java as tsjava
+import tree_sitter_c_sharp as tscsharp
 from tree_sitter import Language, Parser
 
 from context_engine.models import Chunk, ChunkType
 
 _FUNCTION_TYPES = {
     "function_definition", "function_declaration",  # Python, PHP, JS
-    "method_definition", "method_declaration",       # JS/TS, PHP/Go/Java
+    "method_definition", "method_declaration",       # JS/TS, PHP/Go/Java/C#
     "arrow_function",                                # JS/TS
     "function_item",                                 # Rust
+    "local_function_statement",                      # C#
 }
 _CLASS_TYPES = {
-    "class_definition", "class_declaration",  # Python, JS/TS, PHP, Java
-    "type_declaration",                        # Go (struct/interface)
-    "struct_item", "impl_item", "enum_item",   # Rust
+    "class_definition", "class_declaration",       # Python, JS/TS, PHP, Java, C#
+    "struct_declaration", "interface_declaration",  # C#
+    "record_declaration", "enum_declaration",       # Java, C#
+    "type_declaration",                             # Go (struct/interface)
+    "struct_item", "impl_item", "enum_item",        # Rust
 }
 _IMPORT_TYPES = {
     "import_statement", "import_from_statement",  # Python
     "import_declaration",                          # TypeScript, Go, Java
     "use_declaration",                             # PHP, Rust
+    "using_directive",                             # C#
 }
 
 _LANGUAGES = {
@@ -39,6 +44,7 @@ _LANGUAGES = {
     "go": Language(tsgo.language()),
     "rust": Language(tsrust.language()),
     "java": Language(tsjava.language()),
+    "csharp": Language(tscsharp.language()),
 }
 
 
@@ -144,6 +150,13 @@ class Chunker:
                     name = name.lstrip(".")
                     if name:
                         return name.split(".")[0]
+        elif node.type == "using_directive":
+            # C#: "using System.Collections.Generic;" — take the root namespace
+            # segment, mirroring the Python dotted-name convention below.
+            for child in node.children:
+                if child.type in ("qualified_name", "identifier"):
+                    name = source[child.start_byte:child.end_byte].strip()
+                    return name.split(".")[0]
         elif node.type == "import_declaration":
             # TypeScript (tree-sitter-typescript): "import React from 'react'"
             for child in node.children:
