@@ -143,9 +143,9 @@ async def test_index_status_with_tracked_stats(tmp_path):
     assert "60%" in text
 
 
-@pytest.mark.asyncio
-async def test_context_search_appends_omitted_note_when_results_below_top_k(tmp_path):
-    """When retrieve() returns fewer results than retrieval_top_k, a note is appended."""
+def _make_search_server(tmp_path, dropped_low_value):
+    """Server wired for _handle_context_search with a stub retriever whose
+    stats_out reports the given dropped_low_value."""
     from unittest.mock import AsyncMock
     from context_engine.models import Chunk, ChunkType
 
@@ -158,8 +158,17 @@ async def test_context_search_appends_omitted_note_when_results_below_top_k(tmp_
     )
     stub_chunk.confidence_score = 0.8
 
+    async def fake_retrieve(query, top_k=10, confidence_threshold=0.0,
+                            marginal_ratio=0.0, max_tokens=None,
+                            stats_out=None):
+        if stats_out is not None:
+            stats_out["candidates"] = 1 + dropped_low_value
+            stats_out["selected"] = 1
+            stats_out["dropped_low_value"] = dropped_low_value
+        return [stub_chunk]
+
     server._retriever = MagicMock()
-    server._retriever.retrieve = AsyncMock(return_value=[stub_chunk])
+    server._retriever.retrieve = fake_retrieve
     server._compressor = MagicMock()
     server._compressor.compress = AsyncMock(return_value=[stub_chunk])
     server._session_capture = MagicMock()
@@ -169,7 +178,6 @@ async def test_context_search_appends_omitted_note_when_results_below_top_k(tmp_
     server._append_audit_log = MagicMock()
     server._ensure_indexed = AsyncMock(return_value=True)
 
-    # retrieval_top_k=5, but only 1 chunk returned → note should appear
     server._config.retrieval_top_k = 5
     server._config.retrieval_confidence_threshold = 0.99
     server._config.retrieval_marginal_ratio = 0.5
@@ -177,7 +185,23 @@ async def test_context_search_appends_omitted_note_when_results_below_top_k(tmp_
     server._output_level = "off"
     server._project_name = "test-project"
     server._session_id = "test-session"
+    return server
 
+
+@pytest.mark.asyncio
+async def test_context_search_appends_omitted_note_when_drops_reported(tmp_path):
+    """Note appears only when the retriever reports threshold/marginal drops."""
+    server = _make_search_server(tmp_path, dropped_low_value=2)
     result = await server._handle_context_search({"query": "find something", "top_k": 5})
     text = result[0].text
     assert "lower-confidence results omitted" in text
+
+
+@pytest.mark.asyncio
+async def test_context_search_no_note_when_nothing_dropped(tmp_path):
+    """Fewer chunks than retrieval_top_k with zero drops must NOT trigger the
+    note — that was the false-positive the count heuristic produced."""
+    server = _make_search_server(tmp_path, dropped_low_value=0)
+    result = await server._handle_context_search({"query": "find something", "top_k": 5})
+    text = result[0].text
+    assert "lower-confidence results omitted" not in text

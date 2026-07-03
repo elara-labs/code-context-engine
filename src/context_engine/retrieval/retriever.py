@@ -41,6 +41,7 @@ class HybridRetriever:
         confidence_threshold: float = 0.0,
         max_tokens: int | None = None,
         marginal_ratio: float = 0.0,
+        stats_out: dict | None = None,
     ) -> list[Chunk]:
         parsed = self._parser.parse(query)
         query_embedding = self._embedder.embed_query(query)
@@ -150,11 +151,18 @@ class HybridRetriever:
         scored.sort(key=lambda x: x[1], reverse=True)
         scored = self._dedupe_overlaps(scored)
 
+        # Candidate count after dedup, before any confidence filtering —
+        # the baseline for the dropped_low_value accounting below.
+        candidates = len(scored)
+
         # Confidence cutoff with a top-1 guarantee: an over-tight threshold
         # must never turn a matching query into an empty result.
         filtered = [(c, s) for c, s in scored if s >= confidence_threshold]
         if not filtered and scored:
             filtered = scored[:1]
+        # Candidates excluded specifically by the threshold (a top-1
+        # guarantee survivor was not dropped).
+        dropped_low_value = candidates - len(filtered)
         scored = filtered
 
         # File diversity: cap chunks per file so one large file doesn't
@@ -163,8 +171,12 @@ class HybridRetriever:
         top_score = scored[0][1] if scored else 0.0
         file_counts: dict[str, int] = {}
         diverse: list[Chunk] = []
-        for chunk, score in scored:
+        for idx, (chunk, score) in enumerate(scored):
             if diverse and marginal_ratio > 0 and score < marginal_ratio * top_score:
+                # Everything from here on scores below the marginal cutoff
+                # (list is sorted) — count them as low-value drops. Chunks
+                # excluded only by the per-file cap or top_k are NOT counted.
+                dropped_low_value += len(scored) - idx
                 break
             count = file_counts.get(chunk.file_path, 0)
             if count < _MAX_CHUNKS_PER_FILE:
@@ -205,6 +217,10 @@ class HybridRetriever:
                 log.debug("Graph expansion skipped: %s", exc)
 
         if max_tokens is None:
+            if stats_out is not None:
+                stats_out["candidates"] = candidates
+                stats_out["selected"] = len(ranked)
+                stats_out["dropped_low_value"] = dropped_low_value
             return ranked
 
         packed: list[Chunk] = []
@@ -219,6 +235,10 @@ class HybridRetriever:
                 if compressed_tokens <= budget:
                     packed.append(chunk)
                     budget -= compressed_tokens
+        if stats_out is not None:
+            stats_out["candidates"] = candidates
+            stats_out["selected"] = len(packed)
+            stats_out["dropped_low_value"] = dropped_low_value
         return packed
 
     @staticmethod

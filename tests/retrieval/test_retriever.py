@@ -242,3 +242,45 @@ async def test_top1_guarantee_when_threshold_filters_everything(retriever_factor
         "query", top_k=10, confidence_threshold=0.99
     )
     assert len(results) == 1  # best candidate survives an over-tight threshold
+
+
+# ---------------------------------------------------------------------------
+# stats_out: truthful accounting of what the threshold/marginal stop dropped
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_stats_out_counts_threshold_drops(retriever_factory):
+    retriever, chunks = retriever_factory(distances=[1.6, 1.8])
+    stats: dict = {}
+    results = await retriever.retrieve(
+        "query", top_k=10, confidence_threshold=0.99, stats_out=stats,
+    )
+    assert stats["candidates"] == 2
+    assert stats["selected"] == len(results) == 1
+    # One candidate dropped by threshold; the other survives via top-1 guarantee.
+    assert stats["dropped_low_value"] == 1
+
+
+@pytest.mark.asyncio
+async def test_stats_out_counts_marginal_stop_drops(retriever_factory):
+    retriever, chunks = retriever_factory(distances=[0.1, 0.3, 1.8])
+    stats: dict = {}
+    results = await retriever.retrieve(
+        "query", top_k=10, marginal_ratio=0.5, stats_out=stats,
+    )
+    assert stats["candidates"] == 3
+    assert stats["selected"] == len(results) == 2
+    assert stats["dropped_low_value"] == 1  # tail chunk cut by marginal stop
+
+
+@pytest.mark.asyncio
+async def test_stats_out_zero_drops_when_nothing_fires(retriever_factory):
+    retriever, chunks = retriever_factory(distances=[0.1, 0.3, 1.8])
+    stats: dict = {}
+    results = await retriever.retrieve(
+        "query", top_k=10, marginal_ratio=0.0, confidence_threshold=0.0,
+        stats_out=stats,
+    )
+    assert stats["candidates"] == 3
+    assert stats["selected"] == len(results) == 3
+    assert stats["dropped_low_value"] == 0
