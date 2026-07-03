@@ -580,17 +580,18 @@ Diversity loop — add the marginal stop (`scored` is sorted, so `top_score` is 
 
 (Keep every existing argument as-is; only add `marginal_ratio`.)
 
-Also in `mcp_server.py`, directly after that `retrieve` call: the spec requires that cutoff-dropped chunks stay discoverable ("nothing becomes unreachable"). When the cutoff/marginal stop trimmed results below the requested `top_k`, append one compact line to the tool response text (find where the response body is assembled for this handler and add it at the end):
+Also in `mcp_server.py`: the spec requires that cutoff-dropped chunks stay discoverable ("nothing becomes unreachable"). `retrieve()` gains an optional `stats_out: dict | None = None` keyword; when provided it is filled with `candidates` (post-dedup, pre-filter count), `selected` (returned count), and `dropped_low_value` (candidates excluded specifically by the confidence threshold or the marginal stop — NOT by the per-file diversity cap or `top_k`). The `context_search` handler passes a stats dict and appends one compact note line to the response only when `stats["dropped_low_value"] > 0`:
 
 ```python
-        if len(all_chunks) < self._config.retrieval_top_k:
             note = (
                 "[note: lower-confidence results omitted — raise top_k or "
                 "lower retrieval.confidence_threshold to include them]"
             )
 ```
 
-Add a test for this in the MCP-server test file that covers `context_search` (find it via `grep -rl "context_search" tests/`): with a config threshold of 0.99 and stub results, the response contains `lower-confidence results omitted`.
+(Rationale: an earlier draft compared the post-compression chunk count against `retrieval_top_k`, which false-positives on nearly every query — compression and unrelated filters shrink the list too.)
+
+Add tests: retriever `stats_out` accounting (threshold drop, marginal-stop drop, and no-drop → 0), and MCP-server note behavior (present when `dropped_low_value > 0`; absent when retrieval merely returned fewer than `retrieval_top_k` with no drops).
 
 - [ ] **Step 4: Run tests**
 
