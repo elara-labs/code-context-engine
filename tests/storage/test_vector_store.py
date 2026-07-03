@@ -1,3 +1,6 @@
+import sqlite3
+import time
+
 import pytest
 
 from context_engine.models import Chunk, ChunkType
@@ -238,3 +241,69 @@ async def test_ingest_rolls_back_on_midbatch_failure(store):
     store.put_cached_compression("unrelated", "short", "text")
     assert store.count() == 0
     assert await store.search(query_embedding=[0.1, 0.2, 0.3, 0.4], top_k=5) == []
+
+
+def _mk_chunk(cid: str, mtime: float | None = None) -> Chunk:
+    c = Chunk(
+        id=cid,
+        content=f"def {cid}():\n    pass\n",
+        chunk_type=ChunkType.FUNCTION,
+        file_path="src/mod.py",
+        start_line=1,
+        end_line=2,
+        language="python",
+        embedding=[0.1, 0.2, 0.3],
+    )
+    if mtime is not None:
+        c.metadata["modified_ts"] = mtime
+    return c
+
+
+@pytest.mark.asyncio
+async def test_modified_ts_round_trips(tmp_path):
+    store = VectorStore(db_path=str(tmp_path))
+    now = time.time()
+    await store.ingest([_mk_chunk("with_ts", mtime=now)])
+
+    results = await store.search([0.1, 0.2, 0.3], top_k=1)
+    assert results, "expected one search hit"
+    assert results[0].metadata["modified_ts"] == pytest.approx(now)
+
+    by_id = await store.get_by_id("with_ts")
+    assert by_id.metadata["modified_ts"] == pytest.approx(now)
+
+    by_ids = await store.get_chunks_by_ids(["with_ts"])
+    assert by_ids[0].metadata["modified_ts"] == pytest.approx(now)
+
+
+@pytest.mark.asyncio
+async def test_modified_ts_absent_stays_absent(tmp_path):
+    store = VectorStore(db_path=str(tmp_path))
+    await store.ingest([_mk_chunk("no_ts")])
+    results = await store.search([0.1, 0.2, 0.3], top_k=1)
+    assert "modified_ts" not in results[0].metadata
+
+
+@pytest.mark.asyncio
+async def test_legacy_db_without_column_is_migrated(tmp_path):
+    # Simulate a pre-Phase-1 DB: create the store, then drop the column
+    # by rebuilding the table without it, then reopen.
+    store = VectorStore(db_path=str(tmp_path))
+    await store.ingest([_mk_chunk("old_row")])
+    conn = sqlite3.connect(str(tmp_path / "vectors.db"))
+    conn.executescript(
+        """
+        CREATE TABLE chunks_old AS
+            SELECT id, content, chunk_type, file_path, start_line, end_line, language
+            FROM chunks;
+        DROP TABLE chunks;
+        ALTER TABLE chunks_old RENAME TO chunks;
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    reopened = VectorStore(db_path=str(tmp_path))  # must not raise
+    row = await reopened.get_by_id("old_row")
+    assert row is not None
+    assert "modified_ts" not in row.metadata  # NULL column → neutral recency

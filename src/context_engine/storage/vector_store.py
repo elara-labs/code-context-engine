@@ -77,9 +77,19 @@ class VectorStore:
                     file_path TEXT NOT NULL,
                     start_line INTEGER NOT NULL,
                     end_line INTEGER NOT NULL,
-                    language TEXT NOT NULL
+                    language TEXT NOT NULL,
+                    modified_ts REAL
                 )
             """)
+            # Forward-only migration: pre-Phase-1 DBs lack modified_ts.
+            # Old rows stay NULL → ConfidenceScorer keeps neutral recency.
+            cols = {
+                r[1] for r in self._conn.execute("PRAGMA table_info(chunks)")
+            }
+            if "modified_ts" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE chunks ADD COLUMN modified_ts REAL"
+                )
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_chunks_file_path
                 ON chunks(file_path)
@@ -159,7 +169,7 @@ class VectorStore:
         return (
             chunk.id, content, chunk.chunk_type.value,
             chunk.file_path, chunk.start_line, chunk.end_line,
-            chunk.language,
+            chunk.language, chunk.metadata.get("modified_ts"),
         )
 
     def _row_to_chunk(self, row, distance: float | None = None) -> Chunk:
@@ -172,6 +182,8 @@ class VectorStore:
             end_line=row[5],
             language=row[6],
         )
+        if len(row) > 7 and row[7] is not None:
+            chunk.metadata["modified_ts"] = row[7]
         if distance is not None:
             chunk.metadata["_distance"] = distance
         return chunk
@@ -192,15 +204,16 @@ class VectorStore:
                     row = self._chunk_to_row(chunk)
                     rowid = cursor.execute(
                         "INSERT INTO chunks "
-                        "(id, content, chunk_type, file_path, start_line, end_line, language) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                        "(id, content, chunk_type, file_path, start_line, end_line, language, modified_ts) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
                         "ON CONFLICT(id) DO UPDATE SET "
                         "content = excluded.content, "
                         "chunk_type = excluded.chunk_type, "
                         "file_path = excluded.file_path, "
                         "start_line = excluded.start_line, "
                         "end_line = excluded.end_line, "
-                        "language = excluded.language "
+                        "language = excluded.language, "
+                        "modified_ts = excluded.modified_ts "
                         "RETURNING rowid",
                         row,
                     ).fetchone()[0]
@@ -240,7 +253,8 @@ class VectorStore:
                     rows = self._conn.execute(
                         """
                         SELECT c.id, c.content, c.chunk_type, c.file_path,
-                               c.start_line, c.end_line, c.language, v.distance
+                               c.start_line, c.end_line, c.language,
+                               c.modified_ts, v.distance
                         FROM chunks_vec v
                         JOIN chunks c ON c.rowid = v.rowid
                         WHERE v.embedding MATCH ? AND k = ?
@@ -253,7 +267,8 @@ class VectorStore:
                     rows = self._conn.execute(
                         """
                         SELECT c.id, c.content, c.chunk_type, c.file_path,
-                               c.start_line, c.end_line, c.language, v.distance
+                               c.start_line, c.end_line, c.language,
+                               c.modified_ts, v.distance
                         FROM chunks_vec v
                         JOIN chunks c ON c.rowid = v.rowid
                         WHERE v.embedding MATCH ? AND k = ?
@@ -268,7 +283,7 @@ class VectorStore:
                     exc,
                 )
                 return []
-        return [self._row_to_chunk(row[:7], distance=row[7]) for row in rows]
+        return [self._row_to_chunk(row[:8], distance=row[8]) for row in rows]
 
     async def delete_by_file(self, file_path: str) -> None:
         await self.delete_by_files([file_path])
@@ -374,7 +389,7 @@ class VectorStore:
         with self._lock:
             try:
                 row = self._conn.execute(
-                    "SELECT id, content, chunk_type, file_path, start_line, end_line, language "
+                    "SELECT id, content, chunk_type, file_path, start_line, end_line, language, modified_ts "
                     "FROM chunks WHERE id = ?",
                     (chunk_id,),
                 ).fetchone()
@@ -392,7 +407,7 @@ class VectorStore:
             try:
                 placeholders = ",".join("?" for _ in chunk_ids)
                 rows = self._conn.execute(
-                    f"SELECT id, content, chunk_type, file_path, start_line, end_line, language "
+                    f"SELECT id, content, chunk_type, file_path, start_line, end_line, language, modified_ts "
                     f"FROM chunks WHERE id IN ({placeholders})",
                     chunk_ids,
                 ).fetchall()
