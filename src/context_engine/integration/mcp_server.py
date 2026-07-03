@@ -1034,8 +1034,8 @@ class ContextEngineMCP:
         # query because compression/config filtering also shrink the list.
         if retrieval_stats.get("dropped_low_value", 0) > 0:
             note = (
-                "[note: lower-confidence results omitted — raise top_k or "
-                "lower retrieval.confidence_threshold to include them]"
+                "[note: lower-confidence results omitted — lower "
+                "retrieval.marginal_ratio or retrieval.confidence_threshold to include them]"
             )
             body = body + "\n" + note
         self._record(raw_tokens, served_tokens, full_file_tokens)
