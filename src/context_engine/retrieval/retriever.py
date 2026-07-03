@@ -21,6 +21,9 @@ _MAX_CHUNKS_PER_FILE = 3
 # When the parsed query looks like a code lookup, give FTS more pull because
 # exact-identifier hits are usually what the user wants.
 _FTS_BOOST_CODE_LOOKUP = 1.5
+# Worst possible cosine distance (opposite vectors). Used as the fallback for
+# chunks with no vector evidence when no vector results were returned at all.
+_WORST_COSINE_DISTANCE = 2.0
 
 
 class HybridRetriever:
@@ -104,6 +107,19 @@ class HybridRetriever:
         # almost no signal past the top few. Rank-normalising restores gradient.
         max_rrf = max(rrf_scores.values()) if rrf_scores else 0.0
 
+        # Chunks hydrated from FTS-only hits carry no _distance. They were
+        # absent from the vector top-k, so their true distance is at least as
+        # bad as the worst returned vector hit — never default to 0.0, which
+        # would grant keyword-incidental matches perfect vector similarity.
+        observed_distances = [
+            c.metadata["_distance"]
+            for c in vector_results
+            if "_distance" in c.metadata
+        ]
+        no_vector_distance = (
+            max(observed_distances) if observed_distances else _WORST_COSINE_DISTANCE
+        )
+
         # Score with confidence scorer
         scored: list[tuple[Chunk, float]] = []
         for id_, rrf_score in rrf_scores.items():
@@ -111,7 +127,7 @@ class HybridRetriever:
             if chunk is None:
                 continue
 
-            distance = chunk.metadata.get("_distance", 0.0)
+            distance = chunk.metadata.get("_distance", no_vector_distance)
             normalised_distance = min(max(distance / 2.0, 0.0), 1.0)
             keyword_distance = self._estimate_keyword_distance(chunk, parsed)
             conf_score = self._scorer.score(

@@ -63,6 +63,7 @@ def compress_turn(
     raw_tokens = _approx_tokens(text)
     summary, tier = _summarise(text, embedder=embedder, top_k=_DEFAULT_TURN_TOP_K)
     extractive_tokens = _approx_tokens(summary)
+    gram_raw = gram_comp = 0
     if summary:
         # Scrub PII before grammar compression — emails / IPs / SSNs that
         # leaked into a turn (the user pasted a real value into a prompt
@@ -71,13 +72,37 @@ def compress_turn(
         summary, gram_raw, gram_comp = _grammar_compress_counted(
             summary, level=_GRAMMAR_LEVEL,
         )
-        memory_db.record_savings(
-            conn, bucket="grammar", baseline=gram_raw, served=gram_comp,
-        )
+    epoch = int(time.time())
+    # Explicit DELETE-then-INSERT rather than INSERT OR REPLACE: SQLite only
+    # fires delete triggers on a REPLACE conflict when recursive_triggers is
+    # ON, so OR REPLACE silently left dangling turn_summaries_fts entries and
+    # stale turn_summaries_vec rows every time a turn was re-compressed. The
+    # explicit DELETE always fires the _ad triggers that clean both up.
+    conn.execute(
+        "DELETE FROM turn_summaries WHERE session_id = ? AND prompt_number = ?",
+        (session_id, prompt_number),
+    )
+    cur = conn.execute(
+        "INSERT INTO turn_summaries "
+        "(session_id, prompt_number, summary, tier, created_at_epoch) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (session_id, prompt_number, summary, tier, epoch),
+    )
+    if summary:
         # Scan the clean, PII-free, grammar-compressed summary for decisions.
         # Running here reuses the pipeline's existing scrub + compress rather
         # than duplicating that work on the raw turn text.
         _auto_capture_decisions(conn, summary, session_id=session_id, prompt_number=prompt_number, embedder=embedder)
+        memory_db.record_turn_summary_vec(
+            conn, embedder, turn_id=cur.lastrowid, summary=summary,
+        )
+    # Savings are recorded last, after every fallible step above, so a turn
+    # that fails and gets retried by the worker doesn't inflate the ledger
+    # once per attempt.
+    if summary and gram_raw > 0:
+        memory_db.record_savings(
+            conn, bucket="grammar", baseline=gram_raw, served=gram_comp,
+        )
     # Turn-summarization savings: raw turn text (prompt + tool inputs/outputs)
     # vs the extractive summary that ends up in turn_summaries.
     if raw_tokens > 0 and extractive_tokens > 0:
@@ -85,17 +110,6 @@ def compress_turn(
             conn, bucket="turn_summarization",
             baseline=raw_tokens, served=extractive_tokens,
             meta={"kind": "turn", "tier": tier},
-        )
-    epoch = int(time.time())
-    cur = conn.execute(
-        "INSERT OR REPLACE INTO turn_summaries "
-        "(session_id, prompt_number, summary, tier, created_at_epoch) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (session_id, prompt_number, summary, tier, epoch),
-    )
-    if summary:
-        memory_db.record_turn_summary_vec(
-            conn, embedder, turn_id=cur.lastrowid, summary=summary,
         )
     return summary
 
@@ -119,6 +133,8 @@ def compress_session_rollup(
     ))
     text = "\n".join(r["summary"] for r in rows if r["summary"])
     raw_tokens = _approx_tokens(text)
+    extractive_tokens = 0
+    gram_raw = gram_comp = 0
     if not text:
         rollup = ""
         tier = "empty"
@@ -137,21 +153,24 @@ def compress_session_rollup(
         rollup, gram_raw, gram_comp = _grammar_compress_counted(
             rollup, level=_GRAMMAR_LEVEL,
         )
-        memory_db.record_savings(
-            conn, bucket="grammar", baseline=gram_raw, served=gram_comp,
-        )
-        if raw_tokens > 0 and extractive_tokens > 0:
-            memory_db.record_savings(
-                conn, bucket="turn_summarization",
-                baseline=raw_tokens, served=extractive_tokens,
-                meta={"kind": "session_rollup", "tier": tier},
-            )
     epoch = int(time.time())
     conn.execute(
         "UPDATE sessions SET rollup_summary = ?, rollup_summary_at_epoch = ? "
         "WHERE id = ?",
         (rollup, epoch, session_id),
     )
+    # Savings only after the rollup write succeeded — retried failures must
+    # not re-record into the ledger.
+    if gram_raw > 0:
+        memory_db.record_savings(
+            conn, bucket="grammar", baseline=gram_raw, served=gram_comp,
+        )
+    if raw_tokens > 0 and extractive_tokens > 0:
+        memory_db.record_savings(
+            conn, bucket="turn_summarization",
+            baseline=raw_tokens, served=extractive_tokens,
+            meta={"kind": "session_rollup", "tier": tier},
+        )
     log.debug("session rollup tier=%s len=%d", tier, len(rollup))
     return rollup
 
@@ -293,14 +312,23 @@ def _auto_capture_decisions(
     return count
 
 
+# Rows that have failed this many times are dead-lettered: left in the table
+# (visible via `cce sessions status` / last_error) but never picked again, so
+# a deterministically-failing row can't starve the queue with retries every
+# interval.
+_MAX_ATTEMPTS = 5
+
+
 def _drain_one_sync(conn: sqlite3.Connection, embedder) -> bool:
-    """Pop and process the oldest pending row. Pure-sync; safe for either the
-    main thread (tests) or a worker thread (production via to_thread).
-    Returns True iff work was done.
+    """Pop and process the oldest pending row below the attempt cap.
+    Pure-sync; safe for either the main thread (tests) or a worker thread
+    (production via to_thread). Returns True iff work was done.
     """
     row = conn.execute(
         "SELECT id, kind, session_id, prompt_number, attempts FROM pending_compressions "
-        "ORDER BY enqueued_at_epoch ASC LIMIT 1"
+        "WHERE attempts < ? "
+        "ORDER BY enqueued_at_epoch ASC LIMIT 1",
+        (_MAX_ATTEMPTS,),
     ).fetchone()
     if row is None:
         return False
@@ -323,6 +351,9 @@ def _drain_one_sync(conn: sqlite3.Connection, embedder) -> bool:
     except Exception as exc:
         log.exception("Compression failed for %s/%s/%s",
                       row["kind"], row["session_id"], row["prompt_number"])
+        # Discard any partial writes from the failed compression before
+        # persisting the attempt bump.
+        conn.rollback()
         conn.execute(
             "UPDATE pending_compressions SET attempts = attempts + 1, "
             "last_error = ? WHERE id = ?",

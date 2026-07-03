@@ -420,7 +420,11 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
     async def set_compression(req: CompressionRequest) -> dict:
         state = _read_state()
         state["output_level"] = req.level
-        (storage_base / "state.json").write_text(json.dumps(state), encoding="utf-8")
+        # state.json is shared with the MCP server, which reads/writes it
+        # atomically — a plain write_text truncates in place and races it.
+        from context_engine.utils import atomic_write_text
+
+        atomic_write_text(storage_base / "state.json", json.dumps(state))
         return {"level": req.level}
 
     @app.get("/api/export")

@@ -50,6 +50,10 @@ _SECRET_FILENAMES = frozenset({
 # Filename starts with any of these → skip (handles .env, .env.local, etc.).
 _SECRET_PREFIXES = (".env",)
 
+# Filename ends with any of these → skip. Catches the `<name>.env` convention
+# (prod.env, secrets.env, config.env) that the `.env` prefix rule misses.
+_SECRET_SUFFIXES = (".env",)
+
 # File extensions whose presence is a strong signal of a key/cert. Skip outright.
 _SECRET_EXTENSIONS = frozenset({
     ".pem", ".key", ".crt", ".cer", ".der",
@@ -75,6 +79,9 @@ def is_secret_file(path: Path) -> bool:
     for prefix in _SECRET_PREFIXES:
         if name.startswith(prefix):
             return True
+    for suffix in _SECRET_SUFFIXES:
+        if name.endswith(suffix):
+            return True
     return False
 
 
@@ -98,13 +105,16 @@ _CONTENT_PATTERNS: list[tuple[re.Pattern, str]] = [
     # GitHub tokens (classic + fine-grained + app + OAuth).
     (re.compile(r"\bghp_[A-Za-z0-9]{36}\b"), "GITHUB_PAT"),
     (re.compile(r"\bgithub_pat_[A-Za-z0-9_]{82}\b"), "GITHUB_FINE_GRAINED_PAT"),
-    (re.compile(r"\b(ghs|gho|ghu|ghr)_[A-Za-z0-9]{36}\b"), "GITHUB_OAUTH"),
+    # NOTE: prefix groups must be NON-capturing — `_sub` treats a capture
+    # group as "the credential value", so `(ghs|gho|...)` would redact
+    # (or placeholder-skip) just the 3-char prefix and leak the token.
+    (re.compile(r"\b(?:ghs|gho|ghu|ghr)_[A-Za-z0-9]{36}\b"), "GITHUB_OAUTH"),
     # Slack tokens.
     (re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b"), "SLACK_TOKEN"),
     # Stripe live keys (test keys are deliberately not matched — they're
     # safe to commit and matching them would over-redact every Stripe
     # quickstart in the wild).
-    (re.compile(r"\b(sk|rk)_live_[A-Za-z0-9]{24,}\b"), "STRIPE_LIVE_KEY"),
+    (re.compile(r"\b(?:sk|rk)_live_[A-Za-z0-9]{24,}\b"), "STRIPE_LIVE_KEY"),
     # OpenAI / Anthropic API keys.
     (re.compile(r"\bsk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}\b"), "OPENAI_KEY"),
     (re.compile(r"\bsk-ant-(api03|admin01)-[A-Za-z0-9_\-]{93,}\b"), "ANTHROPIC_KEY"),
@@ -129,6 +139,25 @@ _CONTENT_PATTERNS: list[tuple[re.Pattern, str]] = [
         r"(?i)\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|"
         r"private[_-]?key|auth[_-]?token|client[_-]?secret)\b"
         r"['\"\]\s]*[:=]\s*['\"]([^'\"\s]{16,})['\"]"
+    ), "GENERIC_CREDENTIAL"),
+    # Unquoted variant — dotenv / YAML / TOML / shell assignments don't
+    # quote their values (`STRIPE_KEY=sk_live_…`, `password: hunter2…`,
+    # `export AUTH_TOKEN=…`), so the quoted pattern above misses them.
+    #
+    # Deliberately stricter than the quoted pattern to limit false
+    # positives on ordinary code:
+    #   · line-anchored (config formats assign at line start, optionally
+    #     indented / behind `export`) — prose mentions don't fire;
+    #   · the credential keyword must be the TRAILING segment of the
+    #     variable name (`STRIPE_KEY`, `db_password` — but not
+    #     `tokenizer=` or `keyboard_layout=`);
+    #   · the value must be an unbroken run of ≥16 non-quote characters
+    #     (quoted values are the previous pattern's job).
+    (re.compile(
+        r"(?im)^[ \t]*(?:export[ \t]+)?"
+        r"[A-Za-z0-9_.\-]*(?:password|passwd|secret|token|credential|api[_-]?key|key)s?"
+        r"[ \t]*[:=][ \t]*"
+        r"([^\s'\"#`]{16,})"
     ), "GENERIC_CREDENTIAL"),
 ]
 
@@ -169,6 +198,10 @@ def _starts_with_placeholder_prefix(value: str) -> bool:
 def _is_placeholder(value: str) -> bool:
     v = value.strip("'\"<>").lower()
     if v in _PLACEHOLDER_VALUES:
+        return True
+    # Already redacted by an earlier (more specific) pattern this run —
+    # don't re-redact the placeholder into a second label.
+    if v.startswith("[redacted:"):
         return True
     # Repeated single character ("xxxxxxxxxx", "0000000000") is almost
     # always a placeholder, never a real key.

@@ -1007,7 +1007,7 @@ function renderHBarChart(containerId, items) {
       var pct = max > 0 ? item.value/max*100 : 0;
       var name = item.label.split('/').pop() || item.label;
       return '<div class="hbar-row">'
-        +'<div class="hbar-label" title="'+item.label+'">'+name+'</div>'
+        +'<div class="hbar-label" title="'+_esc(item.label)+'">'+_esc(name)+'</div>'
         +'<div class="hbar-track"><div class="hbar-fill" style="width:'+pct+'%;background:'+item.color+'"></div></div>'
         +'<div class="hbar-num">'+item.value+'</div>'
         +'</div>';
@@ -1032,7 +1032,7 @@ function renderVBarChart(containerId, items, color) {
       +'</div>';
   }).join('');
   var labels = items.map(function(item) {
-    return '<div class="vbar-lbl" title="'+item.label+'">'+item.label+'</div>';
+    return '<div class="vbar-lbl" title="'+_esc(item.label)+'">'+_esc(item.label)+'</div>';
   }).join('');
   el.innerHTML =
     '<div class="vbar-chart">'+bars+'</div>'
@@ -1082,7 +1082,7 @@ async function loadMemorySessions() {
     box.innerHTML = rows.map(function(s) {
       var rollup = (s.rollup_summary || '').slice(0, 80);
       return ''
-        + '<div class="table-row" onclick="loadMemoryTimeline(\\\''+_esc(s.id)+'\\\')" style="cursor:pointer">'
+        + '<div class="table-row mem-session-row" data-sid="'+_esc(s.id)+'" style="cursor:pointer">'
         +   '<div><code>'+_esc(s.id)+'</code></div>'
         +   '<div>'+_esc(s.started_at||'')+'</div>'
         +   '<div>'+_esc(s.status||'')+'</div>'
@@ -1090,6 +1090,12 @@ async function loadMemorySessions() {
         +   '<div>'+_esc(rollup)+(rollup && s.rollup_summary && s.rollup_summary.length>80?'…':'')+'</div>'
         + '</div>';
     }).join('');
+    // data-sid + listener instead of an inline onclick: _esc() is an HTML
+    // escaper, and inside onclick="..." its entities decode back to quotes
+    // before the JS parser runs, so it cannot protect a JS-string context.
+    box.querySelectorAll('.mem-session-row').forEach(function(row) {
+      row.addEventListener('click', function() { loadMemoryTimeline(row.dataset.sid); });
+    });
   } catch(e) {
     document.getElementById('mem-sessions-rows').innerHTML =
       '<div class="empty">Memory store unavailable.</div>';
@@ -1115,7 +1121,7 @@ async function loadMemoryTimeline(sessionId) {
     var turns = data.turns.map(function(t) {
       return ''
         + '<div style="padding:6px 0; border-bottom:1px solid var(--border)">'
-        +   '<div style="font-size:11px; color:var(--muted)">turn '+t.prompt_number+' · ['+_esc(t.tier)+']</div>'
+        +   '<div style="font-size:11px; color:var(--muted)">turn '+_esc(t.prompt_number)+' · ['+_esc(t.tier)+']</div>'
         +   '<div>'+_esc(t.summary)+'</div>'
         + '</div>';
     }).join('');
@@ -1347,15 +1353,23 @@ function renderFiles(files) {
   }
   el.innerHTML = files.map(function(f) {
     return '<div class="table-row">'
-      +'<div class="file-path" title="'+f.path+'">'+f.path+'</div>'
-      +'<div class="chunk-num">'+f.chunks+'</div>'
-      +'<div><span class="badge badge-'+f.status+'">'+f.status+'</span></div>'
+      +'<div class="file-path" title="'+_esc(f.path)+'">'+_esc(f.path)+'</div>'
+      +'<div class="chunk-num">'+_esc(f.chunks)+'</div>'
+      +'<div><span class="badge badge-'+_esc(f.status)+'">'+_esc(f.status)+'</span></div>'
       +'<div class="row-acts">'
-        +'<button class="btn-icon" title="Reindex" onclick="reindexFile('+JSON.stringify(f.path)+')">'+SVG.refresh+'</button>'
-        +'<button class="btn-icon del" title="Remove" onclick="deleteFile('+JSON.stringify(f.path)+')">'+SVG.trash+'</button>'
+        +'<button class="btn-icon" title="Reindex" data-act="reindex" data-path="'+_esc(f.path)+'">'+SVG.refresh+'</button>'
+        +'<button class="btn-icon del" title="Remove" data-act="delete" data-path="'+_esc(f.path)+'">'+SVG.trash+'</button>'
       +'</div>'
       +'</div>';
   }).join('');
+  // data-path + listener (not inline onclick) so paths containing quotes or
+  // angle brackets can never escape into HTML-attribute or JS context.
+  el.querySelectorAll('button[data-path]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (btn.dataset.act === 'reindex') reindexFile(btn.dataset.path);
+      else deleteFile(btn.dataset.path);
+    });
+  });
 }
 
 function filterFiles(q) {
@@ -1387,7 +1401,7 @@ async function loadSessions() {
         +'<div class="session-header" onclick="toggleSession('+i+')">'
           +'<div class="chevron" id="chev-'+i+'">'+SVG.chevron+'</div>'
           +'<div class="session-info">'
-            +'<div class="session-name">'+(s.project||s.id)+'</div>'
+            +'<div class="session-name">'+_esc(s.project||s.id)+'</div>'
             +'<div class="session-meta">'
               +'<b>'+decs.length+'</b><span>decisions</span>'
               +'<b>'+areas.length+'</b><span>code areas</span>'
@@ -1399,7 +1413,7 @@ async function loadSessions() {
         +(decs.length
           ?'<div class="session-body" id="sb-'+i+'">'
             +'<div class="decisions-label">Decisions</div>'
-            +decs.map(function(d){ return '<div class="decision-item">'+d.decision+'</div>'; }).join('')
+            +decs.map(function(d){ return '<div class="decision-item">'+_esc(d.decision)+'</div>'; }).join('')
             +'</div>'
           :'')
         +'</div>';

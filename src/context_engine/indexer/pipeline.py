@@ -253,6 +253,25 @@ def _iter_project_files(
 _MAX_FILE_BYTES = 2 * 1024 * 1024
 
 
+def _cceignore_matches_file(rel_posix: str, patterns: list[str]) -> bool:
+    """True if a file (given as a /-separated path relative to the project
+    root) is excluded by `.cceignore`.
+
+    The directory walk gets ancestor exclusion for free — it prunes a
+    matching directory before ever descending into it. The single-file
+    target path skips the walk, so directory patterns (`vendor/`) must be
+    re-checked against every ancestor here.
+    """
+    from context_engine.indexer.ignorefile import matches_any
+    if matches_any(rel_posix, False, patterns):
+        return True
+    parts = rel_posix.split("/")
+    for i in range(1, len(parts)):
+        if matches_any("/".join(parts[:i]), True, patterns):
+            return True
+    return False
+
+
 def _safe_read(file_path: Path) -> str | None:
     """Read file as UTF-8 text; return None for binary, oversized, or unreadable files."""
     try:
@@ -289,7 +308,12 @@ async def run_indexing(
     on large repos) and are complementary: phase_fn is per-phase, embed_
     progress_fn is per-batch.
     """
-    project_dir = Path(project_dir)
+    # Resolve once so every downstream relative_to() call agrees with the
+    # resolve()d paths produced by _resolve_within / _iter_project_files.
+    # Without this, a symlinked project root (macOS /tmp → /private/tmp)
+    # makes `file_path.relative_to(project_dir)` raise ValueError on every
+    # watcher-triggered reindex.
+    project_dir = Path(project_dir).resolve()
     storage_base = project_storage_dir(config, project_dir)
     storage_base.mkdir(parents=True, exist_ok=True)
 
@@ -353,7 +377,33 @@ async def _run_indexing_locked(
     if target_path:
         target = _resolve_within(project_dir, target_path)
         if target.is_file():
-            file_iter = [target] if target.suffix not in _SKIP_EXTENSIONS else []
+            # The single-file branch is the watcher's only path into the
+            # pipeline — it must enforce the same filters as the directory
+            # walk (_iter_project_files), or saving `.env.production` in a
+            # watched project gets it read and indexed.
+            from context_engine.indexer.secrets import is_secret_file
+            rel = str(target.relative_to(project_dir))
+            rel_posix = rel.replace("\\", "/")
+            if target.suffix in _SKIP_EXTENSIONS:
+                file_iter = []
+            elif (
+                getattr(config, "indexer_redact_secrets", True)
+                and is_secret_file(target)
+            ):
+                log.info("indexer: skipping secret file %s", target)
+                if log_fn:
+                    log_fn(f"  [skip] {rel} (secret file)")
+                result.skipped_files.append(rel)
+                file_iter = []
+            elif cceignore_patterns and _cceignore_matches_file(
+                rel_posix, cceignore_patterns
+            ):
+                if log_fn:
+                    log_fn(f"  [skip] {rel} (.cceignore)")
+                result.skipped_files.append(rel)
+                file_iter = []
+            else:
+                file_iter = [target]
         elif target.is_dir():
             file_iter = list(_iter_project_files(
                 target, ignore_set, _SKIP_EXTENSIONS,
@@ -361,6 +411,22 @@ async def _run_indexing_locked(
                 cceignore_patterns=cceignore_patterns,
             ))
         else:
+            # Not on disk. The watcher enqueues deletions through the same
+            # code path — if the manifest still tracks this file, prune its
+            # chunks + manifest entry instead of erroring out.
+            rel = str(target.relative_to(project_dir))
+            if manifest.get_hash(rel) is not None:
+                try:
+                    await backend.delete_by_files([rel])
+                except Exception as exc:
+                    result.errors.append(f"Failed to prune deleted file {rel}: {exc}")
+                    return result
+                manifest.remove(rel)
+                manifest.save()
+                result.deleted_files.append(rel)
+                if log_fn:
+                    log_fn(f"  [delete] {rel} (no longer on disk)")
+                return result
             result.errors.append(f"Target path not found: {target_path}")
             return result
     else:

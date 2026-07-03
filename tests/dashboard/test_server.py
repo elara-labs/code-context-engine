@@ -267,6 +267,31 @@ def test_set_compression_invalid(tmp_path):
     assert r.status_code == 422
 
 
+def test_set_compression_writes_atomically(tmp_path):
+    """state.json is shared with the MCP server, which reads/writes it
+    atomically; the dashboard must use atomic_write_text too, not a plain
+    write_text that truncates in place. Regression for 2026-07-03 review."""
+    from context_engine import utils
+
+    client, storage_base = _make_client(tmp_path)
+    # Pre-existing state keys must survive the rewrite.
+    (storage_base / "state.json").write_text(
+        json.dumps({"output_level": "standard", "other_key": "keep-me"})
+    )
+    with patch(
+        "context_engine.utils.atomic_write_text", wraps=utils.atomic_write_text
+    ) as spy:
+        r = client.post("/api/compression", json={"level": "max"})
+    assert r.status_code == 200
+    written_paths = [call.args[0] for call in spy.call_args_list]
+    assert storage_base / "state.json" in written_paths
+    state = json.loads((storage_base / "state.json").read_text())
+    assert state["output_level"] == "max"
+    assert state["other_key"] == "keep-me"
+    # No stray tempfiles left behind.
+    assert not list(storage_base.glob("*.tmp"))
+
+
 def test_status_with_versioned_manifest(tmp_path):
     """Dashboard must read the real Manifest.save() schema, not treat the
     top-level dict as {file_path: hash}. Regression for 2026-04-27 review."""
