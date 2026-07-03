@@ -627,6 +627,17 @@ async def _run_indexing_locked(
                         continue
                     chunks, imported_modules = chunk_outcome
 
+                    # Stamp source mtime so retrieval's recency weight has
+                    # real signal (spec: Phase 1 item 4). stat() failure is
+                    # non-fatal — chunks just keep neutral recency.
+                    try:
+                        _mtime = file_path.stat().st_mtime
+                    except OSError:
+                        _mtime = None
+                    if _mtime is not None:
+                        for _c in chunks:
+                            _c.metadata["modified_ts"] = _mtime
+
                     batch_files_to_replace.append(rel_path)
 
                     file_node = GraphNode(
