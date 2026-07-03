@@ -148,6 +148,7 @@ class HybridRetriever:
                 scored.append((chunk, final_score))
 
         scored.sort(key=lambda x: x[1], reverse=True)
+        scored = self._dedupe_overlaps(scored)
 
         # File diversity: cap chunks per file so one large file doesn't
         # dominate the result set. This improves precision by letting
@@ -219,6 +220,39 @@ class HybridRetriever:
             if marker in fp_lower:
                 return score * 0.8
         return score
+
+    @staticmethod
+    def _dedupe_overlaps(
+        scored: list[tuple[Chunk, float]],
+    ) -> list[tuple[Chunk, float]]:
+        """Collapse same-file chunks whose line ranges overlap by more than
+        half of the shorter chunk, keeping the higher-scored one. Input must
+        be sorted by score descending; earlier (better) entries win.
+        Candidate sets are small (≤ top_k*3 per source), so O(n²) is fine.
+        """
+        kept: list[tuple[Chunk, float]] = []
+        for chunk, score in scored:
+            duplicate = False
+            for kept_chunk, _ in kept:
+                if kept_chunk.file_path != chunk.file_path:
+                    continue
+                overlap = (
+                    min(chunk.end_line, kept_chunk.end_line)
+                    - max(chunk.start_line, kept_chunk.start_line)
+                    + 1
+                )
+                if overlap <= 0:
+                    continue
+                shorter = min(
+                    chunk.end_line - chunk.start_line + 1,
+                    kept_chunk.end_line - kept_chunk.start_line + 1,
+                )
+                if shorter > 0 and overlap / shorter > 0.5:
+                    duplicate = True
+                    break
+            if not duplicate:
+                kept.append((chunk, score))
+        return kept
 
     def _estimate_keyword_distance(self, chunk, parsed) -> int:
         if parsed.file_hints:

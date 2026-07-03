@@ -162,3 +162,34 @@ async def test_fts_only_without_vector_results_gets_worst_case_distance():
     await retriever.retrieve("some query", top_k=5)
 
     assert seen["fts_only"] == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# Overlap dedup: collapse same-file chunks with >50% line range overlap
+# ---------------------------------------------------------------------------
+
+def _chunk_at(cid, fp, start, end):
+    return Chunk(
+        id=cid, content="x", chunk_type=ChunkType.FUNCTION,
+        file_path=fp, start_line=start, end_line=end, language="python",
+    )
+
+
+def test_dedupe_overlaps_collapses_majority_overlap():
+    scored = [
+        (_chunk_at("a", "src/m.py", 10, 30), 0.9),   # kept (highest)
+        (_chunk_at("b", "src/m.py", 12, 28), 0.7),   # 17/17 lines inside a → dropped
+        (_chunk_at("c", "src/m.py", 29, 60), 0.6),   # 2/32 overlap → kept
+        (_chunk_at("d", "src/other.py", 10, 30), 0.5),  # other file → kept
+    ]
+    kept = HybridRetriever._dedupe_overlaps(scored)
+    assert [c.id for c, _ in kept] == ["a", "c", "d"]
+
+
+def test_dedupe_overlaps_keeps_disjoint_ranges():
+    scored = [
+        (_chunk_at("a", "src/m.py", 1, 10), 0.9),
+        (_chunk_at("b", "src/m.py", 11, 20), 0.8),
+    ]
+    kept = HybridRetriever._dedupe_overlaps(scored)
+    assert len(kept) == 2
