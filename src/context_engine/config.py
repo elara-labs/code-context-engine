@@ -70,7 +70,9 @@ class Config:
     retrieval_top_k: int = 20
     # Stop adding result chunks once a chunk's score falls below this
     # fraction of the top score. 0 disables (always fill to top_k).
-    retrieval_marginal_ratio: float = 0.5
+    # Tuned to 0.75 by Phase 1 A/B benchmark (2026-07-03): achieves ≥25%
+    # token-served reduction with no hit-rate loss.
+    retrieval_marginal_ratio: float = 0.75
     bootstrap_max_tokens: int = 10000
 
     # Indexer

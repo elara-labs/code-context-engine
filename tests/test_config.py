@@ -97,4 +97,4 @@ def test_marginal_ratio_config_mapping(tmp_path):
 
 def test_marginal_ratio_default():
     from context_engine.config import Config
-    assert Config().retrieval_marginal_ratio == 0.5
+    assert Config().retrieval_marginal_ratio == 0.75
