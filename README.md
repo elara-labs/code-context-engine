@@ -49,6 +49,13 @@
   <img src="https://raw.githubusercontent.com/elara-labs/code-context-engine/main/docs/demo.gif" alt="CCE Demo" width="720">
 </p>
 
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=dRmWYHuIJxM">
+    <img src="https://img.youtube.com/vi/dRmWYHuIJxM/maxresdefault.jpg" alt="Talk: We Cut 94% of Our AI Coding Tokens — AI Engineer World's Fair 2026" width="560">
+  </a><br>
+  <sub><strong>Talk:</strong> <a href="https://www.youtube.com/watch?v=dRmWYHuIJxM">We Cut 94% of Our AI Coding Tokens</a> — AI Engineer World's Fair 2026</sub>
+</p>
+
 ---
 
 ## Use cases
