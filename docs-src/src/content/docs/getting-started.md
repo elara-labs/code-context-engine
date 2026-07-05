@@ -54,6 +54,7 @@ This does everything:
 cce init --agent claude     # Claude Code only
 cce init --agent codex      # Codex CLI only
 cce init --agent copilot    # VS Code / Copilot only
+cce init --agent pi         # Pi only
 cce init --agent all        # Every supported editor
 ```
 
