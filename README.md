@@ -129,7 +129,11 @@ it has no per-project config. `cce init` adds one `[mcp_servers.cce-<project>-<h
 section per project so multiple projects coexist; `cce uninstall` removes only
 the section for the current project.
 
-**Pi note:** Pi does not support MCP natively. CCE writes `.mcp.json` and `AGENTS.md` (Pi auto-loads this). A companion adapter such as [pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter) is required to bridge Pi to the CCE MCP server.
+**Pi note:** Pi does not support MCP natively. To use CCE with Pi, you need a
+pi MCP adapter extension (e.g. [pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter))
+that consumes the `.mcp.json` config and exposes CCE's tools to the Pi agent.
+`cce init` sets up both `.mcp.json` and `AGENTS.md` — Pi loads the latter
+automatically for startup instructions.
 
 ```
   my-project · 38 queries · last query 5m ago
