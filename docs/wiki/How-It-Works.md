@@ -88,6 +88,8 @@ Every chunk gets a final confidence score combining:
 
 Only chunks above the configured `confidence_threshold` (default 0.5) are returned.
 
+For the exact formula and tuning notes, see [Confidence Scoring](Confidence-Scoring.md).
+
 ---
 
 ## 6. Compression
