@@ -46,7 +46,7 @@ async def test_target_path_secret_file_not_indexed(simple_project):
     secret = project_dir / ".env.local"
     secret.write_text("API_KEY=supersecret\nDB_PASSWORD=hunter2\n")
 
-    result = await run_indexing(config, str(project_dir), target_path=".env.local")
+    await run_indexing(config, str(project_dir), target_path=".env.local")
 
     # No chunks should have been indexed for the secret file
     storage_base = _storage(config, project_dir)
@@ -67,7 +67,7 @@ async def test_target_path_cceignore_respected(simple_project):
     target = project_dir / "secrets.txt"
     target.write_text("password = 'hunter2'\ntoken = 'abc123'\n")
 
-    result = await run_indexing(config, str(project_dir), target_path="secrets.txt")
+    await run_indexing(config, str(project_dir), target_path="secrets.txt")
 
     storage_base = _storage(config, project_dir)
     backend = LocalBackend(base_path=str(storage_base))

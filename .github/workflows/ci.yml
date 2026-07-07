@@ -87,14 +87,15 @@ jobs:
           python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')"
 
       - name: Run tests
+        shell: bash
         env:
           FASTEMBED_CACHE_PATH: ${{ runner.temp }}/fastembed-cache
         # Windows GitHub Actions runners send spurious SIGINT during pytest
-        # teardown, causing exit code 1 even when all tests pass. The
-        # `|| <bool>` trick tolerates that exit code on Windows only while
-        # still propagating real failures on all other platforms. The
-        # follow-up XML parse step then enforces no actual test cases failed.
-        run: pytest -n ${{ runner.os == 'Windows' && '0' || '4' }} --cov=context_engine --cov-report=xml --cov-report=term --junitxml=junit-results.xml || ${{ runner.os == 'Windows' }}
+        # teardown, causing exit code 1 even when all tests pass. Using
+        # `shell: bash` ensures `|| true` is evaluated by bash on all
+        # platforms. The follow-up XML parse step then enforces no actual
+        # test cases failed.
+        run: pytest -n ${{ runner.os == 'Windows' && '0' || '4' }} --cov=context_engine --cov-report=xml --cov-report=term --junitxml=junit-results.xml || ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
       - name: Verify no test failures (Windows teardown workaround)
         if: runner.os == 'Windows'
