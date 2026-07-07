@@ -142,8 +142,31 @@ def _make_auth_middleware(expected_token: str | None):
             return await handler(request)
 
         remote = request.remote or ""
-        # Loopback requests skip auth regardless of token setting — local dev UX.
+        # Loopback requests skip bearer-token auth, but are still subject to
+        # browser-origin defenses to prevent CSRF from malicious web pages
+        # POSTing to http://127.0.0.1:<port>/ingest.
         if remote in _LOOPBACK_HOSTS:
+            # Safe methods have no write side effects — always allow.
+            if request.method in ("GET", "HEAD", "OPTIONS"):
+                return await handler(request)
+            # Mutating methods: reject cross-origin browser requests.
+            # Browsers always send Origin on cross-site requests; local
+            # tool calls (curl, SDK) do not set it.
+            origin = request.headers.get("Origin", "")
+            if origin and not any(
+                origin.startswith(f"http://{h}") or origin.startswith(f"https://{h}")
+                for h in _LOOPBACK_HOSTS
+            ):
+                return web.json_response(
+                    {"error": "cross-origin request rejected"}, status=403
+                )
+            # Require application/json to block simple-form POSTs (browsers
+            # can send application/x-www-form-urlencoded without a preflight).
+            ct = request.headers.get("Content-Type", "")
+            if request.path not in ("/health",) and "application/json" not in ct:
+                return web.json_response(
+                    {"error": "Content-Type must be application/json"}, status=415
+                )
             return await handler(request)
 
         if not expected_token:
