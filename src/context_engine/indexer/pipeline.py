@@ -353,7 +353,16 @@ async def _run_indexing_locked(
     if target_path:
         target = _resolve_within(project_dir, target_path)
         if target.is_file():
-            file_iter = [target] if target.suffix not in _SKIP_EXTENSIONS else []
+            from context_engine.indexer.secrets import is_secret_file as _is_secret_file
+            from context_engine.indexer.ignorefile import matches_any as _ignore_matches
+            redact = getattr(config, "indexer_redact_secrets", True)
+            rel = str(target.relative_to(project_dir)).replace("\\", "/")
+            secret = redact and _is_secret_file(target)
+            ignored = (
+                target.name in ignore_set
+                or (cceignore_patterns and _ignore_matches(rel, False, cceignore_patterns))
+            )
+            file_iter = [] if target.suffix in _SKIP_EXTENSIONS or secret or ignored else [target]
         elif target.is_dir():
             file_iter = list(_iter_project_files(
                 target, ignore_set, _SKIP_EXTENSIONS,
