@@ -300,18 +300,25 @@ def _has_cce_hook(hook_list: list, marker: str) -> bool:
     return False
 
 
-def _install_memory_hooks(project_dir: Path) -> None:
+def _install_memory_hooks(project_dir: Path, config=None) -> None:
     """Install the 5 lifecycle hooks for memory capture (PR 2).
 
     Writes ~/.cce/hooks/cce_hook.sh and wires <project>/.claude/settings.json
     entries for SessionStart, UserPromptSubmit, PostToolUse, Stop, SessionEnd.
     Idempotent.
+
+    When `config` is provided, the hook command is stamped with the
+    slug-based port file path so two projects with the same basename (e.g.
+    two repos both called ``api``) each read their own port file.
     """
     from context_engine.memory.hook_installer import (
         install_hook_script, install_settings,
     )
     install_hook_script()
-    summary = install_settings(project_dir)
+    port_file_path = None
+    if config is not None:
+        port_file_path = project_storage_dir(config, project_dir) / "serve.port"
+    summary = install_settings(project_dir, port_file_path=port_file_path)
     if summary["added"]:
         _ok(
             "Memory hooks installed  "
@@ -956,7 +963,7 @@ def init(ctx: click.Context, agent: str) -> None:
     if "claude" in editor_targets:
         _ensure_claude_md(project_dir, output_level=output_level)
         _ensure_session_hook(project_dir)
-        _install_memory_hooks(project_dir)
+        _install_memory_hooks(project_dir, config=config)
         _check_memory_capture_reachable(config, project_dir)
 
     # 6. .gitignore — add CCE per-machine entries
