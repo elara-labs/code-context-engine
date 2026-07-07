@@ -12,6 +12,7 @@ cce init                   # Default. Detects installed agents.
 cce init --agent claude    # Configure only Claude Code
 cce init --agent copilot   # Configure only VS Code / Copilot
 cce init --agent codex     # Configure only Codex CLI
+cce init --agent pi        # Configure only Pi
 cce init --agent all       # Configure all supported agents
 ```
 
@@ -28,6 +29,7 @@ When no `--agent` flag is provided, `cce init` defaults to `auto`, which scans f
 | [Codex CLI](/code-context-engine/guide/agents/codex/) | `~/.codex/config.toml` | `AGENTS.md` | User (global) | `~/.codex/` or VS Code OpenAI extension |
 | [OpenCode](/code-context-engine/guide/agents/opencode/) | `opencode.json` | (none) | Project | `opencode.json` exists |
 | [Tabnine](/code-context-engine/guide/agents/tabnine/) | `.tabnine/agent/settings.json` | `TABNINE.md` | Project | `.tabnine/` exists |
+| [Pi](/code-context-engine/guide/agents/pi/) | `.mcp.json` | `AGENTS.md` | Project | `.pi/` exists |
 
 ## How it works
 

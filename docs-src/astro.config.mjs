@@ -27,6 +27,7 @@ export default defineConfig({
             { slug: 'agents/codex' },
             { slug: 'agents/opencode' },
             { slug: 'agents/tabnine' },
+            { slug: 'agents/pi' },
           ],
         },
         { slug: 'configuration' },
