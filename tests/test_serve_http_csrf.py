@@ -7,13 +7,11 @@ Content-Type.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
-
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import make_mocked_request
 
-from context_engine.serve_http import _make_auth_middleware, _LOOPBACK_HOSTS
+from context_engine.serve_http import _make_auth_middleware
 
 
 def _make_request(method: str, path: str, headers: dict | None = None, remote: str = "127.0.0.1"):
