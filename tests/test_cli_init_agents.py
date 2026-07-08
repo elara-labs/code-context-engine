@@ -87,7 +87,7 @@ def test_init_auto_detects_pi_dir(tmp_path, monkeypatch):
     monkeypatch.setattr("context_engine.cli._run_index", _noop_index)
     monkeypatch.setattr("context_engine.cli._check_memory_capture_reachable", lambda config, project: None)
     monkeypatch.setattr("context_engine.cli._ensure_session_hook", lambda project: None)
-    monkeypatch.setattr("context_engine.cli._install_memory_hooks", lambda project: None)
+    monkeypatch.setattr("context_engine.cli._install_memory_hooks", lambda project, config=None: None)
     monkeypatch.chdir(project)
 
     runner = CliRunner()
@@ -188,7 +188,7 @@ def test_init_claude_does_not_write_other_instruction_files(tmp_path, monkeypatc
     monkeypatch.setattr("context_engine.cli._run_index", _noop_index)
     monkeypatch.setattr("context_engine.cli._check_memory_capture_reachable", lambda config, project: None)
     monkeypatch.setattr("context_engine.cli._ensure_session_hook", lambda project: None)
-    monkeypatch.setattr("context_engine.cli._install_memory_hooks", lambda project: None)
+    monkeypatch.setattr("context_engine.cli._install_memory_hooks", lambda project, config=None: None)
     monkeypatch.chdir(project)
 
     runner = CliRunner()
@@ -242,7 +242,7 @@ def test_init_all_then_uninstall_shared_mcp_json(tmp_path, monkeypatch):
     monkeypatch.setattr("context_engine.cli._run_index", _noop_index)
     monkeypatch.setattr("context_engine.cli._check_memory_capture_reachable", lambda config, project: None)
     monkeypatch.setattr("context_engine.cli._ensure_session_hook", lambda project: None)
-    monkeypatch.setattr("context_engine.cli._install_memory_hooks", lambda project: None)
+    monkeypatch.setattr("context_engine.cli._install_memory_hooks", lambda project, config=None: None)
     monkeypatch.chdir(project)
 
     runner = CliRunner()
@@ -277,7 +277,7 @@ def test_init_all_writes_every_editor_config_and_instruction_file(tmp_path, monk
     monkeypatch.setattr("context_engine.cli._run_index", _noop_index)
     monkeypatch.setattr("context_engine.cli._check_memory_capture_reachable", lambda config, project: None)
     monkeypatch.setattr("context_engine.cli._ensure_session_hook", lambda project: None)
-    monkeypatch.setattr("context_engine.cli._install_memory_hooks", lambda project: None)
+    monkeypatch.setattr("context_engine.cli._install_memory_hooks", lambda project, config=None: None)
     monkeypatch.chdir(project)
 
     runner = CliRunner()
