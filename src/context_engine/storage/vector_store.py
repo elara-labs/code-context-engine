@@ -38,6 +38,12 @@ class VectorStore:
         self._db_path = db_path
         self._lock = RLock()
         self._dim: int | None = None
+        # Set True by _ensure_tables when a legacy L2 vector table is wiped for
+        # the cosine-metric rebuild. The pipeline reads this to clear the
+        # manifest and force a full reindex — the on-disk chunks are gone but
+        # the manifest still claims they are indexed, so an incremental run
+        # would otherwise skip every "unchanged" file and leave the index empty.
+        self.metric_rebuilt = False
         os.makedirs(db_path, exist_ok=True)
         self._db_file = os.path.join(db_path, "vectors.db")
         self._conn = self._connect()
@@ -124,6 +130,7 @@ class VectorStore:
                     self._conn.execute("DROP TABLE IF EXISTS chunks_vec")
                     self._conn.execute("DELETE FROM chunks")
                     self._conn.execute("DELETE FROM chunk_compressions")
+                    self.metric_rebuilt = True
                 else:
                     # Table exists — read dim from first row
                     r = self._conn.execute(

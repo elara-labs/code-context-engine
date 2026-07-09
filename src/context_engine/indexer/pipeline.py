@@ -364,6 +364,17 @@ async def _run_indexing_locked(
     backend = LocalBackend(base_path=str(storage_base))
     chunker = Chunker()
     manifest = Manifest(manifest_path=storage_base / "manifest.json")
+    # If constructing the backend just wiped a legacy L2 vector table for the
+    # cosine-metric rebuild, the on-disk chunks are gone but the manifest still
+    # records every file as indexed. Clear it so the scan below re-ingests them
+    # — otherwise an incremental run (the default for `cce index` and the
+    # watcher) skips every "unchanged" file and the index stays empty until
+    # someone runs `cce index --full`. Mirrors the dim-migration guard below.
+    if getattr(getattr(backend, "_vector_store", None), "metric_rebuilt", False):
+        manifest.clear_entries()
+        log.info("Vector table rebuilt for cosine metric; cleared manifest to force full reindex.")
+        if log_fn:
+            log_fn("  [migration] vector index rebuilt (cosine metric) — reindexing all files")
     ignore_set = set(config.indexer_ignore)
     # Load .cceignore once per indexing run. Patterns are evaluated against
     # paths relative to project_dir; see indexer/ignorefile.py.
