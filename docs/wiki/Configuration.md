@@ -31,7 +31,7 @@ indexer:
 
 retrieval:
   top_k: 20              # Maximum number of chunks to return per query
-  confidence_threshold: 0.5  # Minimum confidence score to include a result (0.0–1.0)
+  confidence_threshold: 0.2  # Minimum confidence score to include a result (0.0–1.0)
 
 embedding:
   model: BAAI/bge-small-en-v1.5  # Embedding model (fastembed-compatible)
@@ -116,7 +116,7 @@ You do not need to set this manually — it is detected at startup.
 
 **`top_k`** — how many chunks the retriever returns per query. Higher values surface more context but cost more tokens. Default: 20.
 
-**`confidence_threshold`** — minimum score to include a result. Range 0.0 to 1.0. Lower values return more results; higher values return only strong matches. Default: 0.5.
+**`confidence_threshold`** — minimum score to include a result. Range 0.0 to 1.0. Lower values return more results; higher values return only strong matches. Default: 0.2.
 
 At runtime, Claude can pass `top_k` and `max_tokens` directly to `context_search`:
 ```

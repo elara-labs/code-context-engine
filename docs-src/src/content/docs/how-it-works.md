@@ -68,5 +68,6 @@ Tree-sitter grammars are included for:
 - Go
 - Rust
 - Java
+- C#
 
 Other file types are indexed using line-based chunking without AST awareness.

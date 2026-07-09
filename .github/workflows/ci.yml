@@ -87,13 +87,19 @@ jobs:
           python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')"
 
       - name: Run tests
+        shell: bash
         env:
           FASTEMBED_CACHE_PATH: ${{ runner.temp }}/fastembed-cache
-        run: pytest -n ${{ runner.os == 'Windows' && '0' || '4' }} --cov=context_engine --cov-report=xml --cov-report=term
         # Windows GitHub Actions runners send spurious SIGINT during pytest
-        # teardown, causing exit code 1 even when all tests pass (779/779).
-        # This is a known runner infrastructure issue, not a code bug.
-        continue-on-error: ${{ runner.os == 'Windows' }}
+        # teardown, causing exit code 1 even when all tests pass. Using
+        # `shell: bash` ensures `|| true` is evaluated by bash on all
+        # platforms. The follow-up XML parse step then enforces no actual
+        # test cases failed.
+        run: pytest -n ${{ runner.os == 'Windows' && '0' || '4' }} --cov=context_engine --cov-report=xml --cov-report=term --junitxml=junit-results.xml || ${{ runner.os == 'Windows' && 'true' || 'false' }}
+
+      - name: Verify no test failures (Windows teardown workaround)
+        if: runner.os == 'Windows'
+        run: python -c "import xml.etree.ElementTree as ET; r=ET.parse('junit-results.xml').getroot(); f=int(r.get('failures','0'))+int(r.get('errors','0')); print(f'failures={f}'); exit(f)"
 
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'

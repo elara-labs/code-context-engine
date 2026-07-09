@@ -36,7 +36,8 @@
   <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Gemini_CLI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Gemini CLI"></a>&nbsp;
   <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Codex_CLI-412991?style=for-the-badge" alt="Codex CLI"></a>&nbsp;
   <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/OpenCode-22C55E?style=for-the-badge&logo=gnometerminal&logoColor=white" alt="OpenCode"></a>&nbsp;
-  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Tabnine-4B32C3?style=for-the-badge&logo=tabnine&logoColor=white" alt="Tabnine"></a>
+  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Tabnine-4B32C3?style=for-the-badge&logo=tabnine&logoColor=white" alt="Tabnine"></a>&nbsp;
+  <a href="#install-and-see-savings-in-60-seconds"><img src="https://img.shields.io/badge/Pi-000?style=for-the-badge" alt="Pi"></a>
 </p>
 
 <p align="center">
@@ -47,6 +48,13 @@
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/elara-labs/code-context-engine/main/docs/demo.gif" alt="CCE Demo" width="720">
+</p>
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=dRmWYHuIJxM">
+    <img src="https://img.youtube.com/vi/dRmWYHuIJxM/maxresdefault.jpg" alt="Talk: We Cut 94% of Our AI Coding Tokens — AI Engineer World's Fair 2026" width="560">
+  </a><br>
+  <sub><strong>Talk:</strong> <a href="https://www.youtube.com/watch?v=dRmWYHuIJxM">We Cut 94% of Our AI Coding Tokens</a> — AI Engineer World's Fair 2026</sub>
 </p>
 
 ---
@@ -100,7 +108,7 @@ Tested on macOS, Linux, Windows with Python 3.11/3.12/3.13.
 </details>
 
 `cce init` auto-detects your editor and writes the right config. To target a
-specific agent, use `--agent claude`, `--agent codex`, `--agent copilot`, or
+specific agent, use `--agent claude`, `--agent codex`, `--agent copilot`, `--agent pi`, or
 `--agent all`.
 
 | Editor | Config written | Instructions |
@@ -112,6 +120,7 @@ specific agent, use `--agent claude`, `--agent codex`, `--agent copilot`, or
 | OpenAI Codex | `~/.codex/config.toml` (user-global, per-project section) | `AGENTS.md` |
 | OpenCode | `opencode.json` | |
 | Tabnine | `.tabnine/agent/settings.json` | `TABNINE.md` |
+| Pi | `.mcp.json` | `AGENTS.md` |
 
 Multiple editors in the same project? All get configured in one command.
 
@@ -119,6 +128,12 @@ Multiple editors in the same project? All get configured in one command.
 it has no per-project config. `cce init` adds one `[mcp_servers.cce-<project>-<hash>]`
 section per project so multiple projects coexist; `cce uninstall` removes only
 the section for the current project.
+
+**Pi note:** Pi does not support MCP natively. To use CCE with Pi, you need a
+pi MCP adapter extension (e.g. [pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter))
+that consumes the `.mcp.json` config and exposes CCE's tools to the Pi agent.
+`cce init` sets up both `.mcp.json` and `AGENTS.md` — Pi loads the latter
+automatically for startup instructions.
 
 ```
   my-project · 38 queries · last query 5m ago
@@ -391,7 +406,7 @@ No GPU required. With Ollama, embeddings are handled by the Ollama server. With 
 
 ## Supported Languages
 
-**AST-aware chunking (tree-sitter parsed, 10 extensions):**
+**AST-aware chunking (tree-sitter parsed, 11 extensions):**
 
 | Language | Extensions |
 |----------|-----------|
@@ -402,13 +417,14 @@ No GPU required. With Ollama, embeddings are handled by the Ollama server. With 
 | Go | `.go` |
 | Rust | `.rs` |
 | Java | `.java` |
+| C# | `.cs` |
 
 **Language-aware fallback chunking (40+ extensions):**
 
 | Category | Languages |
 |----------|-----------|
 | Web | HTML, CSS, SCSS, LESS, Vue, Svelte |
-| Systems | C, C++, C#, Zig, Nim |
+| Systems | C, C++, Zig, Nim |
 | Mobile | Swift, Kotlin, Dart |
 | Functional | Haskell, Scala, Clojure, Elixir, Erlang, F# |
 | Scripting | Ruby, Perl, Lua, R, Bash/Zsh |

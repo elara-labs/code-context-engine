@@ -386,6 +386,11 @@ async def _run_indexing_locked(
             rel_posix = rel.replace("\\", "/")
             if target.suffix in _SKIP_EXTENSIONS:
                 file_iter = []
+            elif target.name in ignore_set:
+                if log_fn:
+                    log_fn(f"  [skip] {rel} (ignored)")
+                result.skipped_files.append(rel)
+                file_iter = []
             elif (
                 getattr(config, "indexer_redact_secrets", True)
                 and is_secret_file(target)
