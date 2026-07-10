@@ -690,10 +690,9 @@ class ContextEngineMCP:
         entirely, so the bucket undercounts and (worse) real tokens get spent
         that the directive would have shaved.
         """
-        if hasattr(self, "_state_path"):
-            state_level = self._load_state().get("output_level")
-            if state_level in LEVELS:
-                self._output_level = state_level
+        state_level = self._load_state().get("output_level")
+        if state_level in LEVELS:
+            self._output_level = state_level
 
         if not get_output_rules(self._output_level):
             return body

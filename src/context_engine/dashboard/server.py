@@ -497,13 +497,15 @@ def create_app(config: Config, project_dir: Path) -> FastAPI:
 
     @app.post("/api/format")
     async def set_format_config(req: FormatConfigRequest) -> dict:
+        from context_engine.utils import atomic_write_text
+
         settings = _normalize_format_config(req)
         state = _read_state()
         state["input_preset"] = settings["input_preset"]
         state["context_top_k"] = settings["top_k"]
         state["context_max_tokens"] = settings["max_tokens"]
         state["output_level"] = settings["output_level"]
-        (storage_base / "state.json").write_text(json.dumps(state), encoding="utf-8")
+        atomic_write_text(storage_base / "state.json", json.dumps(state))
         return settings
 
     @app.get("/api/export")
