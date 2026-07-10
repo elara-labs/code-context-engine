@@ -41,7 +41,7 @@ def test_uninstall_removes_versioned_block(runner, tmp_path):
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
     user_content = "# My project\n\nSome user notes.\n\n"
-    (project_dir / "CLAUDE.md").write_text(user_content + _CCE_CLAUDE_MD_BLOCK)
+    (project_dir / "CLAUDE.md").write_text(user_content + _CCE_CLAUDE_MD_BLOCK, encoding="utf-8")
 
     result = _run_uninstall_in(runner, project_dir)
     assert result.exit_code == 0, result.output
@@ -76,7 +76,7 @@ def test_uninstall_deletes_claude_md_when_only_cce_block(runner, tmp_path):
     """If CLAUDE.md contained only the CCE block, the file is unlinked."""
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
-    (project_dir / "CLAUDE.md").write_text(_CCE_CLAUDE_MD_BLOCK)
+    (project_dir / "CLAUDE.md").write_text(_CCE_CLAUDE_MD_BLOCK, encoding="utf-8")
 
     result = _run_uninstall_in(runner, project_dir)
     assert result.exit_code == 0, result.output
@@ -215,7 +215,7 @@ def test_uninstall_full_cleanup(runner, tmp_path):
     (project_dir / ".mcp.json").write_text(json.dumps({
         "mcpServers": {"context-engine": {"command": "cce", "args": ["serve"]}}
     }))
-    (project_dir / "CLAUDE.md").write_text(_CCE_CLAUDE_MD_BLOCK)
+    (project_dir / "CLAUDE.md").write_text(_CCE_CLAUDE_MD_BLOCK, encoding="utf-8")
     (project_dir / ".context-engine.yaml").write_text("compression:\n  level: full\n")
     (project_dir / ".gitignore").write_text(".cce/\n.context-engine.yaml\n")
 

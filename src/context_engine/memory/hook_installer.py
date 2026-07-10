@@ -73,7 +73,7 @@ _HOOK_SCRIPT_BODY_POSIX = """#!/bin/sh
 set -u
 
 HOOK_NAME="${1:-unknown}"
-PORT_FILE="${HOME}/.cce/projects/$(basename "${PWD}")/serve.port"
+PORT_FILE="${CCE_PORT_FILE:-${HOME}/.cce/projects/$(basename "${PWD}")/serve.port}"
 [ -r "${PORT_FILE}" ] || exit 0
 PORT="$(cat "${PORT_FILE}" 2>/dev/null)"
 [ -n "${PORT}" ] || exit 0
@@ -127,8 +127,12 @@ setlocal enabledelayedexpansion
 set "HOOK_NAME=%~1"
 if "%HOOK_NAME%"=="" set "HOOK_NAME=unknown"
 
-for %%I in ("%CD%") do set "PROJECT_NAME=%%~nxI"
-set "PORT_FILE=%USERPROFILE%\\.cce\\projects\\%PROJECT_NAME%\\serve.port"
+if defined CCE_PORT_FILE (
+    set "PORT_FILE=%CCE_PORT_FILE%"
+) else (
+    for %%I in ("%CD%") do set "PROJECT_NAME=%%~nxI"
+    set "PORT_FILE=%USERPROFILE%\\.cce\\projects\\%PROJECT_NAME%\\serve.port"
+)
 if not exist "%PORT_FILE%" exit /b 0
 
 set /p PORT=<"%PORT_FILE%"
@@ -201,8 +205,13 @@ def install_hook_script(target: Path = HOOK_PATH) -> bool:
     return True
 
 
-def install_settings(project_dir: Path) -> dict:
+def install_settings(project_dir: Path, port_file_path: Path | None = None) -> dict:
     """Wire all 5 lifecycle hooks into <project>/.claude/settings.json.
+
+    When `port_file_path` is provided, the hook command is prefixed with
+    ``CCE_PORT_FILE=<path>`` so that two projects sharing the same basename
+    (e.g. two repos both called ``api``) each read their own port file
+    instead of colliding at the basename-derived default path.
 
     Idempotent. Preserves any existing user hooks. Returns a summary dict
     with `added` (hook names we wrote) and `skipped` (hook names already
@@ -226,6 +235,8 @@ def install_settings(project_dir: Path) -> dict:
     added: list[str] = []
     skipped: list[str] = []
 
+    port_env = f"CCE_PORT_FILE={_quote_hook_path(port_file_path)} " if port_file_path else ""
+
     for hook_name in LIFECYCLE_HOOKS:
         bucket = hooks.setdefault(hook_name, [])
         if _has_cce_hook(bucket):
@@ -241,7 +252,7 @@ def install_settings(project_dir: Path) -> dict:
             "matcher": HOOK_MATCHERS.get(hook_name, ""),
             "hooks": [{
                 "type": "command",
-                "command": f"{_quote_hook_path(HOOK_PATH)} {hook_name}",
+                "command": f"{port_env}{_quote_hook_path(HOOK_PATH)} {hook_name}",
             }],
         })
         added.append(hook_name)
