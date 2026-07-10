@@ -444,6 +444,62 @@ async def test_auto_prune_loop_stop_event_short_circuits_initial_delay(tmp_path:
     await asyncio.wait_for(task, timeout=1.0)
 
 
+def test_bootstrap_without_vec_completes_on_later_connect(
+    tmp_path: Path, monkeypatch,
+):
+    """A fresh DB bootstrapped while sqlite-vec is unavailable must not
+    permanently disable semantic recall. The bootstrap must defer the
+    version stamp (like the upgrade branch does) so a later connect()
+    with vec support creates the vec tables, and backfill_vec_tables
+    then picks up rows written while vec was missing."""
+    db_path = tmp_path / "memory.db"
+
+    # Phase 1: bootstrap with sqlite-vec unavailable.
+    monkeypatch.setattr(memory_db, "_try_load_vec", lambda conn: False)
+    conn = memory_db.connect(db_path)
+    try:
+        assert not memory_db.has_vec_tables(conn)
+        assert memory_db.schema_version(conn) < memory_db.CURRENT_VERSION, (
+            "bootstrap must not stamp CURRENT_VERSION when the vec step "
+            "was skipped — otherwise the v2 step never runs"
+        )
+        # A row written while vec was unavailable.
+        conn.execute(
+            "INSERT INTO decisions (decision, reason, source, "
+            "created_at_epoch, created_at) "
+            "VALUES (?, ?, 'manual', 1700000000, '2023-11-14T22:13:20')",
+            ("Recorded while vec was missing", "should backfill later"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Reopening still without vec must be a stable no-op (no crash, no stamp).
+    conn = memory_db.connect(db_path)
+    try:
+        assert not memory_db.has_vec_tables(conn)
+        assert memory_db.schema_version(conn) < memory_db.CURRENT_VERSION
+    finally:
+        conn.close()
+
+    # Phase 2: sqlite-vec is available again.
+    monkeypatch.undo()
+    conn = memory_db.connect(db_path)
+    try:
+        assert memory_db.has_vec_tables(conn), (
+            "vec tables must be created once the extension loads"
+        )
+        assert memory_db.schema_version(conn) == memory_db.CURRENT_VERSION
+        counts = memory_db.backfill_vec_tables(conn, _FakeEmbedder())
+        assert counts["decisions"] == 1
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM decisions_vec"
+        ).fetchone()["n"]
+        assert n == 1
+    finally:
+        conn.close()
+
+
 def test_v1_to_v2_upgrade_in_place(tmp_path: Path):
     """A db stamped at v1 (no vec tables) gains them on the next connect()."""
     import sqlite3

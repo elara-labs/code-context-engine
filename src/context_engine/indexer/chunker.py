@@ -35,6 +35,16 @@ _IMPORT_TYPES = {
     "using_directive",                             # C#
 }
 
+def _node_text(src_bytes: bytes, node) -> str:
+    """Slice a node's source from the utf-8 BYTES tree-sitter parsed.
+
+    node.start_byte / node.end_byte are byte offsets into the encoded
+    source, not str indices — slicing the original str garbles content
+    whenever a multi-byte character precedes the node.
+    """
+    return src_bytes[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
+
+
 _LANGUAGES = {
     "python": Language(tspython.language()),
     "javascript": Language(tsjavascript.language()),
@@ -77,23 +87,28 @@ class Chunker:
         parser = self._get_parser(language)
         if parser is None:
             return [self._fallback_chunk(source, file_path, language)]
-        tree = parser.parse(source.encode("utf-8"))
+        # tree-sitter parses the utf-8 BYTES and reports byte offsets.
+        # Encode once and slice the bytes — slicing the original str with
+        # byte offsets silently garbles every chunk after the first
+        # multi-byte character (emoji, CJK, accents).
+        src_bytes = source.encode("utf-8")
+        tree = parser.parse(src_bytes)
         chunks = []
-        self._walk(tree.root_node, source, file_path, language, chunks)
+        self._walk(tree.root_node, src_bytes, file_path, language, chunks)
         if not chunks:
             return [self._fallback_chunk(source, file_path, language)]
         return chunks
 
-    def _walk(self, node, source, file_path, language, chunks):
+    def _walk(self, node, src_bytes, file_path, language, chunks):
         if node.type in _FUNCTION_TYPES:
-            chunks.append(self._node_to_chunk(node, source, file_path, language, ChunkType.FUNCTION))
+            chunks.append(self._node_to_chunk(node, src_bytes, file_path, language, ChunkType.FUNCTION))
         elif node.type in _CLASS_TYPES:
-            chunks.append(self._node_to_chunk(node, source, file_path, language, ChunkType.CLASS))
+            chunks.append(self._node_to_chunk(node, src_bytes, file_path, language, ChunkType.CLASS))
         for child in node.children:
-            self._walk(child, source, file_path, language, chunks)
+            self._walk(child, src_bytes, file_path, language, chunks)
 
-    def _node_to_chunk(self, node, source, file_path, language, chunk_type):
-        content = source[node.start_byte:node.end_byte]
+    def _node_to_chunk(self, node, src_bytes, file_path, language, chunk_type):
+        content = _node_text(src_bytes, node)
         start_line = node.start_point.row + 1
         end_line = node.end_point.row + 1
         chunk_id = hashlib.sha256(
@@ -115,38 +130,41 @@ class Chunker:
         parser = self._get_parser(language)
         if parser is None:
             return []
-        tree = parser.parse(source.encode("utf-8"))
+        # Same byte-offset contract as chunk(): slice the encoded bytes,
+        # never the str (multi-byte chars shift str indices).
+        src_bytes = source.encode("utf-8")
+        tree = parser.parse(src_bytes)
         imports: list[str] = []
-        self._walk_imports(tree.root_node, source, language, imports)
+        self._walk_imports(tree.root_node, src_bytes, language, imports)
         return list(dict.fromkeys(imports))  # deduplicate while preserving order
 
-    def _walk_imports(self, node, source, language, imports):
+    def _walk_imports(self, node, src_bytes, language, imports):
         if node.type in _IMPORT_TYPES:
-            module = self._parse_import_module(node, source, language)
+            module = self._parse_import_module(node, src_bytes, language)
             if module:
                 imports.append(module)
         for child in node.children:
-            self._walk_imports(child, source, language, imports)
+            self._walk_imports(child, src_bytes, language, imports)
 
-    def _parse_import_module(self, node, source, language) -> str | None:
+    def _parse_import_module(self, node, src_bytes, language) -> str | None:
         if node.type == "import_statement":
             # Python: "import os" or "import os.path"
             # Also handles JS/TS: "import React from 'react'" (string child present)
             for child in node.children:
                 if child.type == "string":
                     # JavaScript/TypeScript import with string module specifier
-                    raw = source[child.start_byte:child.end_byte].strip("'\"")
+                    raw = _node_text(src_bytes, child).strip("'\"")
                     return raw.split("/")[0] if not raw.startswith("@") else "/".join(raw.split("/")[:2])
                 if child.type in ("dotted_name", "aliased_import"):
                     # Python bare import
-                    name = source[child.start_byte:child.end_byte]
+                    name = _node_text(src_bytes, child)
                     name = name.split(" as ")[0].strip()
                     return name.split(".")[0]
         elif node.type == "import_from_statement":
             # Python: "from pathlib import Path"
             for child in node.children:
                 if child.type in ("dotted_name", "relative_import"):
-                    name = source[child.start_byte:child.end_byte].strip()
+                    name = _node_text(src_bytes, child).strip()
                     name = name.lstrip(".")
                     if name:
                         return name.split(".")[0]
@@ -155,13 +173,13 @@ class Chunker:
             # segment, mirroring the Python dotted-name convention below.
             for child in node.children:
                 if child.type in ("qualified_name", "identifier"):
-                    name = source[child.start_byte:child.end_byte].strip()
+                    name = _node_text(src_bytes, child).strip()
                     return name.split(".")[0]
         elif node.type == "import_declaration":
             # TypeScript (tree-sitter-typescript): "import React from 'react'"
             for child in node.children:
                 if child.type == "string":
-                    raw = source[child.start_byte:child.end_byte].strip("'\"")
+                    raw = _node_text(src_bytes, child).strip("'\"")
                     return raw.split("/")[0] if not raw.startswith("@") else "/".join(raw.split("/")[:2])
         return None
 

@@ -21,6 +21,9 @@ _MAX_CHUNKS_PER_FILE = 3
 # When the parsed query looks like a code lookup, give FTS more pull because
 # exact-identifier hits are usually what the user wants.
 _FTS_BOOST_CODE_LOOKUP = 1.5
+# Worst possible cosine distance (opposite vectors). Used as the fallback for
+# chunks with no vector evidence when no vector results were returned at all.
+_WORST_COSINE_DISTANCE = 2.0
 
 
 class HybridRetriever:
@@ -37,6 +40,8 @@ class HybridRetriever:
         top_k: int = 10,
         confidence_threshold: float = 0.0,
         max_tokens: int | None = None,
+        marginal_ratio: float = 0.0,
+        stats_out: dict | None = None,
     ) -> list[Chunk]:
         parsed = self._parser.parse(query)
         query_embedding = self._embedder.embed_query(query)
@@ -104,6 +109,19 @@ class HybridRetriever:
         # almost no signal past the top few. Rank-normalising restores gradient.
         max_rrf = max(rrf_scores.values()) if rrf_scores else 0.0
 
+        # Chunks hydrated from FTS-only hits carry no _distance. They were
+        # absent from the vector top-k, so their true distance is at least as
+        # bad as the worst returned vector hit — never default to 0.0, which
+        # would grant keyword-incidental matches perfect vector similarity.
+        observed_distances = [
+            c.metadata["_distance"]
+            for c in vector_results
+            if "_distance" in c.metadata
+        ]
+        no_vector_distance = (
+            max(observed_distances) if observed_distances else _WORST_COSINE_DISTANCE
+        )
+
         # Score with confidence scorer
         scored: list[tuple[Chunk, float]] = []
         for id_, rrf_score in rrf_scores.items():
@@ -111,7 +129,7 @@ class HybridRetriever:
             if chunk is None:
                 continue
 
-            distance = chunk.metadata.get("_distance", 0.0)
+            distance = chunk.metadata.get("_distance", no_vector_distance)
             normalised_distance = min(max(distance / 2.0, 0.0), 1.0)
             keyword_distance = self._estimate_keyword_distance(chunk, parsed)
             conf_score = self._scorer.score(
@@ -128,17 +146,38 @@ class HybridRetriever:
             final_score = self._apply_path_penalty(chunk.file_path, final_score)
             chunk.confidence_score = final_score
 
-            if final_score >= confidence_threshold:
-                scored.append((chunk, final_score))
+            scored.append((chunk, final_score))
 
         scored.sort(key=lambda x: x[1], reverse=True)
+        scored = self._dedupe_overlaps(scored)
+
+        # Candidate count after dedup, before any confidence filtering —
+        # the baseline for the dropped_low_value accounting below.
+        candidates = len(scored)
+
+        # Confidence cutoff with a top-1 guarantee: an over-tight threshold
+        # must never turn a matching query into an empty result.
+        filtered = [(c, s) for c, s in scored if s >= confidence_threshold]
+        if not filtered and scored:
+            filtered = scored[:1]
+        # Candidates excluded specifically by the threshold (a top-1
+        # guarantee survivor was not dropped).
+        dropped_low_value = candidates - len(filtered)
+        scored = filtered
 
         # File diversity: cap chunks per file so one large file doesn't
         # dominate the result set. This improves precision by letting
         # chunks from more files surface into the top-k.
+        top_score = scored[0][1] if scored else 0.0
         file_counts: dict[str, int] = {}
         diverse: list[Chunk] = []
-        for chunk, _ in scored:
+        for idx, (chunk, score) in enumerate(scored):
+            if diverse and marginal_ratio > 0 and score < marginal_ratio * top_score:
+                # Everything from here on scores below the marginal cutoff
+                # (list is sorted) — count them as low-value drops. Chunks
+                # excluded only by the per-file cap or top_k are NOT counted.
+                dropped_low_value += len(scored) - idx
+                break
             count = file_counts.get(chunk.file_path, 0)
             if count < _MAX_CHUNKS_PER_FILE:
                 diverse.append(chunk)
@@ -178,6 +217,10 @@ class HybridRetriever:
                 log.debug("Graph expansion skipped: %s", exc)
 
         if max_tokens is None:
+            if stats_out is not None:
+                stats_out["candidates"] = candidates
+                stats_out["selected"] = len(ranked)
+                stats_out["dropped_low_value"] = dropped_low_value
             return ranked
 
         packed: list[Chunk] = []
@@ -192,6 +235,10 @@ class HybridRetriever:
                 if compressed_tokens <= budget:
                     packed.append(chunk)
                     budget -= compressed_tokens
+        if stats_out is not None:
+            stats_out["candidates"] = candidates
+            stats_out["selected"] = len(packed)
+            stats_out["dropped_low_value"] = dropped_low_value
         return packed
 
     @staticmethod
@@ -203,6 +250,39 @@ class HybridRetriever:
             if marker in fp_lower:
                 return score * 0.8
         return score
+
+    @staticmethod
+    def _dedupe_overlaps(
+        scored: list[tuple[Chunk, float]],
+    ) -> list[tuple[Chunk, float]]:
+        """Collapse same-file chunks whose line ranges overlap by more than
+        half of the shorter chunk, keeping the higher-scored one. Input must
+        be sorted by score descending; earlier (better) entries win.
+        Candidate sets are small (≤ top_k*3 per source), so O(n²) is fine.
+        """
+        kept: list[tuple[Chunk, float]] = []
+        for chunk, score in scored:
+            duplicate = False
+            for kept_chunk, _ in kept:
+                if kept_chunk.file_path != chunk.file_path:
+                    continue
+                overlap = (
+                    min(chunk.end_line, kept_chunk.end_line)
+                    - max(chunk.start_line, kept_chunk.start_line)
+                    + 1
+                )
+                if overlap <= 0:
+                    continue
+                shorter = min(
+                    chunk.end_line - chunk.start_line + 1,
+                    kept_chunk.end_line - kept_chunk.start_line + 1,
+                )
+                if shorter > 0 and overlap / shorter > 0.5:
+                    duplicate = True
+                    break
+            if not duplicate:
+                kept.append((chunk, score))
+        return kept
 
     def _estimate_keyword_distance(self, chunk, parsed) -> int:
         if parsed.file_hints:

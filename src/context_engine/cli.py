@@ -139,11 +139,16 @@ def _show_update_notice() -> None:
         pass
 
 
-def _configure_mcp(project_dir: Path) -> bool:
+def _configure_mcp(project_dir: Path) -> bool | None:
     """Write MCP server config to .mcp.json in the project directory.
 
-    Returns True if the entry was added. Uses an atomic write so a crash or
-    partial write can't destroy pre-existing MCP server entries in the file.
+    Returns True if the entry was added/updated, False if already configured,
+    or None if an existing .mcp.json could not be parsed — in that case the
+    file is left untouched (overwriting it with `{}` plus our entry would
+    destroy the user's other MCP servers) and the caller should warn.
+
+    Uses an atomic write so a crash or partial write can't destroy
+    pre-existing MCP server entries in the file.
     """
     from context_engine.utils import atomic_write_text, resolve_cce_binary
 
@@ -160,20 +165,29 @@ def _configure_mcp(project_dir: Path) -> bool:
         try:
             data = json.loads(mcp_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            data = {}
+            # Skip rather than clobber a file we couldn't read/parse.
+            return None
+        if not isinstance(data, dict):
+            return None
     else:
         data = {}
 
-    servers = data.setdefault("mcpServers", {})
-    if "context-engine" in servers:
-        existing = servers["context-engine"]
-        if existing.get("command") == command and existing.get("args") == entry["args"]:
-            return False  # already configured and up to date
-        # Update stale command path or args (e.g. after package rename).
-        servers["context-engine"] = entry
-        atomic_write_text(mcp_path, json.dumps(data, indent=2) + "\n")
-        return True
+    # A non-dict value ("mcpServers": null, or a list) can't hold our entry —
+    # replace it with a fresh dict instead of raising TypeError.
+    servers = data.get("mcpServers")
+    if not isinstance(servers, dict):
+        servers = {}
+        data["mcpServers"] = servers
 
+    existing = servers.get("context-engine")
+    if (
+        isinstance(existing, dict)
+        and existing.get("command") == command
+        and existing.get("args") == entry["args"]
+    ):
+        return False  # already configured and up to date
+
+    # Add, or update stale command path/args (e.g. after package rename).
     servers["context-engine"] = entry
     atomic_write_text(mcp_path, json.dumps(data, indent=2) + "\n")
     return True
@@ -908,7 +922,12 @@ def init(ctx: click.Context, agent: str) -> None:
     editor_targets = _init_editor_targets(project_dir, agent)
     if "claude" in editor_targets:
         configured = _configure_mcp(project_dir)
-        if configured:
+        if configured is None:
+            _warn(
+                "MCP config skipped — .mcp.json exists but could not be parsed; "
+                "fix or remove it and re-run `cce init`"
+            )
+        elif configured:
             _ok("MCP server registered in " + click.style(".mcp.json", fg="cyan"))
         else:
             _ok("MCP server already configured in " + click.style(".mcp.json", fg="cyan"))
@@ -2305,11 +2324,68 @@ def search(ctx: click.Context, query: str, top_k: int) -> None:
     asyncio.run(_search())
 
 
+def _strip_cce_git_hook_block(content: str, marker: str) -> str | None:
+    """Remove the CCE-installed block (the marker line plus the command line
+    that follows it) from a git hook script.
+
+    Returns the remaining script text, or None when nothing meaningful is
+    left (only the shebang and blank lines) — meaning the file was created
+    by CCE and should be deleted outright.
+    """
+    lines = content.splitlines()
+    kept: list[str] = []
+    skip_next = False
+    for line in lines:
+        if skip_next:
+            skip_next = False
+            continue
+        if marker in line:
+            skip_next = True  # drop the `cce index ... &` line too
+            continue
+        kept.append(line)
+    meaningful = [
+        ln for ln in kept if ln.strip() and not ln.strip().startswith("#!")
+    ]
+    if not meaningful:
+        return None
+    return "\n".join(kept).rstrip() + "\n"
+
+
+def _is_cce_settings_hook_command(cmd: str) -> bool:
+    """True only for hook commands CCE itself installs — never for commands
+    that merely contain "cce" as a substring ("access", "success", ...).
+
+    CCE installs exactly two command shapes:
+      - memory lifecycle hooks: `<quoted path>/cce_hook.sh <event>`
+        (see memory/hook_installer.install_settings)
+      - SessionStart status hook: `<path-to-cce> status --oneline`
+        (see _ensure_session_hook)
+    plus legacy invocations of the `code-context-engine` binary.
+    """
+    import re
+
+    from context_engine.memory.hook_installer import HOOK_MARKER as _MEM_HOOK_MARKER
+
+    if _MEM_HOOK_MARKER in cmd:  # "cce_hook"
+        return True
+    if "context-engine" in cmd:
+        return True
+    # `cce <subcommand>` where cce may be a bare name or an absolute path
+    # (possibly quoted, possibly cce.exe/cce.cmd on Windows).
+    return bool(
+        re.search(
+            r"""(?:^|[\\/\s"'])cce(?:\.exe|\.cmd)?["']?\s+(?:status|index|serve|sessions)\b""",
+            cmd,
+        )
+    )
+
+
 @main.command()
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
 def uninstall(yes: bool) -> None:
     """Remove CCE from the current project (hooks, .mcp.json entry, CLAUDE.md block)."""
     from context_engine.cli_style import section, animate, dim, warn, CROSS, DOT
+    from context_engine.indexer.git_hooks import HOOK_MARKER as _GIT_HOOK_MARKER
 
     project_dir = _safe_cwd()
     project_name = project_dir.name
@@ -2324,7 +2400,11 @@ def uninstall(yes: bool) -> None:
     lines.append(section(f"Uninstall · {project_name}"))
     lines.append("")
 
-    # Remove git hooks
+    # Remove git hooks. Match only the exact marker CCE installs (or the
+    # unambiguous "context-engine" binary name for legacy hooks) — a bare
+    # "cce" substring also matches user hooks containing words like
+    # "access" or "success". When CCE appended its block to a pre-existing
+    # user hook, strip only that block instead of deleting the whole file.
     hooks_dir = project_dir / ".git" / "hooks"
     removed_hooks = 0
     if hooks_dir.exists():
@@ -2332,7 +2412,16 @@ def uninstall(yes: bool) -> None:
             hook_file = hooks_dir / hook_name
             if hook_file.exists():
                 content = hook_file.read_text(encoding="utf-8")
-                if "cce" in content.lower() or "context-engine" in content.lower():
+                if _GIT_HOOK_MARKER in content:
+                    remaining_hook = _strip_cce_git_hook_block(content, _GIT_HOOK_MARKER)
+                    if remaining_hook is None:
+                        hook_file.unlink()
+                    else:
+                        hook_file.write_text(remaining_hook, encoding="utf-8")
+                    removed_hooks += 1
+                elif "context-engine" in content:
+                    # Legacy CCE hooks predate the marker but invoked the
+                    # code-context-engine binary directly.
                     hook_file.unlink()
                     removed_hooks += 1
     if removed_hooks:
@@ -2418,10 +2507,12 @@ def uninstall(yes: bool) -> None:
             changed = False
             for event in list(hooks.keys()):
                 original = hooks[event]
+                # Match only the command shapes CCE installs — a bare "cce"
+                # substring also matches user hooks like "log-access ...".
                 filtered = [
                     h for h in original
                     if not any(
-                        "cce" in cmd.get("command", "")
+                        _is_cce_settings_hook_command(cmd.get("command", ""))
                         for cmd in (h.get("hooks", []) if isinstance(h, dict) else [])
                     )
                 ]
@@ -2447,19 +2538,30 @@ def uninstall(yes: bool) -> None:
         except (json.JSONDecodeError, OSError):
             pass
 
-    # Remove CCE entries from .gitignore (including comment lines)
+    # Remove CCE entries from .gitignore (including comment lines). Match
+    # only the exact entries/comments CCE writes (see
+    # project_commands._GITIGNORE_ENTRIES / ensure_gitignore) or lines naming
+    # "context-engine" — never a bare "cce" substring, which also matches
+    # user lines like "access-logs/".
     gitignore = project_dir / ".gitignore"
     if gitignore.exists():
         content = gitignore.read_text(encoding="utf-8")
-        if ".cce" in content or "context-engine" in content.lower() or "cce" in content.lower() or ".claude/settings.local.json" in content:
-            # These are the exact entries CCE adds (see project_commands._GITIGNORE_ENTRIES)
-            cce_lines = {".cce/", ".claude/settings.local.json"}
-            new_lines = [
-                line for line in content.splitlines()
-                if line.strip() not in cce_lines
-                and "context-engine" not in line.lower()
-                and not (line.startswith("#") and ("cce" in line.lower() or "claude code local settings" in line.lower()))
-            ]
+        cce_entries = {".cce/", ".claude/settings.local.json"}
+        cce_comments = {
+            "# CCE (code-context-engine)",
+            "# CCE local cache (per-machine, not for version control)",
+            "# Claude Code local settings written by cce init",
+            "# .mcp.json contains absolute paths regenerated by `cce init`",
+        }
+        old_lines = content.splitlines()
+        new_lines = [
+            line for line in old_lines
+            if line.strip() not in cce_entries
+            and line.strip() not in cce_comments
+            and "context-engine" not in line.lower()
+            and not (line.startswith("#") and "claude code local settings" in line.lower())
+        ]
+        if len(new_lines) != len(old_lines):
             new_content = "\n".join(new_lines).strip()
             if new_content:
                 gitignore.write_text(new_content + "\n", encoding="utf-8")
@@ -2615,7 +2717,12 @@ def upgrade(ctx: click.Context, check: bool) -> None:
         click.echo("")
         click.echo(f"  {click.style('Refreshing project config', fg='cyan')}...")
         configured = _configure_mcp(project_dir)
-        if configured:
+        if configured is None:
+            _warn(
+                "MCP config skipped — .mcp.json could not be parsed; "
+                "fix or remove it and re-run `cce init`"
+            )
+        elif configured:
             _ok("MCP server paths updated in " + click.style(".mcp.json", fg="cyan"))
         else:
             _ok("MCP server config is current")

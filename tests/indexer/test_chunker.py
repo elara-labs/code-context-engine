@@ -122,6 +122,45 @@ def test_chunk_unsupported_language_falls_back(chunker):
     assert chunks[0].chunk_type == ChunkType.MODULE
 
 
+MULTIBYTE_PYTHON = '''"""Módulo 🚀 — docstring with émojis and CJK: 日本語."""
+
+def first():
+    return "a"
+
+def second():
+    return "b"
+'''
+
+
+def test_chunk_multibyte_prefix_does_not_shift_offsets(chunker):
+    """tree-sitter reports BYTE offsets on the utf-8 encoding; slicing the
+    original str with them garbles every chunk after a multi-byte char.
+    Chunk contents must exactly equal the function sources."""
+    chunks = chunker.chunk(MULTIBYTE_PYTHON, file_path="emoji.py", language="python")
+    function_chunks = [c for c in chunks if c.chunk_type == ChunkType.FUNCTION]
+    assert [c.content for c in function_chunks] == [
+        'def first():\n    return "a"',
+        'def second():\n    return "b"',
+    ]
+
+
+def test_extract_imports_with_multibyte_prefix(chunker):
+    """Byte offsets must also be handled in _parse_import_module — a CJK
+    comment before the imports used to shift the sliced module names."""
+    source = "# 日本語のコメント 🚀\nimport os\nfrom pathlib import Path\n\ndef main(): pass\n"
+    _, imports = chunker.chunk_with_imports(source, file_path="main.py", language="python")
+    assert imports == ["os", "pathlib"]
+
+
+def test_chunk_multibyte_javascript_import(chunker):
+    """JS string module specifiers after an emoji comment stay intact."""
+    source = "// hello 🎉 world\nimport React from 'react';\nfunction App() { return 1; }\n"
+    chunks, imports = chunker.chunk_with_imports(source, file_path="app.js", language="javascript")
+    assert imports == ["react"]
+    fn = [c for c in chunks if c.chunk_type == ChunkType.FUNCTION]
+    assert fn and fn[0].content == "function App() { return 1; }"
+
+
 def test_extract_imports_python():
     source = "import os\nfrom pathlib import Path\n\ndef main(): pass\n"
     chunker = Chunker()

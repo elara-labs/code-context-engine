@@ -85,3 +85,16 @@ def test_ollama_url_yaml_type_validation(tmp_path):
     }))
     with pytest.raises(ValueError, match="ollama_url"):
         load_config(global_path=config_file)
+
+
+def test_marginal_ratio_config_mapping(tmp_path):
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("retrieval:\n  marginal_ratio: 0.7\n")
+    from context_engine.config import load_config
+    config = load_config(global_path=cfg_file)
+    assert config.retrieval_marginal_ratio == 0.7
+
+
+def test_marginal_ratio_default():
+    from context_engine.config import Config
+    assert Config().retrieval_marginal_ratio == 0.75

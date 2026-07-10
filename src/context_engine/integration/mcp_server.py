@@ -993,11 +993,14 @@ class ContextEngineMCP:
             max_tokens = 8000
 
         # Fetch 2x candidates so overflow can offer references
+        retrieval_stats: dict = {}
         all_chunks = await self._retriever.retrieve(
             query,
             top_k=top_k * 2,
             confidence_threshold=self._config.retrieval_confidence_threshold,
+            marginal_ratio=self._config.retrieval_marginal_ratio,
             max_tokens=None,
+            stats_out=retrieval_stats,
         )
         all_chunks = await self._compressor.compress(all_chunks, self._config.compression_level)
 
@@ -1047,6 +1050,15 @@ class ContextEngineMCP:
 
         body = _format_results_with_overflow(inline_chunks, overflow_chunks)
         body = self._apply_output_compression(body)
+        # Only note omissions the retriever actually made (threshold or
+        # marginal stop) — chunk-count heuristics false-positive on every
+        # query because compression/config filtering also shrink the list.
+        if retrieval_stats.get("dropped_low_value", 0) > 0:
+            note = (
+                "[note: lower-confidence results omitted — lower "
+                "retrieval.marginal_ratio or retrieval.confidence_threshold to include them]"
+            )
+            body = body + "\n" + note
         self._record(raw_tokens, served_tokens, full_file_tokens)
         # Compliance audit log — file:line refs of every served chunk + the
         # score range. Off by default; enable via config.audit_log_enabled.

@@ -127,6 +127,89 @@ def test_placeholders_are_not_redacted(text):
     assert out == text
 
 
+# ── Unquoted credential assignments (dotenv / YAML / TOML / shell) ─────────
+
+@pytest.mark.parametrize("text,leaked", [
+    # dotenv-style, no quotes
+    ("STRIPE_KEY=abcd1234efgh5678ijkl", "abcd1234efgh5678ijkl"),
+    ("DB_PASSWORD=hunter2longvalue123", "hunter2longvalue123"),
+    # YAML mapping, no quotes
+    ("password: hunter2longvalue123", "hunter2longvalue123"),
+    ("api_key: yamlvalue1234567890abc", "yamlvalue1234567890abc"),
+    # TOML-ish bare assignment
+    ("auth_token = tomlvalue1234567890abc", "tomlvalue1234567890abc"),
+    # shell export
+    ("export CLIENT_SECRET=shellvalue1234567890", "shellvalue1234567890"),
+    # indented (nested YAML)
+    ("  db_password: nestedvalue1234567890", "nestedvalue1234567890"),
+])
+def test_unquoted_credential_assignments_redacted(text, leaked):
+    """Dotenv/YAML/TOML/shell assignments don't quote their values — the
+    generic credential pattern must still catch them."""
+    out, fired = redact_secrets(text)
+    assert fired, f"nothing fired on {text!r}"
+    assert leaked not in out, f"secret leaked through: {out!r}"
+    assert "[REDACTED:" in out
+    # Key name and assignment syntax survive so structure stays parseable.
+    key = text.split("=")[0].split(":")[0].replace("export", "").strip()
+    assert key in out
+
+
+@pytest.mark.parametrize("text", [
+    # Keyword is a substring but not the trailing segment of the name.
+    "tokenizer=bert-base-uncased-whole-word",
+    "keyboard_layout=english-international-x",
+    # Short values are never credentials.
+    "password: abc123",
+    "API_KEY=short",
+    # Placeholder values stay untouched even unquoted.
+    "password=your_secret_value_123456",
+    "SECRET_TOKEN=changeme",
+    # Keyword mid-sentence (not line-anchored assignment).
+    "the password token = somethingsomething1234 is described below",
+    # Quoted values are the quoted pattern's job; no double handling.
+    'password = "short"',
+])
+def test_unquoted_pattern_false_positive_guards(text):
+    out, fired = redact_secrets(text)
+    assert fired == [], f"unexpected redaction in {text!r}: fired={fired}"
+    assert out == text
+
+
+def test_unquoted_value_with_trailing_comment_redacted():
+    out, fired = redact_secrets("API_KEY=realvalue1234567890  # prod key")
+    assert "realvalue1234567890" not in out
+    assert fired == ["GENERIC_CREDENTIAL"]
+    assert "# prod key" in out
+
+
+def test_vendor_match_not_double_redacted():
+    """A vendor pattern fires first; the generic unquoted pattern must not
+    re-redact the [REDACTED:...] placeholder it left behind."""
+    out, fired = redact_secrets("STRIPE_KEY=" + "sk_live_" + "abcdefghij1234567890abcd")
+    assert fired == ["STRIPE_LIVE_KEY"]
+    assert out == "STRIPE_KEY=[REDACTED:STRIPE_LIVE_KEY]"
+
+
+# ── *.env filename variants ─────────────────────────────────────────────────
+
+@pytest.mark.parametrize("name", [
+    "prod.env", "secrets.env", "staging.env", "config.env",
+])
+def test_env_suffix_files_are_skipped(name):
+    """`.env`-suffixed files (not just names starting with .env) are
+    credentials by convention — skip them at the filename layer."""
+    assert is_secret_file(Path(name))
+    assert is_secret_file(Path("deploy") / name)
+
+
+@pytest.mark.parametrize("name", [
+    "environment.py", "env.md", "envoy.yaml",
+])
+def test_env_like_names_are_not_skipped(name):
+    assert not is_secret_file(Path(name))
+
+
 # ── scan_and_redact integration ────────────────────────────────────────────
 
 def test_scan_and_redact_skips_secret_filename(tmp_path):

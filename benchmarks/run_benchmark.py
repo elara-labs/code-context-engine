@@ -42,6 +42,7 @@ from context_engine.indexer.pipeline import run_indexing
 from context_engine.memory.grammar import compress_with_counts as grammar_compress
 from context_engine.retrieval.retriever import HybridRetriever
 from context_engine.storage.local_backend import LocalBackend
+from context_engine.utils import project_storage_dir
 
 _CHARS_PER_TOKEN = 4
 
@@ -420,6 +421,73 @@ def format_markdown(results: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+async def run_ab(
+    project_dir: Path,
+    queries: list[dict],
+    storage_dir: Path,
+    threshold: float,
+    marginal_ratio: float,
+) -> dict:
+    """Index once, then run every query with baseline vs tuned retrieval
+    parameters against the same index. No stacking with compression —
+    this isolates the retrieval-precision change."""
+    config = Config()
+    config.storage_path = str(storage_dir)
+
+    print("Indexing project once for A/B...")
+    idx = await run_indexing(config, project_dir, full=True)
+    print(f"  {idx.total_chunks} chunks from {len(idx.indexed_files)} files")
+
+    storage_base = project_storage_dir(config, project_dir)
+    backend = LocalBackend(base_path=str(storage_base))
+    embedder = Embedder(model_name=config.embedding_model)
+    retriever = HybridRetriever(backend=backend, embedder=embedder)
+
+    rows = []
+    for q in queries:
+        base = await retriever.retrieve(q["query"], top_k=10)
+        tuned = await retriever.retrieve(
+            q["query"], top_k=10,
+            confidence_threshold=threshold,
+            marginal_ratio=marginal_ratio,
+        )
+        expected = set(q.get("expected_files", []))
+
+        def _measure(chunks):
+            files = {c.file_path for c in chunks}
+            return {
+                "tokens": sum(_count_tokens(c.content) for c in chunks),
+                "chunks": len(chunks),
+                "hit": bool(files & expected) if expected else None,
+            }
+
+        rows.append({"query": q["query"],
+                     "base": _measure(base), "tuned": _measure(tuned)})
+        b, t = rows[-1]["base"], rows[-1]["tuned"]
+        print(f"  {q['query'][:45]:<45} tokens {b['tokens']:>6} → {t['tokens']:>6}  "
+              f"chunks {b['chunks']:>2} → {t['chunks']:>2}  "
+              f"hit {b['hit']} → {t['hit']}")
+
+    def _agg(side):
+        tok = sum(r[side]["tokens"] for r in rows)
+        hits = sum(1 for r in rows if r[side]["hit"])
+        judged = sum(1 for r in rows if r[side]["hit"] is not None)
+        return tok, hits, judged
+
+    base_tok, base_hits, judged = _agg("base")
+    tuned_tok, tuned_hits, _ = _agg("tuned")
+    reduction = (1 - tuned_tok / base_tok) * 100 if base_tok else 0.0
+    print(f"\nTokens served: {base_tok:,} → {tuned_tok:,}  ({reduction:.1f}% reduction)")
+    print(f"Hit rate: {base_hits}/{judged} → {tuned_hits}/{judged}")
+    return {
+        "threshold": threshold, "marginal_ratio": marginal_ratio,
+        "base_tokens": base_tok, "tuned_tokens": tuned_tok,
+        "reduction_pct": round(reduction, 1),
+        "base_hits": base_hits, "tuned_hits": tuned_hits,
+        "judged": judged, "rows": rows,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description="CCE Benchmark Suite")
     parser.add_argument("--repo", help="Git repo URL to clone and benchmark")
@@ -432,6 +500,13 @@ def main():
     parser.add_argument("--queries", help="Path to queries JSON file")
     parser.add_argument("--output", help="Output path for markdown report")
     parser.add_argument("--json-output", help="Output path for raw JSON results")
+    parser.add_argument("--ab", action="store_true",
+                        help="Run each query twice: baseline retrieval vs tuned "
+                             "(threshold + marginal ratio) and print the delta")
+    parser.add_argument("--threshold", type=float, default=0.35,
+                        help="Tuned confidence_threshold for --ab (default 0.35)")
+    parser.add_argument("--marginal-ratio", type=float, default=0.5,
+                        help="Tuned marginal_ratio for --ab (default 0.5)")
     args = parser.parse_args()
 
     # Determine project dir and queries
@@ -476,6 +551,17 @@ def main():
     storage_dir = Path(tempfile.mkdtemp(prefix="cce-bench-storage-"))
 
     try:
+        if args.ab:
+            results = asyncio.run(run_ab(
+                project_dir, queries, storage_dir,
+                args.threshold, args.marginal_ratio,
+            ))
+            if args.json_output:
+                out_path = Path(args.json_output)
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_text(json.dumps(results, indent=2) + "\n")
+            return
+
         results = asyncio.run(run_benchmark(project_dir, queries, storage_dir))
         if args.repo:
             results["repo_url"] = args.repo

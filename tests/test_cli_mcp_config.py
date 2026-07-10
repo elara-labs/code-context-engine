@@ -77,3 +77,55 @@ def test_configure_mcp_preserves_other_mcp_servers(tmp_path):
     assert "some-other-server" in data["mcpServers"]
     assert data["mcpServers"]["some-other-server"]["command"] == "/opt/other/bin/x"
     assert "context-engine" in data["mcpServers"]
+
+
+def test_configure_mcp_skips_unparseable_file(tmp_path):
+    """An unparseable .mcp.json must be left alone (return None), not reset
+    to {} and overwritten — that would destroy the user's other MCP servers."""
+    mcp_path = tmp_path / ".mcp.json"
+    original = '{"mcpServers": {"other": '  # truncated JSON
+    mcp_path.write_text(original)
+
+    with patch("context_engine.utils.resolve_cce_binary", return_value="/bin/cce"):
+        result = _configure_mcp(tmp_path)
+
+    assert result is None
+    assert mcp_path.read_text() == original
+
+
+def test_configure_mcp_skips_non_dict_top_level(tmp_path):
+    mcp_path = tmp_path / ".mcp.json"
+    original = '["not", "an", "object"]'
+    mcp_path.write_text(original)
+
+    with patch("context_engine.utils.resolve_cce_binary", return_value="/bin/cce"):
+        result = _configure_mcp(tmp_path)
+
+    assert result is None
+    assert mcp_path.read_text() == original
+
+
+def test_configure_mcp_null_servers_key(tmp_path):
+    """`"mcpServers": null` must not raise TypeError; it is replaced by a dict."""
+    mcp_path = tmp_path / ".mcp.json"
+    mcp_path.write_text('{"mcpServers": null, "other": 1}')
+
+    with patch("context_engine.utils.resolve_cce_binary", return_value="/bin/cce"):
+        changed = _configure_mcp(tmp_path)
+    assert changed is True
+
+    data = json.loads(mcp_path.read_text())
+    assert data["other"] == 1
+    assert "context-engine" in data["mcpServers"]
+
+
+def test_configure_mcp_list_servers_key(tmp_path):
+    mcp_path = tmp_path / ".mcp.json"
+    mcp_path.write_text('{"mcpServers": []}')
+
+    with patch("context_engine.utils.resolve_cce_binary", return_value="/bin/cce"):
+        changed = _configure_mcp(tmp_path)
+    assert changed is True
+
+    data = json.loads(mcp_path.read_text())
+    assert "context-engine" in data["mcpServers"]

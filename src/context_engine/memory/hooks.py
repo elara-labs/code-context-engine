@@ -20,7 +20,15 @@ import time
 
 from aiohttp import web
 
+from context_engine.memory import db as memory_db
+
 log = logging.getLogger(__name__)
+
+# Sentinel prompt_number for session_rollup queue rows. SQLite treats NULLs
+# as distinct in UNIQUE constraints, so a NULL here would defeat the
+# UNIQUE(kind, session_id, prompt_number) dedup and every repeated
+# SessionEnd would enqueue (and run) the rollup again.
+_ROLLUP_PROMPT_SENTINEL = -1
 
 
 def _now_epoch() -> int:
@@ -215,7 +223,12 @@ async def handle_session_start(request: web.Request) -> web.Response:
     if not session_id:
         return web.Response(text="", status=400)
     project = data.get("project") or request.app.get("project_name", "")
-    started_epoch = int(data.get("started_at") or _now_epoch())
+    # Guarded parse — hooks must never 500, and a non-numeric started_at
+    # from a misbehaving hook script would raise ValueError here.
+    try:
+        started_epoch = int(data.get("started_at") or _now_epoch())
+    except (TypeError, ValueError):
+        started_epoch = _now_epoch()
 
     conn = _conn(request)
     try:
@@ -263,7 +276,14 @@ async def handle_user_prompt_submit(request: web.Request) -> web.Response:
             "INSERT OR IGNORE INTO prompts "
             "(session_id, prompt_number, prompt_text, created_at_epoch, created_at) "
             "VALUES (?, ?, ?, ?, ?)",
-            (session_id, int(prompt_number), str(prompt_text), epoch, _now_iso(epoch)),
+            (
+                session_id, int(prompt_number),
+                # Scrub before write — prompts_fts indexes this verbatim, so
+                # PII must never reach the row (same policy as compressor /
+                # mcp_server writes; scrub_pii no-ops when redaction is off).
+                memory_db.scrub_pii(str(prompt_text)),
+                epoch, _now_iso(epoch),
+            ),
         )
         conn.execute(
             "UPDATE sessions SET prompt_count = prompt_count + 1 WHERE id = ?",
@@ -297,6 +317,11 @@ async def handle_post_tool_use(request: web.Request) -> web.Response:
 
     raw_input = tool_input if isinstance(tool_input, str) else json.dumps(tool_input)
     raw_output = tool_output if isinstance(tool_output, str) else json.dumps(tool_output)
+    # Scrub raw payloads before they land in tool_event_payloads — they are
+    # served back verbatim by the session_event MCP tool and feed the turn
+    # compressor, so PII must be redacted at the write boundary too.
+    raw_input = memory_db.scrub_pii(raw_input)
+    raw_output = memory_db.scrub_pii(raw_output)
     size = len(raw_input) + len(raw_output)
 
     conn = _conn(request)
@@ -401,7 +426,13 @@ def _enqueue_compression(
     UNIQUE(kind, session_id, prompt_number) guards against double-enqueue when
     a prompt fires both Stop *and* the next UserPromptSubmit's "compress prev"
     trigger in quick succession.
+
+    Rollups have no prompt_number; a NULL would be treated as distinct by the
+    UNIQUE constraint (defeating INSERT OR IGNORE), so they use the -1
+    sentinel instead. The worker ignores prompt_number for rollups.
     """
+    if prompt_number is None:
+        prompt_number = _ROLLUP_PROMPT_SENTINEL
     conn.execute(
         "INSERT OR IGNORE INTO pending_compressions "
         "(kind, session_id, prompt_number, enqueued_at_epoch) "
