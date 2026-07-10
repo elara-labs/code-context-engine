@@ -126,7 +126,7 @@ async def run_benchmark(
     print(f"  Cache: {idx_result.cache_hits} hits, {idx_result.cache_misses} misses")
 
     # Set up retriever + compressor
-    storage_base = Path(config.storage_path) / project_dir.name
+    storage_base = project_storage_dir(config, project_dir)
     backend = LocalBackend(base_path=str(storage_base))
     embedder = Embedder(model_name=config.embedding_model)
     retriever = HybridRetriever(backend=backend, embedder=embedder)
