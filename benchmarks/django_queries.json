@@ -1,0 +1,112 @@
+[
+    {
+        "query": "How does Django's ORM build and compile SQL queries from a QuerySet?",
+        "expected_files": ["db/models/sql/compiler.py", "db/models/query.py"],
+        "category": "orm"
+    },
+    {
+        "query": "How does Django's ModelBase metaclass and Model.save() assign and persist field values?",
+        "expected_files": ["db/models/base.py"],
+        "category": "orm"
+    },
+    {
+        "query": "How does Django's MigrationExecutor.migrate() apply a migration plan?",
+        "expected_files": ["db/migrations/executor.py"],
+        "category": "migrations"
+    },
+    {
+        "query": "How does Django's migration autodetector figure out model changes?",
+        "expected_files": ["db/migrations/autodetector.py"],
+        "category": "migrations"
+    },
+    {
+        "query": "How does Django's URL resolver match a request path to a view?",
+        "expected_files": ["urls/resolvers.py"],
+        "category": "routing"
+    },
+    {
+        "query": "How does Django convert URL path converters like <int:id> into Python types?",
+        "expected_files": ["urls/converters.py"],
+        "category": "routing"
+    },
+    {
+        "query": "How does Django's HttpRequest.build_absolute_uri() and get_host() determine the request URL?",
+        "expected_files": ["http/request.py"],
+        "category": "http"
+    },
+    {
+        "query": "How does Django's HttpResponse class set headers and write content?",
+        "expected_files": ["http/response.py"],
+        "category": "http"
+    },
+    {
+        "query": "How does Django parse multipart form data and file uploads?",
+        "expected_files": ["http/multipartparser.py"],
+        "category": "http"
+    },
+    {
+        "query": "How does Django's authentication backend verify a user's credentials?",
+        "expected_files": ["contrib/auth/backends.py"],
+        "category": "auth"
+    },
+    {
+        "query": "How does Django hash and validate user passwords?",
+        "expected_files": ["contrib/auth/hashers.py"],
+        "category": "auth"
+    },
+    {
+        "query": "How does Django's session middleware load and persist session data?",
+        "expected_files": ["contrib/sessions/middleware.py", "contrib/sessions/base_session.py"],
+        "category": "sessions"
+    },
+    {
+        "query": "How does Django's CSRF middleware protect against cross-site request forgery?",
+        "expected_files": ["middleware/csrf.py"],
+        "category": "middleware"
+    },
+    {
+        "query": "How does Django's CommonMiddleware implement the APPEND_SLASH redirect?",
+        "expected_files": ["middleware/common.py"],
+        "category": "middleware"
+    },
+    {
+        "query": "How does Django's Field.to_python() and validate() methods convert and check form input?",
+        "expected_files": ["forms/fields.py"],
+        "category": "forms"
+    },
+    {
+        "query": "How does Django's ModelForm generate form fields from model fields?",
+        "expected_files": ["forms/models.py"],
+        "category": "forms"
+    },
+    {
+        "query": "How does Django's template engine compile and render templates?",
+        "expected_files": ["template/engine.py", "template/base.py"],
+        "category": "templates"
+    },
+    {
+        "query": "How does Django's ListView class paginate a queryset of objects?",
+        "expected_files": ["views/generic/list.py"],
+        "category": "views"
+    },
+    {
+        "query": "How does Django's DetailView.get_object() and get_queryset() fetch a single model instance?",
+        "expected_files": ["views/generic/detail.py"],
+        "category": "views"
+    },
+    {
+        "query": "How does Django's test client simulate HTTP requests for testing?",
+        "expected_files": ["test/client.py"],
+        "category": "testing"
+    },
+    {
+        "query": "How does Django's signal dispatcher connect and send signals?",
+        "expected_files": ["dispatch/dispatcher.py"],
+        "category": "signals"
+    },
+    {
+        "query": "How does Django's management command base class parse arguments and execute?",
+        "expected_files": ["core/management/base.py"],
+        "category": "management"
+    }
+]
