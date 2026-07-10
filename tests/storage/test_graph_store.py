@@ -66,3 +66,16 @@ async def test_ingest_empty(graph):
     await graph.ingest([], [])
     neighbors = await graph.get_neighbors("nonexistent")
     assert neighbors == []
+
+@pytest.mark.asyncio
+async def test_ingest_rolls_back_on_midbatch_failure(graph):
+    """A mid-batch ingest failure must roll back already-executed inserts so
+    the next unrelated commit doesn't flush partial graph state."""
+    good = GraphNode(id="n_good", node_type=NodeType.FUNCTION, name="f", file_path="a.py")
+    bad = GraphNode(id="n_bad", node_type=NodeType.FUNCTION, name="g", file_path="a.py",
+                    properties={"x": object()})  # json.dumps fails
+    with pytest.raises(TypeError):
+        await graph.ingest([good, bad], [])
+    # Trigger an unrelated commit on the same connection.
+    await graph.ingest([], [])
+    assert await graph.get_nodes_by_file("a.py") == []

@@ -63,22 +63,28 @@ class GraphStore:
 
     def _sync_ingest(self, nodes: list[GraphNode], edges: list[GraphEdge]) -> None:
         with self._lock:
-            cur = self._conn.cursor()
-            for node in nodes:
-                cur.execute(
-                    "INSERT OR REPLACE INTO nodes (id, node_type, name, file_path, properties) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (node.id, node.node_type.value, node.name, node.file_path,
-                     json.dumps(node.properties)),
-                )
-            for edge in edges:
-                cur.execute(
-                    "INSERT OR REPLACE INTO edges (source_id, target_id, edge_type, properties) "
-                    "VALUES (?, ?, ?, ?)",
-                    (edge.source_id, edge.target_id, edge.edge_type.value,
-                     json.dumps(edge.properties)),
-                )
-            self._conn.commit()
+            try:
+                cur = self._conn.cursor()
+                for node in nodes:
+                    cur.execute(
+                        "INSERT OR REPLACE INTO nodes (id, node_type, name, file_path, properties) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        (node.id, node.node_type.value, node.name, node.file_path,
+                         json.dumps(node.properties)),
+                    )
+                for edge in edges:
+                    cur.execute(
+                        "INSERT OR REPLACE INTO edges (source_id, target_id, edge_type, properties) "
+                        "VALUES (?, ?, ?, ?)",
+                        (edge.source_id, edge.target_id, edge.edge_type.value,
+                         json.dumps(edge.properties)),
+                    )
+                self._conn.commit()
+            except Exception:
+                # Roll back so a mid-batch failure doesn't leave pending rows
+                # that the next unrelated commit() silently flushes.
+                self._conn.rollback()
+                raise
 
     def _sync_get_neighbors(self, node_id: str, edge_type: EdgeType | None) -> list[GraphNode]:
         with self._lock:
@@ -160,26 +166,32 @@ class GraphStore:
         from context_engine.utils import batched_params
 
         with self._lock:
-            cur = self._conn.cursor()
-            # Collect node IDs in batches to respect SQLite param limits.
-            # Safe: ph is only "?" chars; values are parameterized.
-            node_ids: list[str] = []
-            for batch in batched_params(file_paths):
-                ph = ",".join("?" * len(batch))
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query
-                    f"SELECT id FROM nodes WHERE file_path IN ({ph})", batch
-                )
-                node_ids.extend(row[0] for row in cur.fetchall())
-            # Delete edges and nodes in batches.
-            for batch in batched_params(node_ids):
-                ph = ",".join("?" * len(batch))
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query
-                    f"DELETE FROM edges WHERE source_id IN ({ph}) "
-                    f"OR target_id IN ({ph})",
-                    batch + batch,
-                )
-                cur.execute(f"DELETE FROM nodes WHERE id IN ({ph})", batch)  # nosemgrep: sqlalchemy-execute-raw-query
-            self._conn.commit()
+            try:
+                cur = self._conn.cursor()
+                # Collect node IDs in batches to respect SQLite param limits.
+                # Safe: ph is only "?" chars; values are parameterized.
+                node_ids: list[str] = []
+                for batch in batched_params(file_paths):
+                    ph = ",".join("?" * len(batch))
+                    cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query
+                        f"SELECT id FROM nodes WHERE file_path IN ({ph})", batch
+                    )
+                    node_ids.extend(row[0] for row in cur.fetchall())
+                # Delete edges and nodes in batches.
+                for batch in batched_params(node_ids):
+                    ph = ",".join("?" * len(batch))
+                    cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query
+                        f"DELETE FROM edges WHERE source_id IN ({ph}) "
+                        f"OR target_id IN ({ph})",
+                        batch + batch,
+                    )
+                    cur.execute(f"DELETE FROM nodes WHERE id IN ({ph})", batch)  # nosemgrep: sqlalchemy-execute-raw-query
+                self._conn.commit()
+            except Exception:
+                # Roll back so a partial multi-batch delete doesn't leave
+                # pending rows that the next unrelated commit() flushes.
+                self._conn.rollback()
+                raise
 
     # ------------------------------------------------------------------
     # Public async API

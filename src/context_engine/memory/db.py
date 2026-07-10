@@ -337,10 +337,15 @@ def _ensure_schema(conn: sqlite3.Connection, *, has_vec: bool) -> None:
                     cur.execute(stmt)
             for stmt in _SCHEMA_V3:
                 cur.execute(stmt)
+            # If sqlite-vec was unavailable the v2 vec tables were skipped.
+            # Stamp only v1 in that case (mirroring the deferred stamp in
+            # the upgrade branch below) so a future connection with vec
+            # loaded completes the v1 → v2 step instead of hitting the
+            # `current >= CURRENT_VERSION` early return forever.
             cur.execute(
                 "INSERT INTO schema_versions (version, applied_at_epoch) "
                 "VALUES (?, strftime('%s','now'))",
-                (CURRENT_VERSION,),
+                (CURRENT_VERSION if has_vec else 1,),
             )
             conn.commit()
         except Exception:

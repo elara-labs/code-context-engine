@@ -1,5 +1,6 @@
 """Parse git log into searchable chunks."""
 import asyncio
+import datetime
 import logging
 import re
 import subprocess
@@ -99,6 +100,25 @@ def _parse_meta(
         content = f"{subject}\n\n{body}".strip()
         short_hash = commit_hash[:7]
 
+        metadata = {
+            "author": author,
+            "date": date,
+            "hash": commit_hash,
+            "chunk_kind": "commit",
+        }
+        # Stamp commit time as epoch so retrieval's recency weight applies
+        # to git-history chunks too. `date` is git log %ai, e.g.
+        # "2026-07-03 20:15:25 +0100" — fromisoformat parses the ±HHMM
+        # offset on Python 3.11+. Parse failure is non-fatal — the chunk
+        # just keeps neutral recency (matching the stat() convention in
+        # the file-indexing pipeline).
+        try:
+            metadata["modified_ts"] = datetime.datetime.fromisoformat(
+                date
+            ).timestamp()
+        except ValueError:
+            pass
+
         chunk = Chunk(
             id=f"commit_{short_hash}",
             content=content,
@@ -107,12 +127,7 @@ def _parse_meta(
             start_line=0,
             end_line=0,
             language="git",
-            metadata={
-                "author": author,
-                "date": date,
-                "hash": commit_hash,
-                "chunk_kind": "commit",
-            },
+            metadata=metadata,
         )
         chunks.append(chunk)
 

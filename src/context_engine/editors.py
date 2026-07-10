@@ -304,26 +304,40 @@ def configure_mcp(project_dir: Path, editor_key: str) -> bool | None:
         try:
             data = json.loads(config_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            data = {}
+            # Never rewrite a file we couldn't parse: resetting to {} would
+            # replace the user's other MCP servers with only our entry.
+            # Skip and let the caller surface a warning (same contract as
+            # the TOML path).
+            return None
+        if not isinstance(data, dict):
+            return None
     else:
         data = {}
 
-    servers = data.setdefault(servers_key, {})
-    if "context-engine" in servers:
-        existing = servers["context-engine"]
-        if existing.get("command") == command and existing.get("args") == entry["args"]:
-            return False
-        servers["context-engine"] = entry
-        atomic_write_text(config_path, json.dumps(data, indent=2) + "\n")
-        return True
+    # A non-dict servers value ("mcpServers": null, or a list) can't hold
+    # our entry — replace it with a fresh dict instead of raising TypeError.
+    servers = data.get(servers_key)
+    if not isinstance(servers, dict):
+        servers = {}
+        data[servers_key] = servers
+
+    existing = servers.get("context-engine")
+    if (
+        isinstance(existing, dict)
+        and existing.get("command") == command
+        and existing.get("args") == entry["args"]
+    ):
+        return False
 
     servers["context-engine"] = entry
     atomic_write_text(config_path, json.dumps(data, indent=2) + "\n")
     return True
 
 
-def _configure_opencode(config_path: Path, command: str, project_dir: str) -> bool:
-    """Add CCE to OpenCode's opencode.json. Returns True if changed.
+def _configure_opencode(config_path: Path, command: str, project_dir: str) -> bool | None:
+    """Add CCE to OpenCode's opencode.json. Returns True if changed, False if
+    already configured, or None if the existing config could not be parsed
+    (skipped rather than overwritten).
 
     OpenCode uses a different MCP entry format: type "local" with command
     as an array (not a string + args).
@@ -345,18 +359,28 @@ def _configure_opencode(config_path: Path, command: str, project_dir: str) -> bo
             # Strip JSONC comments for parsing
             data = json.loads(_strip_jsonc_comments(content))
         except (json.JSONDecodeError, OSError):
-            data = {}
+            # Never rewrite a file we couldn't parse: resetting to {} would
+            # replace the user's other MCP servers with only our entry.
+            return None
+        if not isinstance(data, dict):
+            return None
     else:
         data = {}
 
-    servers = data.setdefault("mcp", {})
-    if "context-engine" in servers:
-        existing = servers["context-engine"]
-        if existing.get("command") == entry["command"] and existing.get("type") == "local":
-            return False
-        servers["context-engine"] = entry
-        atomic_write_text(config_path, json.dumps(data, indent=2) + "\n")
-        return True
+    # A non-dict "mcp" value (null, list) can't hold our entry — replace it
+    # with a fresh dict instead of raising TypeError.
+    servers = data.get("mcp")
+    if not isinstance(servers, dict):
+        servers = {}
+        data["mcp"] = servers
+
+    existing = servers.get("context-engine")
+    if (
+        isinstance(existing, dict)
+        and existing.get("command") == entry["command"]
+        and existing.get("type") == "local"
+    ):
+        return False
 
     servers["context-engine"] = entry
     atomic_write_text(config_path, json.dumps(data, indent=2) + "\n")
@@ -364,9 +388,50 @@ def _configure_opencode(config_path: Path, command: str, project_dir: str) -> bo
 
 
 def _strip_jsonc_comments(text: str) -> str:
-    """Strip single-line // comments from JSONC content for JSON parsing."""
-    import re
-    return re.sub(r'//.*?$', '', text, flags=re.MULTILINE)
+    """Strip `//` line comments and `/* */` block comments from JSONC content
+    for JSON parsing — but only outside strings.
+
+    A naive regex (`//.*?$`) truncates any string value containing `//`
+    (e.g. `"url": "https://..."`), which makes json.loads fail and previously
+    caused the caller to reset the config to {} and destroy the user's other
+    MCP servers. This walker tracks in-string state (including escapes) so
+    string contents are preserved verbatim.
+    """
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    in_string = False
+    while i < n:
+        ch = text[i]
+        if in_string:
+            out.append(ch)
+            if ch == "\\" and i + 1 < n:
+                # Escaped char (e.g. \" or \\) — copy it, stay in string.
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "/":
+            # Line comment: skip to end of line (keep the newline itself).
+            nl = text.find("\n", i)
+            i = n if nl == -1 else nl
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "*":
+            # Block comment: skip to the closing */ (or EOF if unterminated).
+            end = text.find("*/", i + 2)
+            i = n if end == -1 else end + 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
 
 
 _LEGACY_CODEX_SECTION = "mcp_servers.context-engine"

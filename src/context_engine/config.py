@@ -68,6 +68,11 @@ class Config:
     # Retrieval
     retrieval_confidence_threshold: float = 0.2
     retrieval_top_k: int = 20
+    # Stop adding result chunks once a chunk's score falls below this
+    # fraction of the top score. 0 disables (always fill to top_k).
+    # Tuned to 0.75 by Phase 1 A/B benchmark (2026-07-03): achieves ≥25%
+    # token-served reduction with no hit-rate loss.
+    retrieval_marginal_ratio: float = 0.75
     bootstrap_max_tokens: int = 10000
 
     # Indexer
@@ -130,6 +135,7 @@ _EXPECTED_TYPES: dict[str, type | tuple[type, ...]] = {
     "ollama_embed_model": str,
     "retrieval_confidence_threshold": (int, float),
     "retrieval_top_k": int,
+    "retrieval_marginal_ratio": (int, float),
     "bootstrap_max_tokens": int,
     "indexer_watch": bool,
     "indexer_debounce_ms": int,
@@ -154,6 +160,7 @@ def _apply_dict_to_config(config: Config, data: dict) -> None:
         ("embedding", "ollama_model"): "ollama_embed_model",
         ("retrieval", "confidence_threshold"): "retrieval_confidence_threshold",
         ("retrieval", "top_k"): "retrieval_top_k",
+        ("retrieval", "marginal_ratio"): "retrieval_marginal_ratio",
         ("retrieval", "bootstrap_max_tokens"): "bootstrap_max_tokens",
         ("indexer", "watch"): "indexer_watch",
         ("indexer", "debounce_ms"): "indexer_debounce_ms",

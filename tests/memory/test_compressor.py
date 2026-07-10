@@ -133,6 +133,157 @@ def test_session_rollup_with_no_turns_is_empty(conn):
     assert rollup == ""
 
 
+class _DimEmbedder:
+    """Deterministic 384-dim embedder so vec-table writes actually land
+    (the 2-dim stub trips the float[384] dim check and gets swallowed)."""
+
+    def embed_query(self, text: str) -> list[float]:
+        import hashlib
+        digest = hashlib.sha256(text.encode("utf-8")).digest()
+        vec = [((digest[i % 32] / 255.0) - 0.5) for i in range(384)]
+        n = sum(x * x for x in vec) ** 0.5 or 1.0
+        return [x / n for x in vec]
+
+
+def test_recompress_turn_keeps_fts_and_vec_consistent(conn):
+    """Re-compressing the same turn (Stop + next UserPromptSubmit both
+    enqueue it) must not leave dangling FTS entries or stale vec rows.
+    `INSERT OR REPLACE` silently skipped the delete triggers because
+    recursive_triggers is OFF by default."""
+    _seed_session(conn)
+    _seed_turn(conn, "s1", 1, "KEY discussion first pass. KEY again matters. Filler text here.")
+    conn.commit()
+
+    for _ in range(2):
+        memory_compressor.compress_turn(
+            conn, session_id="s1", prompt_number=1, embedder=_DimEmbedder(),
+        )
+        conn.commit()
+
+    ids = {
+        r["id"] for r in conn.execute(
+            "SELECT id FROM turn_summaries "
+            "WHERE session_id = 's1' AND prompt_number = 1"
+        )
+    }
+    assert len(ids) == 1
+
+    # FTS5 external-content integrity check raises SQLITE_CORRUPT_VTAB on
+    # dangling index entries.
+    conn.execute(
+        "INSERT INTO turn_summaries_fts(turn_summaries_fts) "
+        "VALUES('integrity-check')"
+    )
+
+    # Every FTS hit maps back to a live source row.
+    fts_ids = {
+        r["rowid"] for r in conn.execute(
+            "SELECT rowid FROM turn_summaries_fts "
+            "WHERE turn_summaries_fts MATCH 'KEY'"
+        )
+    }
+    assert fts_ids <= ids, f"dangling FTS rowids: {fts_ids - ids}"
+
+    # No stale vec rows pointing at replaced rowids.
+    vec_ids = {
+        r["rowid"] for r in conn.execute(
+            "SELECT rowid FROM turn_summaries_vec"
+        )
+    }
+    assert vec_ids <= ids, f"stale vec rowids: {vec_ids - ids}"
+
+
+def test_drain_skips_rows_at_attempt_cap(conn):
+    """A row that has already failed _MAX_ATTEMPTS times is dead-lettered:
+    left in the table for inspection but never picked again."""
+    _seed_session(conn)
+    _seed_turn(conn, "s1", 1, "some text")
+    conn.execute(
+        "INSERT INTO pending_compressions (kind, session_id, prompt_number, "
+        "enqueued_at_epoch, attempts) VALUES ('turn', 's1', 1, 1700000000, ?)",
+        (memory_compressor._MAX_ATTEMPTS,),
+    )
+    conn.commit()
+
+    did_work = memory_compressor._drain_one_sync(conn, _StubEmbedder())
+    assert did_work is False, "capped row must not be picked"
+    n = conn.execute(
+        "SELECT COUNT(*) AS n FROM pending_compressions"
+    ).fetchone()["n"]
+    assert n == 1, "dead-letter row stays for inspection"
+
+
+def test_failing_row_does_not_starve_queue(conn, monkeypatch):
+    """A deterministically-failing older row must stop being retried after
+    _MAX_ATTEMPTS so younger rows still drain."""
+    _seed_session(conn)
+    _seed_turn(conn, "s1", 1, "poison turn text")
+    _seed_turn(conn, "s1", 2, "healthy KEY turn text. KEY again. Filler.")
+    conn.execute(
+        "INSERT INTO pending_compressions (kind, session_id, prompt_number, "
+        "enqueued_at_epoch) VALUES ('turn', 's1', 1, 100)"
+    )
+    conn.execute(
+        "INSERT INTO pending_compressions (kind, session_id, prompt_number, "
+        "enqueued_at_epoch) VALUES ('turn', 's1', 2, 200)"
+    )
+    conn.commit()
+
+    real_build = memory_compressor._build_turn_text
+
+    def _poisoned(c, *, session_id, prompt_number):
+        if prompt_number == 1:
+            raise RuntimeError("boom")
+        return real_build(c, session_id=session_id, prompt_number=prompt_number)
+
+    monkeypatch.setattr(memory_compressor, "_build_turn_text", _poisoned)
+
+    # Enough drains for the poison row to hit the cap plus one for the
+    # healthy row.
+    for _ in range(memory_compressor._MAX_ATTEMPTS + 1):
+        memory_compressor._drain_one_sync(conn, _StubEmbedder())
+
+    healthy = conn.execute(
+        "SELECT COUNT(*) AS n FROM turn_summaries "
+        "WHERE session_id = 's1' AND prompt_number = 2"
+    ).fetchone()["n"]
+    assert healthy == 1, "healthy row must drain despite the poison row"
+
+    poison = conn.execute(
+        "SELECT attempts FROM pending_compressions "
+        "WHERE prompt_number = 1"
+    ).fetchone()
+    assert poison is not None
+    assert poison["attempts"] == memory_compressor._MAX_ATTEMPTS
+
+
+def test_failed_compression_records_no_savings(conn, monkeypatch):
+    """Savings must only be recorded when the summary write succeeds —
+    otherwise every retry of a failing row inflates the ledger."""
+    _seed_session(conn)
+    _seed_turn(conn, "s1", 1, "KEY text that fails late. KEY again. Filler.")
+    conn.execute(
+        "INSERT INTO pending_compressions (kind, session_id, prompt_number, "
+        "enqueued_at_epoch) VALUES ('turn', 's1', 1, 1700000000)"
+    )
+    conn.commit()
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("decision extraction exploded")
+
+    monkeypatch.setattr(memory_compressor, "_auto_capture_decisions", _boom)
+
+    for _ in range(2):
+        memory_compressor._drain_one_sync(conn, _StubEmbedder())
+
+    n = conn.execute("SELECT COUNT(*) AS n FROM savings_log").fetchone()["n"]
+    assert n == 0, "failed compressions must not record savings"
+    attempts = conn.execute(
+        "SELECT attempts FROM pending_compressions"
+    ).fetchone()["attempts"]
+    assert attempts == 2
+
+
 async def test_drain_one_processes_oldest_pending(conn):
     _seed_session(conn)
     _seed_turn(conn, "s1", 1, "Turn one with KEY content here. KEY appears twice. Other text.")

@@ -33,7 +33,8 @@ indexer:
 
 retrieval:
   top_k: 20              # Maximum chunks returned per query
-  confidence_threshold: 0.5  # Minimum score to include a result (0.0 to 1.0)
+  confidence_threshold: 0.2  # Minimum score to include a result (0.0 to 1.0)
+  marginal_ratio: 0.75   # Stop adding chunks when score falls below this fraction of top
 
 embedding:
   model: BAAI/bge-small-en-v1.5  # Embedding model (fastembed-compatible)
@@ -93,7 +94,9 @@ The default `BAAI/bge-small-en-v1.5` is recommended for most use cases. It balan
 
 **`top_k`** controls how many chunks the retriever returns per query. Higher values surface more context but cost more tokens. Default: 20.
 
-**`confidence_threshold`** sets the minimum score to include a result. Range 0.0 to 1.0. Lower values return more results; higher values return only strong matches. Default: 0.5.
+**`confidence_threshold`** sets the minimum score to include a result. Range 0.0 to 1.0. Lower values return more results; higher values return only strong matches. Default: 0.2.
+
+**`marginal_ratio`** stops adding result chunks once a chunk's confidence falls below this fraction of the top result's score. Range 0.0 to 1.0; `0` disables this behavior. The effective reduction depends on your corpus's score distribution, so tune per project. See `benchmarks/results/cce-phase1-ab.md` for tuning evidence. Default: 0.75.
 
 At runtime, the agent can pass `top_k` and `max_tokens` directly to `context_search`:
 

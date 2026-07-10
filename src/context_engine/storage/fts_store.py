@@ -12,9 +12,35 @@ log = logging.getLogger(__name__)
 _MAX_CONTENT_CHARS = 5_000
 
 
+# Common English words dropped from queries so natural-language phrasing
+# ("where is the retry logic") doesn't drown the signal terms. If every token
+# is a stopword we fall back to using them all rather than matching nothing.
+_STOPWORDS = frozenset({
+    "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "does",
+    "for", "from", "how", "i", "in", "is", "it", "of", "on", "or", "that",
+    "the", "this", "to", "was", "we", "what", "when", "where", "which",
+    "who", "why", "will", "with", "you", "not",
+})
+
+
 def _escape_fts5(query: str) -> str:
-    """Wrap user input as an FTS5 phrase to avoid operator injection."""
-    return '"' + query.replace('"', '""') + '"'
+    """Build a safe FTS5 MATCH expression from free-form user input.
+
+    Each whitespace token is individually quoted (internal quotes doubled),
+    which neutralises FTS5 operators (NEAR, *, :, AND/OR/NOT, ^, parens).
+    Tokens are OR-joined: requiring all tokens (AND / a single phrase) makes
+    multi-word natural-language queries almost never match, while BM25 still
+    ranks documents matching more tokens higher. Multi-part identifiers like
+    `delete_by_files` stay as one quoted token, which FTS5 tokenises into the
+    same consecutive-token phrase unicode61 produced at index time.
+
+    Returns "" when no usable tokens remain; callers must skip the query.
+    """
+    tokens = [t for t in query.split() if any(c.isalnum() for c in t)]
+    kept = [t for t in tokens if t.lower() not in _STOPWORDS]
+    if not kept:
+        kept = tokens
+    return " OR ".join('"' + t.replace('"', '""') + '"' for t in kept)
 
 
 class FTSStore:
@@ -53,12 +79,25 @@ class FTSStore:
             for chunk in chunks
         ]
         with self._lock:
-            self._conn.executemany(
-                "INSERT OR REPLACE INTO chunks_fts(id, content, file_path, language, chunk_type) "
-                "VALUES (?, ?, ?, ?, ?)",
-                rows,
-            )
-            self._conn.commit()
+            try:
+                # FTS5 virtual tables have no unique constraints, so
+                # INSERT OR REPLACE never replaces — delete stale rows for
+                # these ids first, inside the same transaction.
+                self._conn.executemany(
+                    "DELETE FROM chunks_fts WHERE id = ?",
+                    [(chunk.id,) for chunk in chunks],
+                )
+                self._conn.executemany(
+                    "INSERT INTO chunks_fts(id, content, file_path, language, chunk_type) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    rows,
+                )
+                self._conn.commit()
+            except Exception:
+                # Roll back so a mid-batch failure doesn't leave pending rows
+                # that the next unrelated commit() silently flushes.
+                self._conn.rollback()
+                raise
 
     def _search_sync(self, escaped_query: str, top_k: int) -> list[tuple[str, float]]:
         with self._lock:
@@ -82,14 +121,18 @@ class FTSStore:
         from context_engine.utils import batched_params
 
         with self._lock:
-            for batch in batched_params(file_paths):
-                placeholders = ",".join("?" * len(batch))
-                # Safe: placeholders is only "?" chars; values are parameterized.
-                self._conn.execute(  # nosemgrep: sqlalchemy-execute-raw-query
-                    f"DELETE FROM chunks_fts WHERE file_path IN ({placeholders})",
-                    batch,
-                )
-            self._conn.commit()
+            try:
+                for batch in batched_params(file_paths):
+                    placeholders = ",".join("?" * len(batch))
+                    # Safe: placeholders is only "?" chars; values are parameterized.
+                    self._conn.execute(  # nosemgrep: sqlalchemy-execute-raw-query
+                        f"DELETE FROM chunks_fts WHERE file_path IN ({placeholders})",
+                        batch,
+                    )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
 
     async def ingest(self, chunks: list[Chunk]) -> None:
         if not chunks:
@@ -99,7 +142,10 @@ class FTSStore:
     async def search(self, query: str, top_k: int = 30) -> list[tuple[str, float]]:
         if not query.strip():
             return []
-        return await asyncio.to_thread(self._search_sync, _escape_fts5(query), top_k)
+        match_expr = _escape_fts5(query)
+        if not match_expr:
+            return []
+        return await asyncio.to_thread(self._search_sync, match_expr, top_k)
 
     def clear(self) -> None:
         with self._lock:

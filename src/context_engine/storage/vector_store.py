@@ -38,6 +38,12 @@ class VectorStore:
         self._db_path = db_path
         self._lock = RLock()
         self._dim: int | None = None
+        # Set True by _ensure_tables when a legacy L2 vector table is wiped for
+        # the cosine-metric rebuild. The pipeline reads this to clear the
+        # manifest and force a full reindex — the on-disk chunks are gone but
+        # the manifest still claims they are indexed, so an incremental run
+        # would otherwise skip every "unchanged" file and leave the index empty.
+        self.metric_rebuilt = False
         os.makedirs(db_path, exist_ok=True)
         self._db_file = os.path.join(db_path, "vectors.db")
         self._conn = self._connect()
@@ -77,9 +83,19 @@ class VectorStore:
                     file_path TEXT NOT NULL,
                     start_line INTEGER NOT NULL,
                     end_line INTEGER NOT NULL,
-                    language TEXT NOT NULL
+                    language TEXT NOT NULL,
+                    modified_ts REAL
                 )
             """)
+            # Forward-only migration: pre-Phase-1 DBs lack modified_ts.
+            # Old rows stay NULL → ConfidenceScorer keeps neutral recency.
+            cols = {
+                r[1] for r in self._conn.execute("PRAGMA table_info(chunks)")
+            }
+            if "modified_ts" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE chunks ADD COLUMN modified_ts REAL"
+                )
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_chunks_file_path
                 ON chunks(file_path)
@@ -98,15 +114,32 @@ class VectorStore:
             """)
             # Detect vector dimension from existing data
             row = self._conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_vec'"
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='chunks_vec'"
             ).fetchone()
             if row:
-                # Table exists — read dim from first row
-                r = self._conn.execute("SELECT rowid FROM chunks_vec LIMIT 1").fetchone()
-                if r:
-                    self._dim = self._conn.execute(
-                        "SELECT vec_length(embedding) FROM chunks_vec LIMIT 1"
-                    ).fetchone()[0]
+                if "distance_metric=cosine" not in (row[0] or ""):
+                    # Legacy table created before distance_metric=cosine was
+                    # specified — sqlite-vec defaulted to L2, which the
+                    # retriever's distance/2.0 normalisation misreads. Rebuild
+                    # empty (embeddings are a cache; reindex repopulates)
+                    # rather than silently mixing metrics.
+                    log.warning(
+                        "Existing vector table uses L2 distance; rebuilding "
+                        "with cosine metric — run a reindex to repopulate."
+                    )
+                    self._conn.execute("DROP TABLE IF EXISTS chunks_vec")
+                    self._conn.execute("DELETE FROM chunks")
+                    self._conn.execute("DELETE FROM chunk_compressions")
+                    self.metric_rebuilt = True
+                else:
+                    # Table exists — read dim from first row
+                    r = self._conn.execute(
+                        "SELECT rowid FROM chunks_vec LIMIT 1"
+                    ).fetchone()
+                    if r:
+                        self._dim = self._conn.execute(
+                            "SELECT vec_length(embedding) FROM chunks_vec LIMIT 1"
+                        ).fetchone()[0]
             self._conn.commit()
 
     def _ensure_vec_table(self, dim: int) -> None:
@@ -127,9 +160,11 @@ class VectorStore:
                 self._conn.execute("DELETE FROM chunks")
                 self._conn.execute("DELETE FROM chunk_compressions")
             # Safe: dim is a validated integer, never from user input.
+            # distance_metric=cosine must match the retriever's distance/2.0
+            # normalisation (cosine distance lives in [0, 2]).
             self._conn.execute(  # nosemgrep: sqlalchemy-execute-raw-query
                 f"CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec "
-                f"USING vec0(embedding float[{dim}])"
+                f"USING vec0(embedding float[{dim}] distance_metric=cosine)"
             )
             self._dim = dim
             self._conn.commit()
@@ -141,7 +176,7 @@ class VectorStore:
         return (
             chunk.id, content, chunk.chunk_type.value,
             chunk.file_path, chunk.start_line, chunk.end_line,
-            chunk.language,
+            chunk.language, chunk.metadata.get("modified_ts"),
         )
 
     def _row_to_chunk(self, row, distance: float | None = None) -> Chunk:
@@ -154,6 +189,8 @@ class VectorStore:
             end_line=row[5],
             language=row[6],
         )
+        if len(row) > 7 and row[7] is not None:
+            chunk.metadata["modified_ts"] = row[7]
         if distance is not None:
             chunk.metadata["_distance"] = distance
         return chunk
@@ -168,29 +205,37 @@ class VectorStore:
         dim = len(valid[0].embedding)
         self._ensure_vec_table(dim)
         with self._lock:
-            cursor = self._conn.cursor()
-            for chunk in valid:
-                row = self._chunk_to_row(chunk)
-                rowid = cursor.execute(
-                    "INSERT INTO chunks "
-                    "(id, content, chunk_type, file_path, start_line, end_line, language) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?) "
-                    "ON CONFLICT(id) DO UPDATE SET "
-                    "content = excluded.content, "
-                    "chunk_type = excluded.chunk_type, "
-                    "file_path = excluded.file_path, "
-                    "start_line = excluded.start_line, "
-                    "end_line = excluded.end_line, "
-                    "language = excluded.language "
-                    "RETURNING rowid",
-                    row,
-                ).fetchone()[0]
-                cursor.execute("DELETE FROM chunks_vec WHERE rowid = ?", (rowid,))
-                cursor.execute(
-                    "INSERT INTO chunks_vec(rowid, embedding) VALUES (?, ?)",
-                    (rowid, _serialize_vec(chunk.embedding)),
-                )
-            self._conn.commit()
+            try:
+                cursor = self._conn.cursor()
+                for chunk in valid:
+                    row = self._chunk_to_row(chunk)
+                    rowid = cursor.execute(
+                        "INSERT INTO chunks "
+                        "(id, content, chunk_type, file_path, start_line, end_line, language, modified_ts) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                        "ON CONFLICT(id) DO UPDATE SET "
+                        "content = excluded.content, "
+                        "chunk_type = excluded.chunk_type, "
+                        "file_path = excluded.file_path, "
+                        "start_line = excluded.start_line, "
+                        "end_line = excluded.end_line, "
+                        "language = excluded.language, "
+                        "modified_ts = excluded.modified_ts "
+                        "RETURNING rowid",
+                        row,
+                    ).fetchone()[0]
+                    cursor.execute("DELETE FROM chunks_vec WHERE rowid = ?", (rowid,))
+                    cursor.execute(
+                        "INSERT INTO chunks_vec(rowid, embedding) VALUES (?, ?)",
+                        (rowid, _serialize_vec(chunk.embedding)),
+                    )
+                self._conn.commit()
+            except Exception:
+                # Roll back so a mid-batch failure doesn't leave pending rows
+                # (e.g. chunks with no chunks_vec row — silently unfindable)
+                # that the next unrelated commit() would flush.
+                self._conn.rollback()
+                raise
 
     async def search(
         self,
@@ -215,7 +260,8 @@ class VectorStore:
                     rows = self._conn.execute(
                         """
                         SELECT c.id, c.content, c.chunk_type, c.file_path,
-                               c.start_line, c.end_line, c.language, v.distance
+                               c.start_line, c.end_line, c.language,
+                               c.modified_ts, v.distance
                         FROM chunks_vec v
                         JOIN chunks c ON c.rowid = v.rowid
                         WHERE v.embedding MATCH ? AND k = ?
@@ -228,7 +274,8 @@ class VectorStore:
                     rows = self._conn.execute(
                         """
                         SELECT c.id, c.content, c.chunk_type, c.file_path,
-                               c.start_line, c.end_line, c.language, v.distance
+                               c.start_line, c.end_line, c.language,
+                               c.modified_ts, v.distance
                         FROM chunks_vec v
                         JOIN chunks c ON c.rowid = v.rowid
                         WHERE v.embedding MATCH ? AND k = ?
@@ -243,7 +290,7 @@ class VectorStore:
                     exc,
                 )
                 return []
-        return [self._row_to_chunk(row[:7], distance=row[7]) for row in rows]
+        return [self._row_to_chunk(row[:8], distance=row[8]) for row in rows]
 
     async def delete_by_file(self, file_path: str) -> None:
         await self.delete_by_files([file_path])
@@ -257,25 +304,29 @@ class VectorStore:
         from context_engine.utils import batched_params
 
         with self._lock:
-            # Safe: placeholders is only "?" chars; values are parameterized.
-            for batch in batched_params(file_paths):
-                placeholders = ",".join("?" * len(batch))
-                if self._dim is not None:
+            try:
+                # Safe: placeholders is only "?" chars; values are parameterized.
+                for batch in batched_params(file_paths):
+                    placeholders = ",".join("?" * len(batch))
+                    if self._dim is not None:
+                        self._conn.execute(  # nosemgrep: sqlalchemy-execute-raw-query
+                            f"DELETE FROM chunks_vec "
+                            f"WHERE rowid IN (SELECT rowid FROM chunks WHERE file_path IN ({placeholders}))",
+                            batch,
+                        )
                     self._conn.execute(  # nosemgrep: sqlalchemy-execute-raw-query
-                        f"DELETE FROM chunks_vec "
-                        f"WHERE rowid IN (SELECT rowid FROM chunks WHERE file_path IN ({placeholders}))",
+                        f"DELETE FROM chunk_compressions "
+                        f"WHERE chunk_id IN (SELECT id FROM chunks WHERE file_path IN ({placeholders}))",
                         batch,
                     )
-                self._conn.execute(  # nosemgrep: sqlalchemy-execute-raw-query
-                    f"DELETE FROM chunk_compressions "
-                    f"WHERE chunk_id IN (SELECT id FROM chunks WHERE file_path IN ({placeholders}))",
-                    batch,
-                )
-                self._conn.execute(  # nosemgrep: sqlalchemy-execute-raw-query
-                    f"DELETE FROM chunks WHERE file_path IN ({placeholders})",
-                    batch,
-                )
-            self._conn.commit()
+                    self._conn.execute(  # nosemgrep: sqlalchemy-execute-raw-query
+                        f"DELETE FROM chunks WHERE file_path IN ({placeholders})",
+                        batch,
+                    )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
 
     def get_cached_compression(self, chunk_id: str, level: str) -> str | None:
         """Return the cached compressed text for (chunk_id, level), or None."""
@@ -345,7 +396,7 @@ class VectorStore:
         with self._lock:
             try:
                 row = self._conn.execute(
-                    "SELECT id, content, chunk_type, file_path, start_line, end_line, language "
+                    "SELECT id, content, chunk_type, file_path, start_line, end_line, language, modified_ts "
                     "FROM chunks WHERE id = ?",
                     (chunk_id,),
                 ).fetchone()
@@ -363,7 +414,7 @@ class VectorStore:
             try:
                 placeholders = ",".join("?" for _ in chunk_ids)
                 rows = self._conn.execute(
-                    f"SELECT id, content, chunk_type, file_path, start_line, end_line, language "
+                    f"SELECT id, content, chunk_type, file_path, start_line, end_line, language, modified_ts "
                     f"FROM chunks WHERE id IN ({placeholders})",
                     chunk_ids,
                 ).fetchall()

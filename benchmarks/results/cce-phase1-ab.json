@@ -1,0 +1,116 @@
+{
+  "threshold": 0.2,
+  "marginal_ratio": 0.75,
+  "base_tokens": 32138,
+  "tuned_tokens": 23741,
+  "reduction_pct": 26.1,
+  "base_hits": 4,
+  "tuned_hits": 4,
+  "judged": 8,
+  "rows": [
+    {
+      "query": "How does the chunker split code into chunks?",
+      "base": {
+        "tokens": 2533,
+        "chunks": 10,
+        "hit": true
+      },
+      "tuned": {
+        "tokens": 2319,
+        "chunks": 7,
+        "hit": true
+      }
+    },
+    {
+      "query": "vector search implementation",
+      "base": {
+        "tokens": 4600,
+        "chunks": 10,
+        "hit": false
+      },
+      "tuned": {
+        "tokens": 3233,
+        "chunks": 8,
+        "hit": false
+      }
+    },
+    {
+      "query": "confidence scoring formula",
+      "base": {
+        "tokens": 3359,
+        "chunks": 10,
+        "hit": false
+      },
+      "tuned": {
+        "tokens": 3359,
+        "chunks": 10,
+        "hit": false
+      }
+    },
+    {
+      "query": "MCP server tools",
+      "base": {
+        "tokens": 4221,
+        "chunks": 10,
+        "hit": true
+      },
+      "tuned": {
+        "tokens": 4221,
+        "chunks": 10,
+        "hit": true
+      }
+    },
+    {
+      "query": "how does indexing pipeline work",
+      "base": {
+        "tokens": 6331,
+        "chunks": 10,
+        "hit": true
+      },
+      "tuned": {
+        "tokens": 6008,
+        "chunks": 9,
+        "hit": true
+      }
+    },
+    {
+      "query": "FTS5 full text search",
+      "base": {
+        "tokens": 4321,
+        "chunks": 10,
+        "hit": false
+      },
+      "tuned": {
+        "tokens": 736,
+        "chunks": 2,
+        "hit": false
+      }
+    },
+    {
+      "query": "graph neighbors query",
+      "base": {
+        "tokens": 2059,
+        "chunks": 10,
+        "hit": false
+      },
+      "tuned": {
+        "tokens": 1123,
+        "chunks": 6,
+        "hit": false
+      }
+    },
+    {
+      "query": "git commit history indexing",
+      "base": {
+        "tokens": 4714,
+        "chunks": 10,
+        "hit": true
+      },
+      "tuned": {
+        "tokens": 2742,
+        "chunks": 6,
+        "hit": true
+      }
+    }
+  ]
+}

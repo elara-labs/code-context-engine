@@ -179,6 +179,159 @@ def test_uninstall_removes_gitignore_cce_entries(runner, tmp_path):
     assert "dist/" in remaining
 
 
+def test_uninstall_preserves_non_cce_git_hook(runner, tmp_path):
+    """A user hook whose content merely contains 'cce' as a substring
+    ('success', 'access') must NOT be deleted."""
+    project_dir = tmp_path / "proj"
+    hooks_dir = project_dir / ".git" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    user_hook = '#!/bin/sh\necho "deploy success" >> access.log\n'
+    (hooks_dir / "post-commit").write_text(user_hook)
+
+    result = _run_uninstall_in(runner, project_dir)
+    assert result.exit_code == 0, result.output
+
+    assert (hooks_dir / "post-commit").exists()
+    assert (hooks_dir / "post-commit").read_text() == user_hook
+
+
+def test_uninstall_removes_cce_git_hook_block_preserving_user_lines(runner, tmp_path):
+    """When CCE appended its block to an existing user hook, uninstall must
+    strip only the CCE block, not delete the whole hook file."""
+    from context_engine.indexer.git_hooks import HOOK_MARKER
+
+    project_dir = tmp_path / "proj"
+    hooks_dir = project_dir / ".git" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "post-commit").write_text(
+        "#!/bin/sh\necho user-stuff\n\n"
+        f"{HOOK_MARKER}\n'/usr/local/bin/cce' index >/dev/null 2>&1 &\n"
+    )
+
+    result = _run_uninstall_in(runner, project_dir)
+    assert result.exit_code == 0, result.output
+
+    remaining = (hooks_dir / "post-commit").read_text()
+    assert "echo user-stuff" in remaining
+    assert HOOK_MARKER not in remaining
+    assert "cce' index" not in remaining
+
+
+def test_uninstall_deletes_pure_cce_git_hook(runner, tmp_path):
+    """A hook file CCE created from scratch is deleted entirely."""
+    from context_engine.indexer.git_hooks import HOOK_MARKER
+
+    project_dir = tmp_path / "proj"
+    hooks_dir = project_dir / ".git" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "post-merge").write_text(
+        f"#!/bin/sh\n\n{HOOK_MARKER}\n'/usr/local/bin/cce' index >/dev/null 2>&1 &\n"
+    )
+
+    result = _run_uninstall_in(runner, project_dir)
+    assert result.exit_code == 0, result.output
+    assert not (hooks_dir / "post-merge").exists()
+
+
+def test_uninstall_preserves_settings_hook_with_cce_substring(runner, tmp_path):
+    """A user hook whose command contains 'cce' only as a substring
+    ('log-access', 'success') must survive; real CCE hooks are removed."""
+    import json
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    settings_dir = project_dir / ".claude"
+    settings_dir.mkdir()
+    settings = {
+        "hooks": {
+            "SessionStart": [
+                {"matcher": "", "hooks": [{"type": "command", "command": "/usr/local/bin/cce status --oneline"}]},
+                {"matcher": "", "hooks": [{"type": "command", "command": "log-access --verbose"}]},
+            ],
+            "Stop": [
+                {"matcher": "", "hooks": [{"type": "command", "command": "notify-on-success.sh"}]},
+                {"matcher": "", "hooks": [{"type": "command", "command": "'/Users/me/.cce/hooks/cce_hook.sh' stop"}]},
+            ],
+        },
+    }
+    (settings_dir / "settings.local.json").write_text(json.dumps(settings))
+
+    result = _run_uninstall_in(runner, project_dir)
+    assert result.exit_code == 0, result.output
+
+    remaining = json.loads((settings_dir / "settings.local.json").read_text())
+    session_cmds = [
+        h["command"]
+        for entry in remaining["hooks"]["SessionStart"]
+        for h in entry["hooks"]
+    ]
+    stop_cmds = [
+        h["command"]
+        for entry in remaining["hooks"]["Stop"]
+        for h in entry["hooks"]
+    ]
+    assert session_cmds == ["log-access --verbose"]
+    assert stop_cmds == ["notify-on-success.sh"]
+
+
+def test_uninstall_gitignore_preserves_cce_substring_lines(runner, tmp_path):
+    """.gitignore lines that merely contain 'cce' as a substring
+    ('access-logs/', '# my access cache') must NOT be removed."""
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    (project_dir / ".gitignore").write_text(
+        "access-logs/\n"
+        "# my access cache\n"
+        ".cce/\n"
+        "success-reports/\n"
+    )
+
+    result = _run_uninstall_in(runner, project_dir)
+    assert result.exit_code == 0, result.output
+
+    remaining = (project_dir / ".gitignore").read_text()
+    assert "access-logs/" in remaining
+    assert "# my access cache" in remaining
+    assert "success-reports/" in remaining
+    assert ".cce/" not in remaining
+
+
+def test_uninstall_gitignore_removes_cce_comment_lines(runner, tmp_path):
+    """The exact comment lines ensure_gitignore writes are removed."""
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    (project_dir / ".gitignore").write_text(
+        "node_modules/\n"
+        "\n"
+        "# CCE (code-context-engine)\n"
+        "# CCE local cache (per-machine, not for version control)\n"
+        ".cce/\n"
+        "# Claude Code local settings written by cce init\n"
+        ".claude/settings.local.json\n"
+    )
+
+    result = _run_uninstall_in(runner, project_dir)
+    assert result.exit_code == 0, result.output
+
+    remaining = (project_dir / ".gitignore").read_text()
+    assert "node_modules/" in remaining
+    assert "CCE" not in remaining
+    assert ".cce/" not in remaining
+    assert ".claude/settings.local.json" not in remaining
+
+
+def test_uninstall_gitignore_untouched_when_no_cce_entries(runner, tmp_path):
+    """A .gitignore with only lookalike lines is left byte-identical."""
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    original = "access-logs/\nsuccess/\n\n# tools\ndist/\n"
+    (project_dir / ".gitignore").write_text(original)
+
+    result = _run_uninstall_in(runner, project_dir)
+    assert result.exit_code == 0, result.output
+    assert (project_dir / ".gitignore").read_text() == original
+    assert "Removed CCE entries from .gitignore" not in result.output
+
+
 def test_uninstall_removes_index_data(runner, tmp_path):
     """Index data in ~/.cce/projects/<name> is deleted."""
     from unittest.mock import patch as mock_patch

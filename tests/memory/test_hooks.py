@@ -344,6 +344,119 @@ async def test_compression_queue_dedupes(hook_app, aiohttp_client):
     assert n == 1, "double-enqueue should be deduped by UNIQUE constraint"
 
 
+async def test_session_end_rollup_enqueue_dedupes(hook_app, aiohttp_client):
+    """Repeated SessionEnd must not enqueue the rollup more than once.
+    SQLite treats NULLs as distinct in UNIQUE constraints, so the NULL
+    prompt_number used by rollups defeated INSERT OR IGNORE."""
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    await client.post(
+        "/hooks/SessionStart", json={"session_id": "abc", "project": "demo"},
+    )
+    for _ in range(3):
+        resp = await client.post(
+            "/hooks/SessionEnd",
+            json={"session_id": "abc", "exit_reason": "normal"},
+        )
+        assert resp.status == 200
+    n = conn.execute(
+        "SELECT COUNT(*) AS n FROM pending_compressions "
+        "WHERE kind = 'session_rollup' AND session_id = 'abc'"
+    ).fetchone()["n"]
+    assert n == 1, "repeated SessionEnd must dedupe the rollup enqueue"
+
+
+async def test_session_start_bad_started_at_does_not_500(
+    hook_app, aiohttp_client,
+):
+    """Hooks promise never to 500 — a garbage started_at must fall back to
+    the current time instead of raising out of the handler."""
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    resp = await client.post(
+        "/hooks/SessionStart",
+        json={"session_id": "badts", "started_at": "not-a-number"},
+    )
+    assert resp.status == 200
+    row = conn.execute(
+        "SELECT started_at_epoch FROM sessions WHERE id = 'badts'"
+    ).fetchone()
+    assert row is not None
+    assert row["started_at_epoch"] > 0
+
+
+# ── PII scrubbing on hook write paths ─────────────────────────────────────
+
+
+@pytest.fixture
+def _pii_on():
+    memory_db.set_pii_redaction(True)
+    yield
+    memory_db.set_pii_redaction(True)
+
+
+async def test_prompt_text_is_pii_scrubbed(hook_app, aiohttp_client, _pii_on):
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    await client.post(
+        "/hooks/UserPromptSubmit",
+        json={
+            "session_id": "pii1",
+            "prompt_text": "Email alice@example.com when 203.0.113.42 is up",
+        },
+    )
+    row = conn.execute(
+        "SELECT prompt_text FROM prompts WHERE session_id = 'pii1'"
+    ).fetchone()
+    assert "alice@example.com" not in row["prompt_text"]
+    assert "203.0.113.42" not in row["prompt_text"]
+    assert "[REDACTED:EMAIL]" in row["prompt_text"]
+
+
+async def test_tool_payloads_are_pii_scrubbed(hook_app, aiohttp_client, _pii_on):
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    await client.post(
+        "/hooks/PostToolUse",
+        json={
+            "session_id": "pii2",
+            "tool_name": "Bash",
+            "tool_input": {"command": "curl -u bob@example.com https://x"},
+            "tool_output": "reached 203.0.113.42 as bob@example.com",
+        },
+    )
+    row = conn.execute(
+        "SELECT p.raw_input, p.raw_output FROM tool_event_payloads p "
+        "JOIN tool_events te ON te.payload_id = p.id "
+        "WHERE te.session_id = 'pii2'"
+    ).fetchone()
+    assert "bob@example.com" not in row["raw_input"]
+    assert "bob@example.com" not in row["raw_output"]
+    assert "203.0.113.42" not in row["raw_output"]
+
+
+async def test_hook_pii_scrub_respects_disabled_toggle(
+    hook_app, aiohttp_client,
+):
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    memory_db.set_pii_redaction(False)
+    try:
+        await client.post(
+            "/hooks/UserPromptSubmit",
+            json={
+                "session_id": "pii3",
+                "prompt_text": "Email carol@example.com about it",
+            },
+        )
+        row = conn.execute(
+            "SELECT prompt_text FROM prompts WHERE session_id = 'pii3'"
+        ).fetchone()
+        assert "carol@example.com" in row["prompt_text"]
+    finally:
+        memory_db.set_pii_redaction(True)
+
+
 # ── Savings visibility tests ──────────────────────────────────────────────
 
 
