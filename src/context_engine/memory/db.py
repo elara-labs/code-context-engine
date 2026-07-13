@@ -16,6 +16,7 @@ the schema and stamps version=3. Older dbs are upgraded in place additively.
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 import struct
 import time
@@ -25,9 +26,10 @@ log = logging.getLogger(__name__)
 
 CURRENT_VERSION = 3
 
-# bge-small-en-v1.5 — the default embedder used everywhere else in cce.
-# If the project's embedder swaps to a different model, vec tables are
-# rebuilt on first access (see `_ensure_vec_dim`).
+# bge-small-en-v1.5 — the default embedder used everywhere else in cce, and the
+# dimension the vec tables are bootstrapped at. If the project points cce at a
+# different-dimension embedder, the vec tables are rebuilt to match on the next
+# write/backfill (see `_ensure_vec_dim`).
 _VEC_DIM = 384
 
 _SCHEMA_V1 = [
@@ -416,6 +418,56 @@ def _decision_vec_text(decision: str, reason: str) -> str:
     return decision or reason or ""
 
 
+def _declared_vec_dim(conn: sqlite3.Connection) -> int | None:
+    """Dimension the vec tables were created with, or None if they don't exist.
+
+    Read from the stored `vec0(embedding float[N])` DDL rather than a row so it
+    works even when the tables are empty (the usual state after a dim mismatch
+    has silently rejected every insert).
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='decisions_vec'"
+    ).fetchone()
+    if not row:
+        return None
+    sql = row["sql"] if isinstance(row, sqlite3.Row) else row[0]
+    m = re.search(r"float\[(\d+)\]", sql or "")
+    return int(m.group(1)) if m else None
+
+
+def _ensure_vec_dim(conn: sqlite3.Connection, dim: int) -> None:
+    """Rebuild the vec tables when the active embedder's dimension no longer
+    matches the one they were created with.
+
+    The tables are bootstrapped at `_VEC_DIM` (bge-small = 384), but a project
+    can point cce at any embedder — e.g. Ollama's default `nomic-embed-text`
+    emits 768-dim vectors. Without this, every `_write_vec_row` INSERT and every
+    `search_*_vec` MATCH raises a dimension-mismatch OperationalError that the
+    callers swallow at debug level, so semantic recall silently returns nothing
+    forever. Mirrors VectorStore._ensure_vec_table for the code index.
+
+    The source `decisions`/`turn_summaries` rows are untouched — dropping the
+    now-unusable vec rows just means `backfill_vec_tables` re-embeds them at the
+    new dimension on its next pass. Both tables always share the embedder's
+    dimension, so they are rebuilt together to stay consistent.
+    """
+    if not has_vec_tables(conn):
+        return
+    current = _declared_vec_dim(conn)
+    if current == dim:
+        return
+    log.warning(
+        "memory vec dimension changed (%s -> %d); rebuilding decisions_vec / "
+        "turn_summaries_vec — semantic recall repopulates on next backfill.",
+        current, dim,
+    )
+    conn.execute("DROP TABLE IF EXISTS decisions_vec")
+    conn.execute("DROP TABLE IF EXISTS turn_summaries_vec")
+    for stmt in _vec_table_stmts(dim):
+        conn.execute(stmt)
+    conn.commit()
+
+
 def _write_vec_row(conn, table: str, rowid: int, vec) -> None:
     """Best-effort vec write. Swallows dim mismatches so a swapped embedder
     doesn't break inserts on the source table — the failed row simply won't
@@ -444,6 +496,7 @@ def record_decision_vec(conn, embedder, *, decision_id: int, decision: str, reas
     except Exception:
         log.exception("embedder failed for decision %s", decision_id)
         return
+    _ensure_vec_dim(conn, len(vec))
     _write_vec_row(conn, "decisions_vec", decision_id, vec)
 
 
@@ -458,6 +511,7 @@ def record_turn_summary_vec(conn, embedder, *, turn_id: int, summary: str) -> No
     except Exception:
         log.exception("embedder failed for turn_summary %s", turn_id)
         return
+    _ensure_vec_dim(conn, len(vec))
     _write_vec_row(conn, "turn_summaries_vec", turn_id, vec)
 
 
@@ -478,12 +532,26 @@ def backfill_vec_tables(conn, embedder) -> dict[str, int]:
     counts = {"decisions": 0, "turn_summaries": 0}
     if not has_vec_tables(conn):
         return counts
+    # Reconcile the vec-table dimension with the active embedder up front. If
+    # the embedder changed while the tables were already populated at the old
+    # dimension (e.g. bge-small 384 -> nomic-embed-text 768), the existing rows
+    # are unusable but the `NOT EXISTS` filter below would find nothing pending
+    # and never trigger a rebuild. Probing here makes _ensure_vec_dim wipe them
+    # so every source row is re-embedded at the new dimension. The per-row
+    # record_*_vec calls then find the dimension already matching (no-op), so
+    # the fetchall()s below just guard against the tables being mutated under
+    # an open cursor in any edge case.
+    try:
+        _ensure_vec_dim(conn, len(embedder.embed_query("dimension probe")))
+    except Exception:
+        log.exception("vec dimension probe failed; skipping backfill")
+        return counts
     for row in conn.execute(
         "SELECT d.id, d.decision, d.reason FROM decisions d "
         "WHERE NOT EXISTS ("
         "  SELECT 1 FROM decisions_vec v WHERE v.rowid = d.id"
         ")"
-    ):
+    ).fetchall():
         record_decision_vec(
             conn, embedder,
             decision_id=row["id"],
@@ -496,7 +564,7 @@ def backfill_vec_tables(conn, embedder) -> dict[str, int]:
         "WHERE NOT EXISTS ("
         "  SELECT 1 FROM turn_summaries_vec v WHERE v.rowid = t.id"
         ")"
-    ):
+    ).fetchall():  # materialise before iterating — see the decisions loop above
         record_turn_summary_vec(
             conn, embedder,
             turn_id=row["id"],
