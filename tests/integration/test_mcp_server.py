@@ -23,6 +23,9 @@ def _make_server(tmp_path):
     server._config = config
     server._output_level = "standard"
     server._stats_path = tmp_path / "stats.json"
+    server._state_path = tmp_path / "state.json"
+    server._default_top_k = 10
+    server._default_max_tokens = 8000
     server._stats = server._load_stats()
     # _record_bucket already guards on this; tests don't need a real db.
     server._memory_conn = None

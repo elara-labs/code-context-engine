@@ -68,6 +68,8 @@ def test_root_contains_js_functions(tmp_path):
     assert "loadOverviewPanels" in r.text
     assert "loadFiles" in r.text
     assert "loadSavings" in r.text
+    assert "Input / Output Format" in r.text
+    assert "saveFormatConfig" in r.text
 
 
 def test_root_js_parses_without_error(tmp_path):
@@ -194,6 +196,22 @@ def test_set_compression_valid(tmp_path):
     assert r.status_code == 200
     data = r.json()
     assert data["level"] == "max"
+
+
+def test_format_config_valid(tmp_path):
+    client, _ = _setup(tmp_path)
+    r = client.post("/api/format", json={
+        "input_preset": "deep",
+        "top_k": 1,
+        "max_tokens": 500,
+        "output_level": "max",
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["input_preset"] == "deep"
+    assert data["top_k"] == 20
+    assert data["max_tokens"] == 12000
+    assert data["output_level"] == "max"
 
 
 def test_set_compression_invalid(tmp_path):
