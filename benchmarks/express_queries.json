@@ -1,0 +1,102 @@
+[
+    {
+        "query": "How does Express initialize the application and set up the default router?",
+        "expected_files": ["application.js"],
+        "category": "core"
+    },
+    {
+        "query": "How does app.use() register middleware on an Express application?",
+        "expected_files": ["application.js"],
+        "category": "middleware"
+    },
+    {
+        "query": "How does app.handle() dispatch an incoming request through the router?",
+        "expected_files": ["application.js"],
+        "category": "routing"
+    },
+    {
+        "query": "How does app.set() and app.enabled() manage application settings?",
+        "expected_files": ["application.js"],
+        "category": "core"
+    },
+    {
+        "query": "How does app.render() render a view with a template engine?",
+        "expected_files": ["application.js", "view.js"],
+        "category": "views"
+    },
+    {
+        "query": "How does Express resolve and load view templates by name?",
+        "expected_files": ["view.js"],
+        "category": "views"
+    },
+    {
+        "query": "How does res.send() determine the response body type and content-length?",
+        "expected_files": ["response.js"],
+        "category": "response"
+    },
+    {
+        "query": "How does res.json() serialize an object and set the JSON content type?",
+        "expected_files": ["response.js"],
+        "category": "response"
+    },
+    {
+        "query": "How does res.sendFile() stream a file to the client?",
+        "expected_files": ["response.js"],
+        "category": "response"
+    },
+    {
+        "query": "How does res.download() set the Content-Disposition header for file downloads?",
+        "expected_files": ["response.js"],
+        "category": "response"
+    },
+    {
+        "query": "How does res.status() and res.sendStatus() set the HTTP status code?",
+        "expected_files": ["response.js"],
+        "category": "response"
+    },
+    {
+        "query": "How does res.cookie() and res.clearCookie() manage response cookies?",
+        "expected_files": ["response.js"],
+        "category": "response"
+    },
+    {
+        "query": "How does req.accepts() perform content negotiation against the Accept header?",
+        "expected_files": ["request.js"],
+        "category": "request"
+    },
+    {
+        "query": "How does req.get() and req.header() read request headers?",
+        "expected_files": ["request.js"],
+        "category": "request"
+    },
+    {
+        "query": "How does req.is() check the request's Content-Type against a given type?",
+        "expected_files": ["request.js"],
+        "category": "request"
+    },
+    {
+        "query": "How does req.range() parse a Range header for partial content requests?",
+        "expected_files": ["request.js"],
+        "category": "request"
+    },
+    {
+        "query": "How does Express generate an ETag for a response body?",
+        "expected_files": ["utils.js"],
+        "category": "utils"
+    },
+    {
+        "query": "How does Express compile and normalize configured MIME types?",
+        "expected_files": ["utils.js"],
+        "category": "utils"
+    },
+    {
+        "query": "How does the express() factory function create an application instance?",
+        "expected_files": ["express.js"],
+        "category": "core"
+    },
+    {
+        "query": "How does Express expose the json, urlencoded, and static middleware helpers?",
+        "expected_files": ["express.js"],
+        "category": "middleware"
+    }
+]
