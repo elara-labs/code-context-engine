@@ -469,6 +469,12 @@ class ContextEngineMCP:
         # Lazy indexing flag — triggers on first context_search if index is empty.
         self._lazy_indexed = False
 
+        # Memory nudge state — tracks tool activity so context_search can
+        # append reminders when the agent hasn't been recording (#nudges).
+        # Reset on every record_decision / record_code_area call.
+        self._searches_since_last_decision = 0
+        self._has_recorded_decision = False
+
         self._register_tools()
         self._register_prompts()
 
@@ -708,6 +714,76 @@ class ContextEngineMCP:
                 meta={"level": self._output_level},
             )
         return out
+
+    # ── memory nudges ───────────────────────────────────────────────────
+
+    # Thresholds for triggering nudges. After the first record_decision,
+    # the search threshold doubles — the agent has shown it knows how, so
+    # we nudge less aggressively.
+    _DECISION_NUDGE_FIRST = 4
+    _DECISION_NUDGE_REPEAT = 8
+    _CODE_AREA_NUDGE_THRESHOLD = 3
+    _CODE_AREA_NUDGE_MAX_FILES = 5
+
+    def _build_nudge(self) -> str:
+        """Return a nudge string to append to context_search results, or "".
+
+        Two independent triggers:
+        1. Decision nudge: N searches with 0 decisions recorded.
+        2. Code area nudge: M files touched (via search/expand) but not
+           explicitly record_code_area'd this session.
+
+        Both can fire in the same response. The "skip if" clause gives the
+        agent permission to ignore the nudge when it's just reading.
+        """
+        parts: list[str] = []
+
+        # ── decision nudge ────────────────────────────────────────────
+        threshold = (
+            self._DECISION_NUDGE_REPEAT
+            if self._has_recorded_decision
+            else self._DECISION_NUDGE_FIRST
+        )
+        if self._searches_since_last_decision >= threshold:
+            n = self._searches_since_last_decision
+            snap = self._session_capture.get_session_snapshot(self._session_id)
+            n_decisions = len(snap["decisions"]) if snap else 0
+            parts.append(
+                f"[CCE] {n} context searches this session, "
+                f"{n_decisions} decision(s) recorded.\n"
+                f"If you chose a library, resolved an ambiguity, or "
+                f"established a convention, call "
+                f'record_decision(decision="...", reason="...").\n'
+                f"Skip if this session is just exploration/reading."
+            )
+
+        # ── code area nudge ───────────────────────────────────────────
+        snap = self._session_capture.get_session_snapshot(self._session_id)
+        if snap:
+            touched = set(snap.get("touched_files", {}).keys())
+            recorded = {
+                ca["file_path"] for ca in snap.get("code_areas", [])
+            }
+            unrecorded = sorted(touched - recorded)
+            if len(unrecorded) >= self._CODE_AREA_NUDGE_THRESHOLD:
+                shown = unrecorded[:self._CODE_AREA_NUDGE_MAX_FILES]
+                suffix = (
+                    f" (+{len(unrecorded) - len(shown)} more)"
+                    if len(unrecorded) > len(shown) else ""
+                )
+                file_list = ", ".join(shown) + suffix
+                parts.append(
+                    f"[CCE] {len(unrecorded)} files explored but not "
+                    f"recorded: {file_list}\n"
+                    f"If you modified or traced a non-obvious flow, call "
+                    f'record_code_area(file_path="...", '
+                    f'description="...").\n'
+                    f"Skip for files you only glanced at."
+                )
+
+        if not parts:
+            return ""
+        return "\n\n---\n" + "\n\n".join(parts)
 
     def get_tool_names(self) -> list[str]:
         return list(self.TOOL_NAMES)
@@ -1048,6 +1124,14 @@ class ContextEngineMCP:
         self._persist_current_session()
 
         body = _format_results_with_overflow(inline_chunks, overflow_chunks)
+        # Memory nudge — appended before output compression so the agent
+        # sees it as part of the tool result. Fires only when thresholds
+        # are met (see _build_nudge). Increment BEFORE building the nudge
+        # so the current search counts toward the threshold.
+        self._searches_since_last_decision += 1
+        nudge = self._build_nudge()
+        if nudge:
+            body = body + nudge
         body = self._apply_output_compression(body)
         # Only note omissions the retriever actually made (threshold or
         # marginal stop) — chunk-count heuristics false-positive on every
@@ -1246,6 +1330,10 @@ class ContextEngineMCP:
         reason = memory_db.scrub_pii(reason)
         self._session_capture.record_decision(self._session_id, decision, reason)
         self._persist_current_session()
+        # Reset nudge state — the agent recorded something, give it a
+        # longer leash before the next nudge.
+        self._searches_since_last_decision = 0
+        self._has_recorded_decision = True
         # Dual-write into memory.db. `decision` and `reason` are compressed
         # via the grammar module before INSERT — structured tokens (paths,
         # versions, identifiers) are preserved byte-for-byte; only prose

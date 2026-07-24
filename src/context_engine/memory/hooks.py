@@ -383,7 +383,73 @@ async def handle_stop(request: web.Request) -> web.Response:
     except Exception:
         log.exception("Stop enqueue failed")
         return web.json_response({"ok": False}, status=202)
+
+    # Memory nudge — summarise unrecorded activity so the agent can fire
+    # off quick record_decision / record_code_area calls before the session
+    # ends. The hook script captures Stop stdout (like SessionStart) and
+    # injects it into the model context.
+    nudge = _build_stop_nudge(conn, session_id)
+    if nudge:
+        return web.Response(text=nudge, content_type="text/plain")
     return web.json_response({"ok": True})
+
+
+def _build_stop_nudge(conn: sqlite3.Connection, session_id: str) -> str:
+    """Build a session-end nudge summarising unrecorded activity.
+
+    Queries memory.db for tool_events (context_search calls) and decisions
+    recorded during this session. Returns a short directive if activity
+    was significant but recording was low. Returns "" if nothing to nudge.
+    """
+    try:
+        # Count context_search tool calls this session
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM tool_events "
+            "WHERE session_id = ? AND tool_name = 'context_search'",
+            (session_id,),
+        ).fetchone()
+        n_searches = int(row["n"]) if row else 0
+
+        # Count decisions recorded this session
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM decisions WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        n_decisions = int(row["n"]) if row else 0
+
+        # Count code_areas recorded this session
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM code_areas WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        n_code_areas = int(row["n"]) if row else 0
+
+        # Only nudge if there was real activity (4+ searches) and
+        # recording was sparse.
+        if n_searches < 4:
+            return ""
+        parts: list[str] = []
+        if n_decisions == 0:
+            parts.append(
+                "If you chose a library, resolved an ambiguity, or "
+                "established a convention, call "
+                'record_decision(decision="...", reason="...") now.'
+            )
+        if n_code_areas == 0:
+            parts.append(
+                "If you modified or traced non-obvious code, call "
+                'record_code_area(file_path="...", description="...") now.'
+            )
+        if not parts:
+            return ""
+        header = (
+            f"[CCE session end] {n_searches} searches, "
+            f"{n_decisions} decision(s), {n_code_areas} code area(s) recorded."
+        )
+        return header + "\n" + "\n".join(parts)
+    except Exception:
+        log.debug("Stop nudge query failed", exc_info=True)
+        return ""
 
 
 async def handle_session_end(request: web.Request) -> web.Response:

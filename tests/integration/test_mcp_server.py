@@ -30,6 +30,9 @@ def _make_server(tmp_path):
     # _record_bucket already guards on this; tests don't need a real db.
     server._memory_conn = None
     server._storage_base = tmp_path
+    # Memory nudge state (see ContextEngineMCP.__init__)
+    server._searches_since_last_decision = 0
+    server._has_recorded_decision = False
     return server
 
 
@@ -176,6 +179,9 @@ def _make_search_server(tmp_path, dropped_low_value):
     server._compressor.compress = AsyncMock(return_value=[stub_chunk])
     server._session_capture = MagicMock()
     server._session_capture.touch_files = MagicMock()
+    server._session_capture.get_session_snapshot = MagicMock(return_value={
+        "decisions": [], "code_areas": [], "touched_files": {},
+    })
     server._persist_current_session = MagicMock()
     server._record = MagicMock()
     server._append_audit_log = MagicMock()
@@ -208,3 +214,62 @@ async def test_context_search_no_note_when_nothing_dropped(tmp_path):
     result = await server._handle_context_search({"query": "find something", "top_k": 5})
     text = result[0].text
     assert "lower-confidence results omitted" not in text
+
+
+@pytest.mark.asyncio
+async def test_decision_nudge_fires_after_threshold(tmp_path):
+    """After 4 context_search calls with no record_decision, the nudge appears."""
+    server = _make_search_server(tmp_path, dropped_low_value=0)
+    # First 3 searches: no nudge
+    for _ in range(3):
+        result = await server._handle_context_search({"query": "q", "top_k": 5})
+        assert "[CCE]" not in result[0].text
+    # 4th search: nudge fires
+    result = await server._handle_context_search({"query": "q", "top_k": 5})
+    assert "[CCE] 4 context searches" in result[0].text
+    assert "record_decision" in result[0].text
+
+
+@pytest.mark.asyncio
+async def test_decision_nudge_resets_after_record(tmp_path):
+    """Recording a decision resets the search counter."""
+    server = _make_search_server(tmp_path, dropped_low_value=0)
+    # Trigger nudge
+    for _ in range(4):
+        await server._handle_context_search({"query": "q", "top_k": 5})
+    # Simulate record_decision resetting state
+    server._searches_since_last_decision = 0
+    server._has_recorded_decision = True
+    # Next search: no nudge (counter reset, higher threshold now)
+    result = await server._handle_context_search({"query": "q", "top_k": 5})
+    assert "[CCE]" not in result[0].text
+
+
+@pytest.mark.asyncio
+async def test_code_area_nudge_fires_with_unrecorded_files(tmp_path):
+    """Nudge appears when 3+ files are touched but none recorded as code areas."""
+    server = _make_search_server(tmp_path, dropped_low_value=0)
+    # Simulate 3 touched files with no code_areas recorded
+    server._session_capture.get_session_snapshot = MagicMock(return_value={
+        "decisions": [], "code_areas": [],
+        "touched_files": {"a.py": 1, "b.py": 2, "c.py": 1},
+    })
+    result = await server._handle_context_search({"query": "q", "top_k": 5})
+    assert "files explored but not recorded" in result[0].text
+    assert "record_code_area" in result[0].text
+
+
+@pytest.mark.asyncio
+async def test_code_area_nudge_excludes_recorded_files(tmp_path):
+    """Files that were record_code_area'd don't count toward the threshold."""
+    server = _make_search_server(tmp_path, dropped_low_value=0)
+    server._session_capture.get_session_snapshot = MagicMock(return_value={
+        "decisions": [], "touched_files": {"a.py": 1, "b.py": 2, "c.py": 1},
+        "code_areas": [
+            {"file_path": "a.py", "description": "x", "timestamp": 0},
+            {"file_path": "b.py", "description": "y", "timestamp": 0},
+        ],
+    })
+    result = await server._handle_context_search({"query": "q", "top_k": 5})
+    # Only 1 unrecorded file (c.py) — below threshold
+    assert "[CCE]" not in result[0].text or "files explored" not in result[0].text

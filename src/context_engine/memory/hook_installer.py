@@ -97,7 +97,7 @@ if command -v bash >/dev/null 2>&1; then
     bash -c "exec 3<>/dev/tcp/127.0.0.1/${PORT}" 2>/dev/null || exit 0
 fi
 
-if [ "${HOOK_NAME}" = "SessionStart" ]; then
+if [ "${HOOK_NAME}" = "SessionStart" ] || [ "${HOOK_NAME}" = "Stop" ]; then
     RESPONSE="$(curl -sf -m 2 -X POST -H "Content-Type: application/json" \\
         --data-binary @- "http://127.0.0.1:${PORT}/hooks/${HOOK_NAME}" \\
         2>/dev/null || true)"
@@ -154,17 +154,19 @@ REM See the POSIX comment above for the motivation (#67).
 powershell -NoProfile -Command "$ErrorActionPreference='Stop'; try { (New-Object Net.Sockets.TcpClient).Connect('127.0.0.1',%PORT%); exit 0 } catch { exit 1 }" >nul 2>&1
 if errorlevel 1 exit /b 0
 
-if /i "%HOOK_NAME%"=="SessionStart" (
-    set "TMP_RESP=%TEMP%\\cce_hook_resp_%RANDOM%.txt"
-    curl -sf -m 2 -X POST -H "Content-Type: application/json" ^
-        --data-binary @- "http://127.0.0.1:%PORT%/hooks/%HOOK_NAME%" ^
-        > "%TMP_RESP%" 2>nul
-    if exist "%TMP_RESP%" type "%TMP_RESP%"
-    if exist "%TMP_RESP%" del "%TMP_RESP%" >nul 2>&1
-) else (
-    curl -sf -m 1 -X POST -H "Content-Type: application/json" ^
-        --data-binary @- "http://127.0.0.1:%PORT%/hooks/%HOOK_NAME%" >nul 2>&1
-)
+if /i "%HOOK_NAME%"=="SessionStart" goto :capture_response
+if /i "%HOOK_NAME%"=="Stop" goto :capture_response
+curl -sf -m 1 -X POST -H "Content-Type: application/json" ^
+    --data-binary @- "http://127.0.0.1:%PORT%/hooks/%HOOK_NAME%" >nul 2>&1
+goto :eof
+
+:capture_response
+set "TMP_RESP=%TEMP%\\cce_hook_resp_%RANDOM%.txt"
+curl -sf -m 2 -X POST -H "Content-Type: application/json" ^
+    --data-binary @- "http://127.0.0.1:%PORT%/hooks/%HOOK_NAME%" ^
+    > "%TMP_RESP%" 2>nul
+if exist "%TMP_RESP%" type "%TMP_RESP%"
+if exist "%TMP_RESP%" del "%TMP_RESP%" >nul 2>&1
 exit /b 0
 """
 
