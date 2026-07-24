@@ -79,6 +79,12 @@ class Config:
     indexer_watch: bool = True
     indexer_debounce_ms: int = 500
     indexer_ignore: list[str] = field(default_factory=lambda: list(DEFAULT_IGNORE))
+    # Resource governor (#139) — caps per-process ONNX Runtime threads and
+    # auto-shuts down idle servers so zombie processes don't accumulate.
+    # 0 = disabled (no auto-shutdown / use ORT default threads).
+    serve_idle_timeout_minutes: int = 30
+    serve_max_ort_threads: int = 2
+
     # When True, the indexer skips well-known credential filenames
     # (.env*, *.pem, secrets.yml, credentials.json, …) and redacts
     # AWS/GitHub/JWT/etc. patterns from the content of files it does
@@ -140,6 +146,8 @@ _EXPECTED_TYPES: dict[str, type | tuple[type, ...]] = {
     "indexer_watch": bool,
     "indexer_debounce_ms": int,
     "indexer_ignore": list,
+    "serve_idle_timeout_minutes": int,
+    "serve_max_ort_threads": int,
     "indexer_redact_secrets": bool,
     "memory_redact_pii": bool,
     "audit_log_enabled": bool,
@@ -162,6 +170,8 @@ def _apply_dict_to_config(config: Config, data: dict) -> None:
         ("retrieval", "top_k"): "retrieval_top_k",
         ("retrieval", "marginal_ratio"): "retrieval_marginal_ratio",
         ("retrieval", "bootstrap_max_tokens"): "bootstrap_max_tokens",
+        ("serve", "idle_timeout_minutes"): "serve_idle_timeout_minutes",
+        ("serve", "max_ort_threads"): "serve_max_ort_threads",
         ("indexer", "watch"): "indexer_watch",
         ("indexer", "debounce_ms"): "indexer_debounce_ms",
         ("indexer", "ignore"): "indexer_ignore",

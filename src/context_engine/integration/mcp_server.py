@@ -389,6 +389,9 @@ class ContextEngineMCP:
         self._compressor = compressor
         self._embedder = embedder
         self._config = config
+        # Set by _run_serve after construction; reset on every tool call
+        # so the idle-shutdown watchdog knows the server is in use (#139).
+        self._idle_tracker = None
         # Propagate the PII-redaction toggle to the memory module's
         # process-global state. Done at MCPServer boot — the compressor
         # and migrate paths read from the same module-level flag.
@@ -863,6 +866,8 @@ class ContextEngineMCP:
         @self._server.call_tool()
         async def call_tool(name: str, arguments: dict):
             arguments = arguments or {}
+            if self._idle_tracker is not None:
+                self._idle_tracker.touch()
             try:
                 if name == "context_search":
                     return await self._handle_context_search(arguments)
