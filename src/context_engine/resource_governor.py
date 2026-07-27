@@ -4,7 +4,7 @@ Addresses issue #139: dozens of ``cce serve`` processes (one per project per
 AI session) exhaust system memory and cause 10–20 minute desktop freezes on
 Linux.
 
-Three mechanisms:
+Four mechanisms:
 
 1. **ONNX Runtime thread caps** — each process gets a bounded number of
    intra-op/inter-op threads instead of the OS default (often == CPU count).
@@ -63,16 +63,19 @@ def cap_ort_threads(max_threads: int | None = None) -> int:
     if n <= 0:
         return 0  # 0 = "let ONNX pick"
 
+    # Force-set rather than setdefault — pre-existing values (common on dev
+    # machines / CI) would silently override the cap and defeat the purpose.
+    cap = str(n)
     for var in (
         "OMP_NUM_THREADS",
         "MKL_NUM_THREADS",
         "OPENBLAS_NUM_THREADS",
         "ORT_NUM_THREADS",       # some ORT builds read this directly
     ):
-        os.environ.setdefault(var, str(n))
+        os.environ[var] = cap
 
     # tokenizers library (used by fastembed) also spawns threads
-    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     log.debug("ORT thread cap applied: %d", n)
     return n
@@ -106,6 +109,7 @@ class ProjectIndexLock:
         """Non-blocking attempt. Returns True if this process now holds it."""
         if fcntl is None:
             return True  # no-op on Windows
+        fd = -1
         try:
             self._lock_path.parent.mkdir(parents=True, exist_ok=True)
             fd = os.open(str(self._lock_path), os.O_CREAT | os.O_RDWR, 0o644)
@@ -113,6 +117,13 @@ class ProjectIndexLock:
             self._fd = fd
             return True
         except (OSError, BlockingIOError):
+            # Close the fd if open() succeeded but flock() failed,
+            # otherwise we leak a file descriptor on every failed attempt.
+            if fd >= 0:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
             return False
 
     def release(self) -> None:

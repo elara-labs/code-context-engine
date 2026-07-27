@@ -3501,7 +3501,9 @@ async def _run_serve(config) -> None:
             while True:
                 rel = await _reindex_queue.get()
                 _reindex_pending.discard(rel)
-                # Back off under memory pressure (#139).
+                # Back off under memory pressure (#139). Re-queue the
+                # file so it isn't lost — without this, the last change
+                # during sustained pressure would leave the index stale.
                 if is_memory_pressured():
                     _log.info(
                         "Memory pressure detected; deferring re-index of %s",
@@ -3509,6 +3511,10 @@ async def _run_serve(config) -> None:
                     )
                     _reindex_queue.task_done()
                     await asyncio.sleep(30)
+                    # Re-queue for retry after pressure subsides.
+                    if rel not in _reindex_pending:
+                        _reindex_pending.add(rel)
+                        await _reindex_queue.put(rel)
                     continue
                 if not index_lock.try_acquire():
                     _log.debug(
