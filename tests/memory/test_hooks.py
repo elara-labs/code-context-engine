@@ -268,7 +268,7 @@ async def test_stop_enqueues_turn_compression(hook_app, aiohttp_client):
         "/hooks/Stop",
         json={"session_id": "abc"},
     )
-    assert resp.status == 200
+    assert resp.status in (200, 204)
     pending = list(conn.execute(
         "SELECT kind, session_id, prompt_number FROM pending_compressions"
     ))
@@ -585,7 +585,7 @@ async def test_stop_without_session_start_does_not_crash(hook_app, aiohttp_clien
         "/hooks/Stop",
         json={"session_id": "orphan3"},
     )
-    assert resp.status == 200
+    assert resp.status in (200, 204)
 
 
 async def test_session_end_without_session_start_does_not_crash(hook_app, aiohttp_client):
@@ -597,3 +597,74 @@ async def test_session_end_without_session_start_does_not_crash(hook_app, aiohtt
         json={"session_id": "orphan4", "exit_reason": "normal"},
     )
     assert resp.status == 200
+
+
+# ── Stop nudge tests ────────────────────────────────────────────────────
+
+
+async def test_stop_nudge_fires_with_searches_no_decisions(hook_app, aiohttp_client):
+    """Stop returns a nudge when there were 4+ searches but no decisions."""
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    await client.post(
+        "/hooks/SessionStart", json={"session_id": "nudge1", "project": "demo"},
+    )
+    # Seed 5 context_search tool events.
+    for i in range(5):
+        conn.execute(
+            "INSERT INTO tool_events (session_id, tool_name, prompt_number, "
+            "created_at_epoch, created_at) VALUES (?, 'context_search', ?, ?, ?)",
+            ("nudge1", i + 1, 1700000000 + i, "2023-11-14T22:13:20"),
+        )
+    conn.commit()
+    resp = await client.post("/hooks/Stop", json={"session_id": "nudge1"})
+    assert resp.status == 200
+    text = await resp.text()
+    assert "5 searches" in text
+    assert "record_decision" in text
+
+
+async def test_stop_nudge_silent_when_few_searches(hook_app, aiohttp_client):
+    """Stop returns 204 (no nudge) when fewer than 4 searches."""
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    await client.post(
+        "/hooks/SessionStart", json={"session_id": "nudge2", "project": "demo"},
+    )
+    conn.execute(
+        "INSERT INTO tool_events (session_id, tool_name, prompt_number, "
+        "created_at_epoch, created_at) VALUES "
+        "('nudge2', 'context_search', 1, 1700000000, '2023-11-14T22:13:20')",
+    )
+    conn.commit()
+    resp = await client.post("/hooks/Stop", json={"session_id": "nudge2"})
+    assert resp.status == 204
+
+
+async def test_stop_nudge_silent_when_decisions_recorded(hook_app, aiohttp_client):
+    """Stop returns 204 when searches exist but decisions were recorded."""
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    await client.post(
+        "/hooks/SessionStart", json={"session_id": "nudge3", "project": "demo"},
+    )
+    for i in range(6):
+        conn.execute(
+            "INSERT INTO tool_events (session_id, tool_name, prompt_number, "
+            "created_at_epoch, created_at) VALUES (?, 'context_search', ?, ?, ?)",
+            ("nudge3", i + 1, 1700000000 + i, "2023-11-14T22:13:20"),
+        )
+    conn.execute(
+        "INSERT INTO decisions (session_id, decision, reason, source, "
+        "created_at_epoch, created_at) VALUES "
+        "('nudge3', 'Use Redis', 'Fast cache', 'manual', "
+        "1700001000, '2023-11-14T22:30:00')",
+    )
+    conn.execute(
+        "INSERT INTO code_areas (session_id, file_path, description, "
+        "created_at_epoch) VALUES "
+        "('nudge3', 'src/cache.py', 'Redis wrapper', 1700001000)",
+    )
+    conn.commit()
+    resp = await client.post("/hooks/Stop", json={"session_id": "nudge3"})
+    assert resp.status == 204

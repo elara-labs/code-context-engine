@@ -391,7 +391,9 @@ async def handle_stop(request: web.Request) -> web.Response:
     nudge = _build_stop_nudge(conn, session_id)
     if nudge:
         return web.Response(text=nudge, content_type="text/plain")
-    return web.json_response({"ok": True})
+    # No nudge — return empty body so the hook script has nothing to
+    # inject into the model context (JSON like {"ok":true} would pollute it).
+    return web.Response(status=204)
 
 
 def _build_stop_nudge(conn: sqlite3.Connection, session_id: str) -> str:

@@ -471,7 +471,7 @@ class ContextEngineMCP:
 
         # Memory nudge state — tracks tool activity so context_search can
         # append reminders when the agent hasn't been recording (#nudges).
-        # Reset on every record_decision / record_code_area call.
+        # Reset on every record_decision call.
         self._searches_since_last_decision = 0
         self._has_recorded_decision = False
 
