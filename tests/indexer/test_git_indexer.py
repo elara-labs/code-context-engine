@@ -89,3 +89,29 @@ async def test_incremental_since_sha(git_repo):
     first_sha = chunks_all[-1].metadata["hash"]  # oldest commit
     chunks_new, _, _ = await index_commits(git_repo, since_sha=first_sha)
     assert len(chunks_new) < len(chunks_all)
+
+
+@pytest.mark.asyncio
+async def test_non_ascii_commit_metadata(tmp_path):
+    """Non-ASCII author names and commit messages must not crash indexing,
+    even when the system locale prefers a non-UTF-8 encoding (#140)."""
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "config", "user.name", "田中太郎"],
+        cwd=tmp_path, capture_output=True, check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "tanaka@example.com"],
+        cwd=tmp_path, capture_output=True, check=True,
+    )
+    (tmp_path / "hello.py").write_text("print('こんにちは')\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "-c", "commit.gpgsign=false", "commit", "-m", "機能追加: 挨拶モジュール"],
+        cwd=tmp_path, capture_output=True, check=True,
+    )
+
+    chunks, nodes, edges = await index_commits(tmp_path, max_commits=10)
+    assert len(chunks) == 1
+    assert "田中太郎" in chunks[0].metadata["author"]
+    assert "機能追加" in chunks[0].content
