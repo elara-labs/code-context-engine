@@ -419,12 +419,14 @@ def _ensure_session_hook(project_dir: Path) -> None:
     cce_cmd = _resolve_cce_cmd()
     changed = False
 
+    from context_engine.memory.hook_installer import _quote_hook_path
+
     # SessionStart hook — show CCE status
     session_hooks = hooks.setdefault("SessionStart", [])
     if not _has_cce_hook(session_hooks, "cce status"):
         session_hooks.append({
             "matcher": "",
-            "hooks": [{"type": "command", "command": f"{cce_cmd} status --oneline"}],
+            "hooks": [{"type": "command", "command": f"{_quote_hook_path(Path(cce_cmd))} status --oneline"}],
         })
         changed = True
 
