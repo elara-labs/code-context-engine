@@ -104,6 +104,10 @@ class ContextEngineHTTP:
                 {"error": f"query too long (max {_MAX_QUERY_CHARS} characters)"},
                 status=400,
             )
+        # NOTE: the 0.2 default below is hardcoded, so a project overriding
+        # `retrieval_confidence_threshold` in .context-engine.yaml is honoured by the MCP
+        # context_search handler but NOT here. Deliberate for v1 — wiring config through
+        # is a follow-up, not a widening of this PR.
         # Validate + clamp: non-numeric input would otherwise raise ValueError and
         # surface as a 400 "missing field" via the generic handler; clamp to the same
         # ranges the MCP context_search handler uses.
@@ -132,7 +136,7 @@ class ContextEngineHTTP:
                     "content": c.content,
                     "chunk_type": c.chunk_type.value,
                     "language": c.language,
-                    "confidence_score": getattr(c, "confidence_score", None),
+                    "confidence_score": c.confidence_score,
                     "metadata": c.metadata,
                 }
                 for c in chunks
