@@ -1,5 +1,7 @@
 """Tests for services.py — PID utilities and status checks."""
 import os
+import subprocess
+import sys
 
 import pytest
 
@@ -49,8 +51,42 @@ def test_process_alive_self():
 
 def test_process_alive_dead_pid():
     # PID 2**22 is beyond the max PID on all supported platforms (Linux max=4194304=2^22,
-    # macOS max=99998). Using it guarantees ProcessLookupError without relying on timing.
+    # macOS max=99998). Using it guarantees the not-found path without relying on timing.
+    # On Windows this previously raised OSError(WinError 87) instead of returning False.
     assert _process_alive(4_200_000) is False
+
+
+def test_process_alive_exited_child_is_dead():
+    """A process that has actually exited must report dead.
+
+    This is the case the max-PID test cannot reach. On Windows a process handle
+    stays openable while any handle to it remains, so `os.kill(pid, 0)` on a
+    just-exited PID does not raise — the old implementation returned True and a
+    crashed service was reported as running. Silent, and worse than the crash.
+    """
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    assert _process_alive(proc.pid) is False
+
+
+def test_process_alive_running_child_is_alive():
+    """The positive control: a child we know is running must report alive."""
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert _process_alive(proc.pid) is True
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+@pytest.mark.parametrize("pid", [0, -1, -12345])
+def test_process_alive_rejects_non_positive_pids(pid):
+    """0 and negatives are not processes.
+
+    On POSIX os.kill(0, 0) signals the caller's entire process GROUP and returns
+    cleanly, which would have reported "alive" for a PID that cannot exist.
+    """
+    assert _process_alive(pid) is False
 
 
 # ── Port check ────────────────────────────────────────────────────────────────
