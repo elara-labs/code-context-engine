@@ -2,6 +2,7 @@
 import os
 import subprocess
 from datetime import datetime
+from unittest.mock import patch
 
 import pytest
 from context_engine.indexer.git_indexer import index_commits
@@ -111,7 +112,23 @@ async def test_non_ascii_commit_metadata(tmp_path):
         cwd=tmp_path, capture_output=True, check=True,
     )
 
-    chunks, nodes, edges = await index_commits(tmp_path, max_commits=10)
+    calls: list[dict] = []
+    real_run = subprocess.run
+
+    def spy_run(*args, **kwargs):
+        calls.append(kwargs)
+        return real_run(*args, **kwargs)
+
+    with patch("subprocess.run", side_effect=spy_run):
+        chunks, _, _ = await index_commits(tmp_path, max_commits=10)
+
     assert len(chunks) == 1
     assert "田中太郎" in chunks[0].metadata["author"]
     assert "機能追加" in chunks[0].content
+
+    # index_commits must pass encoding/errors so non-ASCII never crashes
+    git_log_calls = [c for c in calls if c.get("encoding") is not None]
+    assert git_log_calls, "index_commits should pass encoding kwarg to subprocess.run"
+    for c in git_log_calls:
+        assert c["encoding"] == "utf-8"
+        assert c["errors"] == "replace"
