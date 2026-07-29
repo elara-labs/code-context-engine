@@ -382,7 +382,7 @@ async def handle_stop(request: web.Request) -> web.Response:
         conn.commit()
     except Exception:
         log.exception("Stop enqueue failed")
-        return web.json_response({"ok": False}, status=202)
+        return web.Response(status=202)
 
     # Memory nudge — summarise unrecorded activity so the agent can fire
     # off quick record_decision / record_code_area calls before the session
@@ -399,9 +399,10 @@ async def handle_stop(request: web.Request) -> web.Response:
 def _build_stop_nudge(conn: sqlite3.Connection, session_id: str) -> str:
     """Build a session-end nudge summarising unrecorded activity.
 
-    Queries memory.db for tool_events (context_search calls) and decisions
-    recorded during this session. Returns a short directive if activity
-    was significant but recording was low. Returns "" if nothing to nudge.
+    Queries memory.db for tool_events (context_search calls), decisions,
+    and code_areas recorded during this session. Returns a short directive
+    if activity was significant but recording was low. Returns "" if
+    nothing to nudge.
     """
     try:
         # Count context_search tool calls this session

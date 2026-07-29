@@ -737,6 +737,7 @@ class ContextEngineMCP:
         agent permission to ignore the nudge when it's just reading.
         """
         parts: list[str] = []
+        snap = self._session_capture.get_session_snapshot(self._session_id)
 
         # ── decision nudge ────────────────────────────────────────────
         threshold = (
@@ -746,8 +747,7 @@ class ContextEngineMCP:
         )
         if self._searches_since_last_decision >= threshold:
             n = self._searches_since_last_decision
-            snap = self._session_capture.get_session_snapshot(self._session_id)
-            n_decisions = len(snap["decisions"]) if snap else 0
+            n_decisions = len(snap.get("decisions", [])) if snap else 0
             parts.append(
                 f"[CCE] {n} context searches this session, "
                 f"{n_decisions} decision(s) recorded.\n"
@@ -758,7 +758,6 @@ class ContextEngineMCP:
             )
 
         # ── code area nudge ───────────────────────────────────────────
-        snap = self._session_capture.get_session_snapshot(self._session_id)
         if snap:
             touched = set(snap.get("touched_files", {}).keys())
             recorded = {
