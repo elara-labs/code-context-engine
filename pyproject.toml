@@ -41,7 +41,11 @@ dependencies = [
     "tree-sitter-java>=0.23",
     "tree-sitter-c-sharp>=0.23",
     "watchdog>=4.0",
-    "mcp>=1.0",
+    # Upper bound is deliberate. mcp 2.0.0 removed the decorator registration API
+    # (Server.list_tools / Server.call_tool), so an unbounded "mcp>=1.0" resolves to 2.x
+    # and ContextEngineMCP raises AttributeError in __init__ — the MCP server does not
+    # start at all. See #147. Lift this once the server is ported to the 2.x API.
+    "mcp>=1.0,<2",
     "httpx>=0.27",
     "fastapi>=0.110",
     "uvicorn>=0.29",
