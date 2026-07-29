@@ -3521,9 +3521,14 @@ async def _run_serve(config) -> None:
                 if not index_lock.try_acquire():
                     _log.debug(
                         "Another process is indexing this project; "
-                        "skipping %s", rel,
+                        "deferring %s", rel,
                     )
                     _reindex_queue.task_done()
+                    await asyncio.sleep(5)
+                    # Re-queue for retry after the other process finishes.
+                    if rel not in _reindex_pending:
+                        _reindex_pending.add(rel)
+                        await _reindex_queue.put(rel)
                     continue
                 try:
                     await run_indexing(config, project_dir, target_path=rel)

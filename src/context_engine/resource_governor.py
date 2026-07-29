@@ -61,6 +61,9 @@ def cap_ort_threads(max_threads: int | None = None) -> int:
         n = _DEFAULT_ORT_THREADS
 
     if n <= 0:
+        # Even when ORT caps are disabled, prevent the tokenizers library
+        # from spawning extra threads — it is independent of ORT.
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
         return 0  # 0 = "let ONNX pick"
 
     # Force-set rather than setdefault — pre-existing values (common on dev
