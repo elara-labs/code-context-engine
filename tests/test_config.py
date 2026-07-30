@@ -98,3 +98,24 @@ def test_marginal_ratio_config_mapping(tmp_path):
 def test_marginal_ratio_default():
     from context_engine.config import Config
     assert Config().retrieval_marginal_ratio == 0.75
+
+
+def test_serve_config_defaults():
+    config = Config()
+    assert config.serve_idle_timeout_minutes == 30
+    assert config.serve_max_ort_threads == 2
+
+
+def test_serve_config_yaml_mapping(tmp_path):
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("serve:\n  idle_timeout_minutes: 60\n  max_ort_threads: 4\n")
+    config = load_config(global_path=cfg_file)
+    assert config.serve_idle_timeout_minutes == 60
+    assert config.serve_max_ort_threads == 4
+
+
+def test_serve_config_type_validation(tmp_path):
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("serve:\n  idle_timeout_minutes: not_a_number\n")
+    with pytest.raises(ValueError, match="serve.idle_timeout_minutes"):
+        load_config(global_path=cfg_file)

@@ -3428,6 +3428,14 @@ async def _run_serve(config) -> None:
     # gets the multiprocess path.
     os.environ.setdefault("CCE_EMBED_PARALLEL", "0")
 
+    # Cap ONNX Runtime threads per process (#139). With N concurrent
+    # cce-serve processes, uncapped threads (default = cpu_count) create
+    # thousands of OS threads competing for cores and page-cache.
+    from context_engine.resource_governor import (
+        cap_ort_threads, IdleTracker, ProjectIndexLock, is_memory_pressured,
+    )
+    cap_ort_threads(max_threads=getattr(config, "serve_max_ort_threads", None))
+
     from context_engine.storage.local_backend import LocalBackend
     from context_engine.indexer.embedder import Embedder
     from context_engine.retrieval.retriever import HybridRetriever
@@ -3454,6 +3462,15 @@ async def _run_serve(config) -> None:
         embedder=embedder, config=config,
     )
 
+    # Idle tracker — shuts down the server after prolonged inactivity (#139).
+    idle_tracker = IdleTracker(
+        timeout_minutes=getattr(config, "serve_idle_timeout_minutes", None),
+    )
+
+    # Per-project index lock — prevents N duplicate cce-serve processes from
+    # all indexing the same project simultaneously (#139).
+    index_lock = ProjectIndexLock(storage_base)
+
     chunk_count = backend._vector_store.count()
     import sys
 
@@ -3476,15 +3493,50 @@ async def _run_serve(config) -> None:
                 await _reindex_queue.put(rel)
 
         async def _reindex_worker():
-            """Background task that processes re-index requests sequentially."""
+            """Background task that processes re-index requests sequentially.
+
+            Acquires a per-project file lock before indexing so duplicate
+            cce-serve processes for the same project don't all index at
+            once.  Backs off when the system is under memory pressure
+            (Linux PSI).  See #139.
+            """
             while True:
                 rel = await _reindex_queue.get()
                 _reindex_pending.discard(rel)
+                # Back off under memory pressure (#139). Re-queue the
+                # file so it isn't lost — without this, the last change
+                # during sustained pressure would leave the index stale.
+                if is_memory_pressured():
+                    _log.info(
+                        "Memory pressure detected; deferring re-index of %s",
+                        rel,
+                    )
+                    _reindex_queue.task_done()
+                    await asyncio.sleep(30)
+                    # Re-queue for retry after pressure subsides.
+                    if rel not in _reindex_pending:
+                        _reindex_pending.add(rel)
+                        await _reindex_queue.put(rel)
+                    continue
+                if not index_lock.try_acquire():
+                    _log.debug(
+                        "Another process is indexing this project; "
+                        "deferring %s", rel,
+                    )
+                    _reindex_queue.task_done()
+                    await asyncio.sleep(5)
+                    # Re-queue for retry after the other process finishes.
+                    if rel not in _reindex_pending:
+                        _reindex_pending.add(rel)
+                        await _reindex_queue.put(rel)
+                    continue
                 try:
                     await run_indexing(config, project_dir, target_path=rel)
                     _log.debug("Re-indexed: %s", rel)
                 except Exception as exc:
                     _log.warning("Watch re-index failed for %s: %s", rel, exc)
+                finally:
+                    index_lock.release()
                 _reindex_queue.task_done()
 
         watcher = FileWatcher(
@@ -3537,11 +3589,18 @@ async def _run_serve(config) -> None:
     except Exception as exc:
         _log.warning("Auto-prune worker failed to start: %s", exc)
 
+    # Inject idle tracker so every MCP tool call resets the idle timer (#139).
+    mcp._idle_tracker = idle_tracker
+
     watcher_label = " · live watcher active" if watcher else ""
     hook_label = f" · memory hooks :{hook_port}" if hook_port else ""
+    idle_label = (
+        f" · idle shutdown {idle_tracker.timeout_seconds // 60}m"
+        if idle_tracker.timeout_seconds > 0 else ""
+    )
     print(
         f"CCE ready · {project_name} · {chunk_count} chunks indexed"
-        f"{watcher_label}{hook_label}",
+        f"{watcher_label}{hook_label}{idle_label}",
         file=sys.stderr,
     )
 
@@ -3552,6 +3611,26 @@ async def _run_serve(config) -> None:
     # workers (#66).
     serve_loop = asyncio.get_running_loop()
     mcp_task = asyncio.create_task(mcp.run_stdio())
+
+    # Idle-shutdown loop: periodically check if the server has been unused
+    # for longer than the configured timeout and initiate shutdown (#139).
+    async def _idle_watchdog():
+        while True:
+            await asyncio.sleep(60)
+            if idle_tracker.is_idle():
+                idle_min = int(idle_tracker.idle_seconds // 60)
+                _log.info(
+                    "No MCP activity for %d minutes; shutting down", idle_min,
+                )
+                print(
+                    f"CCE idle for {idle_min}m — shutting down "
+                    f"(set CCE_IDLE_TIMEOUT_MINUTES=0 to disable)",
+                    file=sys.stderr,
+                )
+                mcp_task.cancel()
+                return
+
+    idle_task = asyncio.create_task(_idle_watchdog())
 
     def _request_shutdown(signame: str) -> None:
         if not mcp_task.done():
@@ -3590,6 +3669,7 @@ async def _run_serve(config) -> None:
         except asyncio.CancelledError:
             pass
     finally:
+        idle_task.cancel()
         for _sig in installed_signals:
             try:
                 serve_loop.remove_signal_handler(_sig)
@@ -3620,3 +3700,4 @@ async def _run_serve(config) -> None:
                 await hook_runner.cleanup()
             except Exception:
                 _log.warning("hook_runner cleanup failed", exc_info=True)
+        index_lock.release()
