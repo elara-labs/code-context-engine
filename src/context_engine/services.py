@@ -13,6 +13,8 @@ import os
 import signal
 import socket
 import subprocess
+
+import psutil
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -56,13 +58,36 @@ def _remove_pid(name: str) -> None:
 
 
 def _process_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
+    """Is this PID a live process?
+
+    os.kill(pid, 0) is the POSIX idiom, but it does not carry to Windows, where
+    os.kill is implemented over OpenProcess/TerminateProcess rather than signals.
+    Measured on Windows 11 / CPython 3.13, the previous implementation had two
+    distinct faults:
+
+      * a PID that never existed raised OSError(WinError 87, "The parameter is
+        incorrect") instead of ProcessLookupError, so it escaped both excepts and
+        propagated out of a status check;
+      * a recently-exited PID did NOT raise at all, because a process handle stays
+        openable while any handle to it remains, so the function returned True and
+        a dead service was reported as running.
+
+    The second is the more damaging: it is silent, and it makes `services status`
+    claim a crashed service is healthy.
+
+    psutil is already a core dependency and gets this right on every platform, so
+    use it rather than hand-rolling the Windows path. Zombies are excluded
+    deliberately — on POSIX a reaped-but-not-collected child still "exists" but is
+    not running, which is the same lie in a different shape.
+    """
+    if pid <= 0:
         return False
-    except PermissionError:
-        # Process exists but owned by another user
+    try:
+        return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
+    except psutil.NoSuchProcess:
+        return False
+    except psutil.AccessDenied:
+        # Exists, owned by another user — preserves the old PermissionError branch.
         return True
 
 
