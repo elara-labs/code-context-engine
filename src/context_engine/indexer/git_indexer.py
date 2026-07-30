@@ -31,8 +31,10 @@ async def index_commits(
 
     meta_result = await asyncio.to_thread(
         subprocess.run,
-        ["git", "log", range_arg, "--format=%H%n%an%n%ai%n%s%n%b%x00"],
-        cwd=project_dir, capture_output=True, text=True, check=False,
+        ["git", "-c", "i18n.logOutputEncoding=UTF-8",
+         "log", range_arg, "--format=%H%n%an%n%ai%n%s%n%b%x00"],
+        cwd=project_dir, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", check=False,
     )
 
     if meta_result.returncode != 0:
@@ -41,8 +43,10 @@ async def index_commits(
 
     files_result = await asyncio.to_thread(
         subprocess.run,
-        ["git", "log", range_arg, "--name-only", "--format=%H"],
-        cwd=project_dir, capture_output=True, text=True, check=False,
+        ["git", "-c", "i18n.logOutputEncoding=UTF-8",
+         "log", range_arg, "--name-only", "--format=%H"],
+        cwd=project_dir, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", check=False,
     )
 
     changed_files_by_hash: dict[str, list[str]] = {}
