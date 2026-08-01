@@ -132,8 +132,8 @@ the section for the current project.
 **Pi note:** Pi does not support MCP natively. To use CCE with Pi, you need a
 pi MCP adapter extension (e.g. [pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter))
 that consumes the `.mcp.json` config and exposes CCE's tools to the Pi agent.
-`cce init` sets up both `.mcp.json` and `AGENTS.md` — Pi loads the latter
-automatically for startup instructions.
+`cce init` sets up both `.mcp.json` and `AGENTS.md` (Pi loads the latter
+automatically for startup instructions).
 
 ```
   my-project · 38 queries · last query 5m ago
@@ -206,10 +206,12 @@ Output compression (reducing Claude's reply length) provides additional savings 
 | Repo | Language | Files | Retrieval savings | Recall@10 |
 |------|----------|-------|-------------------|-----------|
 | [FastAPI](benchmarks/results/fastapi.md) | Python | 53 | **94%** | 0.90 |
+| [Django](benchmarks/results/django.md) | Python (large) | 2,347 | **93%** | 0.95 |
+| [Express](benchmarks/results/express.md) | JavaScript | 6 | **94%** | 1.00 |
 | [chi](benchmarks/results/chi.md) | Go | 94 | **76%** | 0.67 |
 | [fiber](benchmarks/results/fiber.md) | Go (monorepo) | 396 | **93%** | 0.07 |
 
-Go's shorter files reduce the retrieval headroom (smaller baseline). Monorepos dilute recall at top-10 (fiber). Middleware queries with one-feature-per-file hit R=1.00 consistently.
+Django (2,347 files, 5.4M tokens) shows CCE scales to large codebases with 0.95 recall. Go's shorter files reduce the retrieval headroom (smaller baseline). Monorepos dilute recall at top-10 (fiber). Middleware queries with one-feature-per-file hit R=1.00 consistently.
 
 **Reproduce it yourself:**
 
@@ -225,7 +227,7 @@ Full results in [`benchmarks/results/`](benchmarks/results/). Queries and method
 
 ## What you get
 
-**9 MCP tools** that Claude uses automatically:
+**11 MCP tools** that Claude uses automatically:
 
 | Tool | What it does |
 |------|-------------|
@@ -233,6 +235,8 @@ Full results in [`benchmarks/results/`](benchmarks/results/). Queries and method
 | `expand_chunk` | Full source for a compressed result |
 | `related_context` | Find code via graph edges (calls, imports) |
 | `session_recall` | Recall decisions from past sessions |
+| `session_timeline` | Walk turn summaries for a session (drill into recall hits) |
+| `session_event` | Inspect raw tool input/output for a specific event |
 | `record_decision` | Save a decision for future sessions |
 | `record_code_area` | Record which files were worked in |
 | `index_status` | Check index freshness |
@@ -326,6 +330,24 @@ Dollar estimates in `cce savings` support 15+ models across Anthropic, OpenAI, a
 </details>
 
 <details>
+<summary><strong>Resource Governor (Multi-Instance Safety)</strong></summary>
+
+Running dozens of `cce serve` processes (one per project per AI session) can exhaust system memory. The resource governor caps ONNX Runtime threads per process, uses advisory file locks so only one process indexes a given project at a time, backs off under Linux memory pressure (PSI), and auto-shuts down idle servers after 30 minutes. Configure via `serve.idle_timeout_minutes` and `serve.max_ort_threads`.
+</details>
+
+<details>
+<summary><strong>Memory Nudges</strong></summary>
+
+CCE's cross-session memory depends on the agent calling `record_decision` and `record_code_area`. Memory nudges make recording ambient: after N searches without a recording, `context_search` results include a short reminder. At session end, the Stop hook summarizes unrecorded activity. Nudges re-arm after the first recording so they stay useful without being noisy.
+</details>
+
+<details>
+<summary><strong>HTTP Search Endpoint</strong></summary>
+
+`cce serve --http` exposes a `POST /search` endpoint for custom agent integrations that speak HTTP instead of MCP stdio. Same hybrid retrieval pipeline, structured JSON response with confidence scores. Input validation clamps `top_k` (1..100) and `confidence_threshold` (0.0..1.0).
+</details>
+
+<details>
 <summary><strong>Append-Only Savings Ledger</strong></summary>
 
 7 buckets track every token saved: retrieval, chunk compression, output compression, memory recall, grammar, turn summarization, progressive disclosure. Survives restarts. Powers CLI and dashboard analytics.
@@ -372,7 +394,7 @@ pricing:
   # output: 75.0           # override $/1M output tokens
 ```
 
-**Remote Ollama:** If you run Ollama on another machine in your network, set `compression.ollama_url` (e.g. `http://nas.local:11434`) or export `CCE_OLLAMA_URL` — the env var wins. CCE probes the endpoint and falls back to truncation-only compression when it's unreachable, so a flaky link won't break indexing.
+**Remote Ollama:** If you run Ollama on another machine in your network, set `compression.ollama_url` (e.g. `http://nas.local:11434`) or export `CCE_OLLAMA_URL` (the env var wins). CCE probes the endpoint and falls back to truncation-only compression when it's unreachable, so a flaky link won't break indexing.
 
 ---
 
@@ -506,9 +528,10 @@ Output tokens cost 5x more per token (e.g. Opus: $15/1M input vs $75/1M output),
 ## Roadmap
 
 - [x] Multi-repo benchmarks (FastAPI, chi, fiber)
-- [ ] More benchmarks (Django, Express)
+- [x] More benchmarks (Django, Express)
 - [ ] Tree-sitter support for C, C++, Ruby, Swift, Kotlin
 - [ ] Docker support for remote mode
+- [ ] Port to mcp 2.x API
 
 See [CHANGELOG.md](CHANGELOG.md) for shipped features.
 

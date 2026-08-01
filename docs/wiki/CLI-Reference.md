@@ -18,7 +18,7 @@ All commands use colorful, structured output with line-by-line animation on TTY:
 Running `cce` with no subcommand shows a welcome banner with project status at a glance:
 
 ```
-╭─────────────────────────── Code Context Engine v0.4.4 ────────────────────────────╮
+╭─────────────────────────── Code Context Engine v0.4.25 ────────────────────────────╮
 │                                                                                     │
 │                                     ⬡  C C E  ⬡                                     │
 │                                                                                     │
@@ -264,7 +264,7 @@ cce status -v
 **Oneline output example** (shown at the top of each Claude Code session):
 
 ```
-CCE v0.4.4 · my-project · 1247 chunks indexed · 68% saved over 42 queries
+CCE v0.4.25 · my-project · 1247 chunks indexed · 68% saved over 42 queries
 USE context_search MCP tool for all code questions. Do NOT use Read/Grep to explore code.
 ```
 
@@ -449,10 +449,10 @@ cce dashboard
 
 The dashboard provides four views:
 
-- **Overview** — chunks indexed, files indexed, queries run, tokens saved, live charts
-- **Files** — full file list with staleness detection (`ok`, `stale`, `missing`)
-- **Sessions** — architectural decisions and code areas from past Claude sessions
-- **Savings** — token usage breakdown with compression controls
+- **Overview**: chunks indexed, files indexed, queries run, tokens saved, live charts
+- **Files**: full file list with staleness detection (`ok`, `stale`, `missing`)
+- **Sessions**: architectural decisions and code areas from past Claude sessions
+- **Savings**: token usage breakdown with compression controls
 
 **Variants:**
 
@@ -648,7 +648,7 @@ cce upgrade
     Install method:  uv
     Running:         uv tool upgrade code-context-engine
 
-  ✓ Upgraded 0.4.3 → 0.4.4
+  ✓ Upgraded 0.4.3 → 0.4.25
 
   Refreshing project config...
   ✓ MCP server config is current
@@ -661,7 +661,7 @@ cce upgrade
 **When already on the latest version:**
 
 ```
-  ✓ Already on latest version (0.4.4)
+  ✓ Already on latest version (0.4.25)
 ```
 
 **Check without upgrading:**
@@ -672,7 +672,7 @@ cce upgrade --check
 
 ```
   ── Upgrade ───────────────────────────────────────
-    Current version: 0.4.4
+    Current version: 0.4.25
     Install method:  uv
 
     To upgrade: uv tool upgrade code-context-engine
@@ -737,11 +737,16 @@ These behave identically to the `cce services start` and `cce services stop` com
 
 ## cce serve
 
-Start the MCP server. Claude Code calls this automatically via `.mcp.json` — you do not need to run this manually.
+Start the MCP server. Claude Code calls this automatically via `.mcp.json`. You do not need to run this manually.
 
 ```bash
 cce serve
 
 # Point at a specific project directory (useful for debugging)
 cce serve --project-dir /path/to/your/project
+
+# Start with an HTTP search endpoint (POST /search) for custom integrations
+cce serve --http
 ```
+
+When `--http` is passed, the server also listens on an HTTP port and exposes a `POST /search` endpoint. This is useful for custom agent integrations that speak HTTP instead of MCP stdio. The endpoint accepts JSON with `query`, `top_k` (1..100), and `confidence_threshold` (0.0..1.0), and returns ranked results with confidence scores.
