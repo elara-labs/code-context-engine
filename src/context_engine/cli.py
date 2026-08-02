@@ -1159,19 +1159,23 @@ def status(ctx: click.Context, output_json: bool, oneline: bool) -> None:
     lines.append(f"    {BULLET} {label('Compress')}      {value(compression_mode)}")
 
     # Output compression level
+    from context_engine.compression.output_rules import LEVELS as _OUT_LEVELS
     out_level = getattr(config, "output_compression", "standard")
     # state.json may override the config default (set_output_compression persists here)
-    state_path = project_storage_dir(config, _safe_cwd()) / "state.json"
+    storage = project_storage_dir(config, _safe_cwd())
+    state_path = storage / "state.json"
     if state_path.exists():
         try:
             state = json.loads(state_path.read_text(encoding="utf-8"))
             out_level = state.get("output_level", out_level)
         except (json.JSONDecodeError, OSError):
             pass
+    if out_level not in _OUT_LEVELS:
+        out_level = "standard"
     lines.append(f"    {BULLET} {label('Output')}       {value(out_level)}")
 
     # Token savings
-    stats_path = project_storage_dir(config, _safe_cwd()) / "stats.json"
+    stats_path = storage / "stats.json"
     lines.append("")
     lines.append(section("Token Savings"))
     lines.append("")
