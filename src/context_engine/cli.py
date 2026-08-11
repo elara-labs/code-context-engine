@@ -2852,9 +2852,10 @@ def serve(ctx: click.Context, as_http: bool, host: str, port: int, project_dir: 
         )
     else:
         discovered = _discover_project_root(Path.cwd())
-        if discovered and discovered != Path.cwd():
-            import os
-            os.chdir(str(discovered))
+        if discovered:
+            if discovered != Path.cwd():
+                import os
+                os.chdir(str(discovered))
             target_config = discovered / PROJECT_CONFIG_NAME
             ctx.obj["config"] = load_config(
                 project_path=target_config if target_config.exists() else None

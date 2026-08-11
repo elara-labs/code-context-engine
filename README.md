@@ -363,7 +363,7 @@ CCE's cross-session memory depends on the agent calling `record_decision` and `r
 
 ## Agent Plugin
 
-[Agent Plugins](https://agent-plugins.org) is an open standard (v1.0.0) backed by Amazon, Cursor, Microsoft, OpenAI, and Vercel for packaging AI skills and MCP servers into portable, zero-install bundles. CCE can generate a plugin directory that compatible editors discover and load automatically.
+[Agent Plugins](https://agent-plugins.org) is an open standard (v1.0.0) backed by Amazon, Cursor, Microsoft, OpenAI, and Vercel for packaging AI skills and MCP servers into portable, zero-install bundles. CCE can generate a plugin directory that compatible editors can discover and load automatically.
 
 ```bash
 cce init --plugin                          # Generate at .cce/plugin/

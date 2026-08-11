@@ -101,8 +101,8 @@ EDITORS: dict[str, dict] = {
 @lru_cache(maxsize=1)
 def get_instructions_base() -> str:
     """Load the agent-neutral instruction template from data/instructions.md."""
-    path = Path(__file__).parent / "data" / "instructions.md"
-    return path.read_text(encoding="utf-8")
+    from importlib.resources import files
+    return files("context_engine.data").joinpath("instructions.md").read_text(encoding="utf-8")
 
 
 def _build_instructions(output_level: str = "standard") -> str:
@@ -776,7 +776,8 @@ def generate_plugin(
     # skills/code-context/references/tools.md
     ref_dir = skill_dir / "references"
     ref_dir.mkdir(parents=True, exist_ok=True)
-    tools_ref = (Path(__file__).parent / "data" / "tools_reference.md").read_text(
+    from importlib.resources import files
+    tools_ref = files("context_engine.data").joinpath("tools_reference.md").read_text(
         encoding="utf-8"
     )
     (ref_dir / "tools.md").write_text(tools_ref, encoding="utf-8")
