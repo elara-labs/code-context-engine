@@ -761,7 +761,7 @@ def generate_plugin(
     frontmatter = (
         "---\n"
         "name: code-context\n"
-        f"description: >\n"
+        "description: >\n"
         + "".join(f"  {line}\n" for line in description.splitlines())
         + "license: MIT\n"
         "compatibility: Requires Python 3.11+ and uv (or uvx)\n"

@@ -1,7 +1,5 @@
 """Tests for Agent Plugins generation and instruction template."""
 import json
-from pathlib import Path
-
 import yaml
 
 from context_engine.cli import _discover_project_root
