@@ -2385,22 +2385,32 @@ def search(ctx: click.Context, query: str, top_k: int) -> None:
 
 
 def _strip_cce_git_hook_block(content: str, marker: str) -> str | None:
-    """Remove the CCE-installed block (the marker line plus the command line
-    that follows it) from a git hook script.
+    """Remove the CCE-installed block from a git hook script.
+
+    Handles both the old format (marker + one command line) and the new
+    multi-line format (delimited by marker and end-marker).
 
     Returns the remaining script text, or None when nothing meaningful is
     left (only the shebang and blank lines) — meaning the file was created
     by CCE and should be deleted outright.
     """
+    from context_engine.indexer.git_hooks import HOOK_END_MARKER
     lines = content.splitlines()
     kept: list[str] = []
-    skip_next = False
+    inside_block = False
     for line in lines:
-        if skip_next:
-            skip_next = False
-            continue
         if marker in line:
-            skip_next = True  # drop the `cce index ... &` line too
+            inside_block = True
+            continue
+        if inside_block:
+            if HOOK_END_MARKER in line:
+                inside_block = False
+                continue
+            # Old format (no end marker): skip just the one line after marker
+            if not any(HOOK_END_MARKER in ln for ln in lines):
+                inside_block = False
+                continue
+            # Inside multi-line block, skip
             continue
         kept.append(line)
     meaningful = [
