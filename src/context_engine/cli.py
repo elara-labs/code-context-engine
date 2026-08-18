@@ -2398,16 +2398,28 @@ def _strip_cce_git_hook_block(content: str, marker: str) -> str | None:
     lines = content.splitlines()
     kept: list[str] = []
     inside_block = False
+    # Determine format: check if an end marker appears anywhere after the
+    # start marker.  Only lines after the marker position matter.
+    marker_line_idx = next(
+        (i for i, ln in enumerate(lines) if marker in ln), None
+    )
+    has_end_marker = marker_line_idx is not None and any(
+        HOOK_END_MARKER in ln for ln in lines[marker_line_idx + 1:]
+    )
+    skip_next = False
     for line in lines:
-        if marker in line:
+        if skip_next:
+            skip_next = False
+            inside_block = False
+            continue
+        if not inside_block and marker in line:
             inside_block = True
+            if not has_end_marker:
+                # Old format: skip marker line + the one command line after it
+                skip_next = True
             continue
         if inside_block:
-            if HOOK_END_MARKER in line:
-                inside_block = False
-                continue
-            # Old format (no end marker): skip just the one line after marker
-            if not any(HOOK_END_MARKER in ln for ln in lines):
+            if has_end_marker and HOOK_END_MARKER in line:
                 inside_block = False
                 continue
             # Inside multi-line block, skip

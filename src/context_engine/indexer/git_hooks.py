@@ -9,11 +9,6 @@ HOOK_MARKER = "# cce hook"
 HOOK_END_MARKER = "# cce hook end"
 HOOK_NAMES = ["post-commit", "post-checkout", "post-merge"]
 
-# Max concurrent hook-triggered indexers machine-wide.  The hook script
-# uses a global lock file (not per-project) so worktrees sharing
-# .git/hooks/ don't each spawn their own unbounded indexer.  See #159.
-_MAX_CONCURRENT_INDEXERS = 2
-
 # Paths that indicate an ephemeral/throwaway worktree created by AI
 # agent harnesses.  Indexing these is wasted work since the tree is
 # deleted minutes later.
@@ -61,8 +56,11 @@ def _hook_script() -> str:
     """
     bin_path = shlex.quote(_resolve_cce_binary())
     # Build the ephemeral-path skip check as shell conditions.
+    # These are shell glob patterns inside `case`, not arguments, so they
+    # must NOT be shlex.quote'd (quoting turns them into literal strings
+    # that never match).
     skip_checks = " || ".join(
-        f'case "$PWD" in *{shlex.quote(m)}*) true;; *) false;; esac'
+        f'case "$PWD" in *{m}*) true;; *) false;; esac'
         for m in _EPHEMERAL_PATH_MARKERS
     )
     return f"""{HOOK_MARKER}
@@ -156,11 +154,23 @@ def _install_single_hook(hook_path: Path) -> None:
     if hook_path.exists():
         existing = hook_path.read_text(encoding="utf-8")
         if HOOK_MARKER in existing:
-            # Re-install: replace the old hook block with the new one
-            # so upgrades pick up concurrency caps, nice, etc.
+            # Re-install: replace only the CCE block, preserving any user
+            # content before AND after it.
             marker_idx = existing.index(HOOK_MARKER)
             prefix = existing[:marker_idx].rstrip()
-            new_content = prefix + ("\n\n" if prefix else "#!/bin/sh\n\n") + script
+            # Find end of old block: end-marker (new format) or marker + one line (legacy)
+            end_idx = existing.find(HOOK_END_MARKER, marker_idx)
+            if end_idx >= 0:
+                suffix = existing[end_idx + len(HOOK_END_MARKER):]
+            else:
+                # Legacy: marker + one command line
+                after_marker = existing[marker_idx + len(HOOK_MARKER):]
+                lines_after = after_marker.split("\n", 2)
+                suffix = "\n" + lines_after[2] if len(lines_after) > 2 else ""
+            suffix = suffix.strip()
+            new_content = (prefix or "#!/bin/sh") + "\n\n" + script
+            if suffix:
+                new_content = new_content.rstrip() + "\n\n" + suffix + "\n"
             hook_path.write_text(new_content, encoding="utf-8")
             hook_path.chmod(hook_path.stat().st_mode | stat.S_IEXEC)
             return
