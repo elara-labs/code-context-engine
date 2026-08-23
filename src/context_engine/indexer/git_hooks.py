@@ -6,7 +6,17 @@ import sys
 from pathlib import Path
 
 HOOK_MARKER = "# cce hook"
+HOOK_END_MARKER = "# cce hook end"
 HOOK_NAMES = ["post-commit", "post-checkout", "post-merge"]
+
+# Paths that indicate an ephemeral/throwaway worktree created by AI
+# agent harnesses.  Indexing these is wasted work since the tree is
+# deleted minutes later.
+_EPHEMERAL_PATH_MARKERS = [
+    "/private/tmp/",
+    "/tmp/",
+    "/.claude/worktrees/",
+]
 
 
 def _resolve_cce_binary() -> str:
@@ -32,29 +42,104 @@ def _resolve_cce_binary() -> str:
 
 
 def _hook_script() -> str:
-    # `cce index` without any flag already performs incremental indexing
-    # via the on-disk manifest's content-hash check. The old
-    # `--changed-only` flag was removed but the hook template hadn't been
-    # updated — every commit silently errored with
-    # "No such option: --changed-only" (issue #67).
-    #
-    # bin_path must be shell-quoted because resolved paths commonly
-    # include spaces (e.g. C:\Users\Alice Smith\... on Windows, or
-    # /Users/Firstname Lastname/.venv/bin/cce on macOS). git's hook
-    # runner invokes the file via POSIX sh on every platform — even
-    # git-for-windows ships a bundled sh — so single-quoting with
-    # shlex.quote produces a correct token for the shell that actually
-    # runs the hook (Copilot review).
+    """Generate the shell snippet inserted into git hook files.
+
+    The script:
+    1. Skips ephemeral worktree paths (agent-created throwaway trees).
+    2. Holds a global (machine-wide) lock via mkdir (POSIX atomic, works
+       on macOS and Linux without flock/shlock).  At most one hook-triggered
+       indexer runs at a time.  The previous version used bare `&` with no
+       cap, which with N worktrees produced N detached indexers (#159).
+    3. Runs at nice 10 so indexing never competes with foreground work.
+    4. Stale lock cleanup: if the lock dir exists but the PID inside is
+       dead, the lock is reclaimed.
+    """
     bin_path = shlex.quote(_resolve_cce_binary())
+    # Build the ephemeral-path skip check as shell conditions.
+    # These are shell glob patterns inside `case`, not arguments, so they
+    # must NOT be shlex.quote'd (quoting turns them into literal strings
+    # that never match).
+    skip_checks = " || ".join(
+        f'case "$PWD" in *{m}*) true;; *) false;; esac'
+        for m in _EPHEMERAL_PATH_MARKERS
+    )
     return f"""{HOOK_MARKER}
-{bin_path} index >/dev/null 2>&1 &
+# Skip ephemeral worktree paths (agent-created throwaway trees)
+if {skip_checks}; then
+  exit 0
+fi
+# Global concurrency cap: one hook-triggered indexer machine-wide.
+# Uses mkdir as an atomic lock (POSIX portable, no flock needed). #159
+_cce_lock_dir="${{TMPDIR:-/tmp}}/cce-index-hook.lock"
+_cce_try_lock() {{
+  if mkdir "$_cce_lock_dir" 2>/dev/null; then
+    echo $$ > "$_cce_lock_dir/pid"
+    return 0
+  fi
+  # Check for stale lock (owner process dead)
+  if [ -f "$_cce_lock_dir/pid" ]; then
+    _old_pid=$(cat "$_cce_lock_dir/pid" 2>/dev/null)
+    if [ -n "$_old_pid" ] && ! kill -0 "$_old_pid" 2>/dev/null; then
+      rm -rf "$_cce_lock_dir"
+      if mkdir "$_cce_lock_dir" 2>/dev/null; then
+        echo $$ > "$_cce_lock_dir/pid"
+        return 0
+      fi
+    fi
+  fi
+  return 1
+}}
+(
+  if _cce_try_lock; then
+    trap 'rm -rf "$_cce_lock_dir"' EXIT
+    nice -n 10 {bin_path} index >/dev/null 2>&1
+  fi
+) &
+{HOOK_END_MARKER}
 """
+
+
+def _resolve_hooks_dir(project_dir: str) -> Path | None:
+    """Resolve the hooks directory, following git worktree indirection.
+
+    In a worktree, `.git` is a file containing `gitdir: <path>`.  Hook
+    lookup resolves through the common dir, so we install there to avoid
+    writing hooks into a worktree-local path that git ignores.  Returns
+    None if the project is not a git repo.
+    """
+    dot_git = Path(project_dir) / ".git"
+    if dot_git.is_file():
+        # Worktree: .git is a file, not a directory.  Resolve common dir.
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--git-common-dir"],
+                capture_output=True, text=True, timeout=5,
+                cwd=project_dir,
+            )
+            if result.returncode == 0:
+                common = Path(result.stdout.strip())
+                if not common.is_absolute():
+                    common = (dot_git.parent / common).resolve()
+                hooks_dir = common / "hooks"
+                if hooks_dir.exists() or hooks_dir.parent.exists():
+                    hooks_dir.mkdir(exist_ok=True)
+                    return hooks_dir
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+        return None
+    elif dot_git.is_dir():
+        hooks_dir = dot_git / "hooks"
+        if not hooks_dir.exists():
+            hooks_dir.mkdir(exist_ok=True)
+        return hooks_dir
+    return None
 
 
 def install_hooks(project_dir: str) -> list[str]:
     """Install CCE git hooks. Returns [] gracefully if not a git repo."""
-    hooks_dir = Path(project_dir) / ".git" / "hooks"
-    if not hooks_dir.exists():
+    hooks_dir = _resolve_hooks_dir(project_dir)
+    if hooks_dir is None:
         return []
     installed = []
     for hook_name in HOOK_NAMES:
@@ -69,6 +154,25 @@ def _install_single_hook(hook_path: Path) -> None:
     if hook_path.exists():
         existing = hook_path.read_text(encoding="utf-8")
         if HOOK_MARKER in existing:
+            # Re-install: replace only the CCE block, preserving any user
+            # content before AND after it.
+            marker_idx = existing.index(HOOK_MARKER)
+            prefix = existing[:marker_idx].rstrip()
+            # Find end of old block: end-marker (new format) or marker + one line (legacy)
+            end_idx = existing.find(HOOK_END_MARKER, marker_idx)
+            if end_idx >= 0:
+                suffix = existing[end_idx + len(HOOK_END_MARKER):]
+            else:
+                # Legacy: marker + one command line
+                after_marker = existing[marker_idx + len(HOOK_MARKER):]
+                lines_after = after_marker.split("\n", 2)
+                suffix = "\n" + lines_after[2] if len(lines_after) > 2 else ""
+            suffix = suffix.strip()
+            new_content = (prefix or "#!/bin/sh") + "\n\n" + script
+            if suffix:
+                new_content = new_content.rstrip() + "\n\n" + suffix + "\n"
+            hook_path.write_text(new_content, encoding="utf-8")
+            hook_path.chmod(hook_path.stat().st_mode | stat.S_IEXEC)
             return
         new_content = existing.rstrip() + "\n\n" + script
     else:
