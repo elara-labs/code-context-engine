@@ -288,6 +288,7 @@ async def run_indexing(
     *,
     full: bool = False,
     target_path: str | None = None,
+    storage_base_override: str | Path | None = None,
     log_fn=None,
     progress_fn=None,
     embed_progress_fn=None,
@@ -314,7 +315,11 @@ async def run_indexing(
     # makes `file_path.relative_to(project_dir)` raise ValueError on every
     # watcher-triggered reindex.
     project_dir = Path(project_dir).resolve()
-    storage_base = project_storage_dir(config, project_dir)
+    storage_base = (
+        Path(storage_base_override)
+        if storage_base_override is not None
+        else project_storage_dir(config, project_dir)
+    )
     storage_base.mkdir(parents=True, exist_ok=True)
 
     async with _pipeline_lock(str(storage_base)):

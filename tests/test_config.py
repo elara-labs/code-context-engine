@@ -100,6 +100,20 @@ def test_marginal_ratio_default():
     assert Config().retrieval_marginal_ratio == 0.75
 
 
+def test_structural_config_defaults():
+    config = Config()
+    assert config.structural_provider == "off"
+    assert config.structural_codegraph_executable == "codegraph"
+
+
+def test_structural_config_yaml_mapping(tmp_path):
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("structural:\n  provider: codegraph\n  codegraph_executable: cg\n")
+    config = load_config(global_path=cfg_file)
+    assert config.structural_provider == "codegraph"
+    assert config.structural_codegraph_executable == "cg"
+
+
 def test_serve_config_defaults():
     config = Config()
     assert config.serve_idle_timeout_minutes == 30

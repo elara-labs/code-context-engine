@@ -26,6 +26,7 @@ def _make_mcp(tmp_path, monkeypatch, *, chunk_count: int):
         embedding_model="BAAI/bge-small-en-v1.5",
     )
     backend = MagicMock()
+    backend.count_chunks.return_value = chunk_count
     backend._vector_store.count.return_value = chunk_count
     compressor = MagicMock()
     embedder = MagicMock()
@@ -103,8 +104,11 @@ async def test_ensure_indexed_returns_false_for_empty_and_true_for_populated(
     tmp_path, monkeypatch
 ):
     mcp_empty = _make_mcp(tmp_path / "a", monkeypatch, chunk_count=0)
+    mcp_empty._index_storage_base = tmp_path / "overlay-index"
+    indexing_kwargs: list[dict] = []
 
     async def _fake_run_indexing(*a, **kw):
+        indexing_kwargs.append(kw)
         return None
 
     monkeypatch.setattr(
@@ -112,6 +116,10 @@ async def test_ensure_indexed_returns_false_for_empty_and_true_for_populated(
     )
 
     assert await mcp_empty._ensure_indexed() is False
+    await asyncio.sleep(0)
+    assert indexing_kwargs == [
+        {"full": False, "storage_base_override": tmp_path / "overlay-index"}
+    ]
 
     mcp_full = _make_mcp(tmp_path / "b", monkeypatch, chunk_count=10)
     assert await mcp_full._ensure_indexed() is True

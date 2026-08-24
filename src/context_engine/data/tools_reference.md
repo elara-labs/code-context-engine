@@ -13,8 +13,11 @@ Search the codebase using hybrid vector + BM25 retrieval.
 | top_k | integer | no | 10 | Maximum results to return |
 | max_tokens | integer | no | 8000 | Token budget for results |
 
-Returns ranked code chunks with confidence scores. Use this instead of
-Read, Grep, or Glob when exploring code.
+Returns ranked code chunks with confidence scores. When
+`structural.provider: codegraph` is enabled, the same response may also include
+structural sources, relationships, and impact items with exact file/line
+provenance. If CodeGraph is unavailable, the tool returns semantic results
+only. Use this instead of Read, Grep, or Glob when exploring code.
 
 ## expand_chunk
 

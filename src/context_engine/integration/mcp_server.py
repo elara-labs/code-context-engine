@@ -12,6 +12,7 @@ from context_engine.utils import atomic_write_text as _atomic_write_text, projec
 from mcp.server import Server
 from mcp.types import Tool, TextContent
 
+from context_engine.git.diff import GitWorktreeDiff
 from context_engine.compression.output_rules import (
     ADVERTISED_PCT,
     ESTIMATED_AVG_REPLY_TOKENS,
@@ -32,6 +33,14 @@ from context_engine.memory.grammar import (
     compress_with_counts as _grammar_compress_counted,
     expand as _grammar_expand,
     DEFAULT_LEVEL as _GRAMMAR_LEVEL,
+)
+from context_engine.retrieval import RetrievalFusionInput, fuse_retrieval_context
+from context_engine.structural import (
+    CodeGraphBaseProvider,
+    CodeGraphClient,
+    SourceRange,
+    StructuralContext,
+    merge_structural_contexts,
 )
 
 log = logging.getLogger(__name__)
@@ -368,6 +377,71 @@ def _format_results_with_overflow(inline_chunks: list, overflow_chunks: list) ->
     return "\n\n---\n\n".join(parts) if parts else "No results found."
 
 
+def _format_structural_context(structural: StructuralContext) -> str:
+    lines: list[str] = []
+    if structural.sources:
+        lines.append("Structural sources:")
+        for source in structural.sources:
+            lines.append(
+                f"- {source.path}:{source.start_line}-{source.end_line}"
+                + (f"\n{source.content}" if source.content else "")
+            )
+    if structural.relationships:
+        lines.append("Structural relationships:")
+        for relationship in structural.relationships:
+            lines.append(
+                f"- {_symbol_ref(relationship.source)} "
+                f"{relationship.kind} {_symbol_ref(relationship.target)}"
+            )
+    if structural.impact:
+        lines.append("Structural impact:")
+        for symbol in structural.impact:
+            lines.append(f"- {_symbol_ref(symbol)}")
+    return "\n".join(lines)
+
+
+def _symbol_ref(symbol) -> str:
+    location = symbol.path or "<unknown>"
+    if getattr(symbol, "line", None):
+        location = f"{location}:{symbol.line}"
+    return f"{symbol.qualified_name} ({symbol.kind or 'symbol'} at {location})"
+
+
+def _worktree_structural_overlay(
+    *,
+    query: str,
+    worktree_root: Path,
+    diff,
+) -> StructuralContext:
+    sources = []
+    for rel_path in sorted(diff.added | diff.modified):
+        source = _source_for_worktree_path(query, worktree_root, rel_path)
+        if source is not None:
+            sources.append(source)
+    return StructuralContext(sources=sources, provider="worktree")
+
+
+def _source_for_worktree_path(query: str, worktree_root: Path, rel_path: str) -> SourceRange | None:
+    path = worktree_root / rel_path
+    try:
+        content = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+    lines = content.splitlines()
+    if not lines:
+        return None
+    query_terms = [term.lower() for term in re.findall(r"\w+", query) if len(term) > 2]
+    start = 1
+    for index, line in enumerate(lines, start=1):
+        haystack = line.lower()
+        if any(term in haystack for term in query_terms):
+            start = max(1, index - 3)
+            break
+    end = min(len(lines), start + 39)
+    excerpt = "\n".join(lines[start - 1:end])
+    return SourceRange(path=rel_path, start_line=start, end_line=end, content=excerpt)
+
+
 class ContextEngineMCP:
     TOOL_NAMES = [
         "context_search",
@@ -383,12 +457,22 @@ class ContextEngineMCP:
         "set_output_compression",
     ]
 
-    def __init__(self, retriever, backend, compressor, embedder, config) -> None:
+    def __init__(
+        self,
+        retriever,
+        backend,
+        compressor,
+        embedder,
+        config,
+        *,
+        index_storage_base=None,
+    ) -> None:
         self._retriever = retriever
         self._backend = backend
         self._compressor = compressor
         self._embedder = embedder
         self._config = config
+        self._index_storage_base = index_storage_base
         # Set by _run_serve after construction; reset on every tool call
         # so the idle-shutdown watchdog knows the server is in use (#139).
         self._idle_tracker = None
@@ -973,6 +1057,56 @@ class ContextEngineMCP:
 
     # ── tool handlers ───────────────────────────────────────────────────────
 
+    async def _build_structural_context(self, query: str):
+        if getattr(self._config, "structural_provider", "off") != "codegraph":
+            return StructuralContext(), None
+        try:
+            from context_engine.git import get_worktree_diff, resolve_git_repository_context
+
+            git_context = resolve_git_repository_context(Path(self._project_dir))
+            if git_context is None:
+                return StructuralContext(), None
+            diff = get_worktree_diff(
+                git_context.worktree_root,
+                base_sha=git_context.base_sha,
+                head_sha=git_context.head_sha,
+            )
+            provider = getattr(self, "_structural_provider", None)
+            if provider is None:
+                provider = CodeGraphBaseProvider(
+                    CodeGraphClient(
+                        executable=getattr(
+                            self._config,
+                            "structural_codegraph_executable",
+                            "codegraph",
+                        )
+                    )
+                )
+            status = await provider.status(git_context.worktree_root)
+            if not status.available:
+                return StructuralContext(), diff
+            base_explore = await provider.explore(query, git_context.worktree_root)
+            base_impact = await provider.impact(query, git_context.worktree_root)
+            base = StructuralContext(
+                sources=base_explore.sources,
+                relationships=[
+                    *base_explore.relationships,
+                    *base_impact.relationships,
+                ],
+                impact=[*base_explore.impact, *base_impact.impact],
+                provider=base_explore.provider,
+                metadata={"status": status.metadata},
+            )
+            overlay = _worktree_structural_overlay(
+                query=query,
+                worktree_root=git_context.worktree_root,
+                diff=diff,
+            )
+            return merge_structural_contexts(base=base, overlay=overlay, diff=diff), diff
+        except Exception as exc:
+            log.debug("Structural context skipped: %s", exc)
+            return StructuralContext(), None
+
     async def _ensure_indexed(self) -> bool:
         """Lazy indexing on empty index.
 
@@ -985,7 +1119,12 @@ class ContextEngineMCP:
         client's side it looked like the call had hung (#67).
         """
         try:
-            count = self._backend._vector_store.count()
+            count_chunks = getattr(self._backend, "count_chunks", None)
+            count = (
+                count_chunks()
+                if count_chunks is not None
+                else self._backend._vector_store.count()
+            )
             if count > 0:
                 return True
         except Exception:
@@ -1007,7 +1146,12 @@ class ContextEngineMCP:
         async def _bg_index():
             try:
                 from context_engine.indexer.pipeline import run_indexing
-                await run_indexing(self._config, self._project_dir, full=False)
+                await run_indexing(
+                    self._config,
+                    self._project_dir,
+                    full=False,
+                    storage_base_override=getattr(self, "_index_storage_base", None),
+                )
                 log.info("Background indexing complete for %s", self._project_name)
             except Exception as exc:
                 log.warning("Background indexing failed: %s", exc)
@@ -1019,7 +1163,12 @@ class ContextEngineMCP:
             # to blocking. Better than swallowing the request.
             try:
                 from context_engine.indexer.pipeline import run_indexing
-                await run_indexing(self._config, self._project_dir, full=False)
+                await run_indexing(
+                    self._config,
+                    self._project_dir,
+                    full=False,
+                    storage_base_override=getattr(self, "_index_storage_base", None),
+                )
                 return True
             except Exception as exc:
                 log.warning("Lazy indexing failed: %s", exc)
@@ -1087,7 +1236,18 @@ class ContextEngineMCP:
         # small projects and aren't what users are searching for.
         all_chunks = [c for c in all_chunks if not _is_cce_config(c.file_path)]
 
-        inline_chunks, overflow_chunks = _split_inline_overflow(all_chunks, max_tokens)
+        structural_context, structural_diff = await self._build_structural_context(query)
+        fused_context = fuse_retrieval_context(
+            RetrievalFusionInput(
+                overlay_chunks=all_chunks,
+                structural=structural_context,
+                diff=structural_diff or GitWorktreeDiff(),
+            ),
+            max_tokens=max_tokens,
+        )
+        inline_chunks = fused_context.chunks
+        inline_ids = {chunk.id for chunk in inline_chunks}
+        overflow_chunks = [chunk for chunk in all_chunks if chunk.id not in inline_ids]
 
         # Accounting — track per-file to cap overlapping chunks
         per_file_raw: dict[str, int] = {}
@@ -1128,6 +1288,9 @@ class ContextEngineMCP:
         self._persist_current_session()
 
         body = _format_results_with_overflow(inline_chunks, overflow_chunks)
+        structural_text = _format_structural_context(fused_context.structural)
+        if structural_text:
+            body = "Relevant source chunks:\n" + body + "\n\n---\n\n" + structural_text
         # Memory nudge — appended before output compression so the agent
         # sees it as part of the tool result. Fires only when thresholds
         # are met (see _build_nudge). Increment BEFORE building the nudge

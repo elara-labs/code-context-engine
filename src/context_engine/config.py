@@ -74,6 +74,8 @@ class Config:
     # token-served reduction with no hit-rate loss.
     retrieval_marginal_ratio: float = 0.75
     bootstrap_max_tokens: int = 10000
+    structural_provider: str = "off"  # off | codegraph
+    structural_codegraph_executable: str = "codegraph"
 
     # Indexer
     indexer_watch: bool = True
@@ -143,6 +145,8 @@ _EXPECTED_TYPES: dict[str, type | tuple[type, ...]] = {
     "retrieval_top_k": int,
     "retrieval_marginal_ratio": (int, float),
     "bootstrap_max_tokens": int,
+    "structural_provider": str,
+    "structural_codegraph_executable": str,
     "indexer_watch": bool,
     "indexer_debounce_ms": int,
     "indexer_ignore": list,
@@ -170,6 +174,8 @@ def _apply_dict_to_config(config: Config, data: dict) -> None:
         ("retrieval", "top_k"): "retrieval_top_k",
         ("retrieval", "marginal_ratio"): "retrieval_marginal_ratio",
         ("retrieval", "bootstrap_max_tokens"): "bootstrap_max_tokens",
+        ("structural", "provider"): "structural_provider",
+        ("structural", "codegraph_executable"): "structural_codegraph_executable",
         ("serve", "idle_timeout_minutes"): "serve_idle_timeout_minutes",
         ("serve", "max_ort_threads"): "serve_max_ort_threads",
         ("indexer", "watch"): "indexer_watch",

@@ -70,6 +70,13 @@ def _project_slug(project_dir: Path) -> str:
     return f"{safe or 'project'}-{h}"
 
 
+def resolve_project_storage_dir(config: object, project_dir: Path) -> Path:
+    """Return the slugged per-project storage directory without filesystem changes."""
+    slug = _project_slug(project_dir)
+    storage_root = Path(config.storage_path)  # type: ignore[union-attr]
+    return storage_root / slug
+
+
 def project_storage_dir(config: object, project_dir: Path) -> Path:
     """Return the per-project storage directory under ``config.storage_path``.
 
@@ -81,9 +88,8 @@ def project_storage_dir(config: object, project_dir: Path) -> Path:
     exists but the new slug directory does not, the legacy directory is
     renamed in place to preserve existing users' data.
     """
-    slug = _project_slug(project_dir)
+    slug_path = resolve_project_storage_dir(config, project_dir)
     storage_root = Path(config.storage_path)  # type: ignore[union-attr]
-    slug_path = storage_root / slug
     legacy_path = storage_root / project_dir.resolve().name
 
     if not slug_path.exists() and legacy_path.exists():

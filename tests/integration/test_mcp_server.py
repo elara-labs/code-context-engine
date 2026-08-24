@@ -1,6 +1,17 @@
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+from context_engine.cli import _run_index, _runtime_storage_backend, _runtime_storage_base
 from context_engine.integration.mcp_server import ContextEngineMCP
+from context_engine.models import Chunk, ChunkType
+from context_engine.retrieval.retriever import HybridRetriever
+from context_engine.structural import (
+    ProviderStatus,
+    Relationship,
+    SourceRange,
+    StructuralContext,
+    SymbolKey,
+)
+from tests.test_git_repository_context import init_repo
 
 
 def test_mcp_server_has_required_tools():
@@ -34,6 +45,287 @@ def _make_server(tmp_path):
     server._searches_since_last_decision = 0
     server._has_recorded_decision = False
     return server
+
+
+def _embedded_chunk(chunk_id, file_path, content):
+    return Chunk(
+        id=chunk_id,
+        content=content,
+        chunk_type=ChunkType.FUNCTION,
+        file_path=file_path,
+        start_line=1,
+        end_line=2,
+        language="python",
+        embedding=[0.1, 0.2, 0.3, 0.4],
+    )
+
+
+class _StubEmbedder:
+    def embed_query(self, query):
+        return [0.1, 0.2, 0.3, 0.4]
+
+
+def _symbol(name, path, line=1):
+    return SymbolKey(qualified_name=name, kind="function", path=path, line=line)
+
+
+class _StubStructuralProvider:
+    def __init__(self, context, *, available=True):
+        self._context = context
+        self._available = available
+
+    async def status(self, project_root):
+        return ProviderStatus("codegraph", self._available, metadata={"index": {"state": "complete"}})
+
+    async def explore(self, query, project_root):
+        return self._context
+
+    async def impact(self, symbol, project_root):
+        return StructuralContext(impact=list(self._context.impact), provider="codegraph")
+
+
+@pytest.mark.asyncio
+async def test_context_search_uses_worktree_overlay_version(tmp_path, monkeypatch):
+    repo = init_repo(tmp_path / "repo")
+    (repo / "base.py").write_text("def base():\n    return 'worktree value'\n")
+    cfg = MagicMock()
+    cfg.storage_path = str(tmp_path / "storage")
+    cfg.output_compression = "off"
+    cfg.compression_level = "off"
+    cfg.retrieval_confidence_threshold = 0.0
+    cfg.retrieval_marginal_ratio = 0.0
+    monkeypatch.chdir(repo)
+
+    _, backend, _ = _runtime_storage_backend(cfg, repo)
+    await backend._base.ingest(
+        [_embedded_chunk("base-old", "base.py", "def base():\n    return 'base value'\n")],
+        [],
+        [],
+    )
+    await backend.ingest(
+        [_embedded_chunk("overlay-new", "base.py", "def base():\n    return 'worktree value'\n")],
+        [],
+        [],
+    )
+
+    server = _make_server(tmp_path)
+    server._config = cfg
+    server._backend = backend
+    server._retriever = HybridRetriever(backend=backend, embedder=_StubEmbedder())
+    server._compressor = MagicMock()
+    server._compressor.compress = AsyncMock(side_effect=lambda chunks, _level: chunks)
+    server._session_capture = MagicMock()
+    server._session_capture.touch_files = MagicMock()
+    server._session_capture.get_session_snapshot = MagicMock(return_value={
+        "decisions": [],
+        "code_areas": [],
+        "touched_files": {},
+    })
+    server._persist_current_session = MagicMock()
+    server._record = MagicMock()
+    server._append_audit_log = MagicMock()
+    server._session_id = "test-session"
+
+    result = await server._handle_context_search({"query": "base value", "top_k": 5})
+    text = result[0].text
+
+    assert "worktree value" in text
+    assert "base value" not in text
+
+
+@pytest.mark.asyncio
+async def test_context_search_returns_codegraph_structural_context(tmp_path, monkeypatch):
+    repo = init_repo(tmp_path / "repo")
+    cfg = MagicMock()
+    cfg.storage_path = str(tmp_path / "storage")
+    cfg.output_compression = "off"
+    cfg.compression_level = "off"
+    cfg.retrieval_confidence_threshold = 0.0
+    cfg.retrieval_marginal_ratio = 0.0
+    cfg.structural_provider = "codegraph"
+    monkeypatch.chdir(repo)
+
+    _, backend, _ = _runtime_storage_backend(cfg, repo)
+    await backend._base.ingest(
+        [_embedded_chunk("semantic", "base.py", "def base():\n    return 'semantic'\n")],
+        [],
+        [],
+    )
+    server = _make_server(tmp_path)
+    server._config = cfg
+    server._project_dir = str(repo)
+    server._backend = backend
+    server._retriever = HybridRetriever(backend=backend, embedder=_StubEmbedder())
+    server._compressor = MagicMock()
+    server._compressor.compress = AsyncMock(side_effect=lambda chunks, _level: chunks)
+    server._session_capture = MagicMock()
+    server._session_capture.touch_files = MagicMock()
+    server._session_capture.get_session_snapshot = MagicMock(return_value={
+        "decisions": [],
+        "code_areas": [],
+        "touched_files": {},
+    })
+    server._persist_current_session = MagicMock()
+    server._record = MagicMock()
+    server._append_audit_log = MagicMock()
+    server._session_id = "test-session"
+    auth = _symbol("auth.login", "auth.py", line=12)
+    token = _symbol("token.validate", "token.py", line=3)
+    server._structural_provider = _StubStructuralProvider(StructuralContext(
+        sources=[SourceRange("auth.py", 12, 18, "def login(): pass")],
+        relationships=[Relationship(auth, token, "calls")],
+        impact=[token],
+        provider="codegraph",
+    ))
+
+    result = await server._handle_context_search({"query": "login", "top_k": 5})
+    text = result[0].text
+
+    assert "Relevant source chunks:" in text
+    assert "def base()" in text
+    assert "Structural sources:" in text
+    assert "auth.py:12-18" in text
+    assert "auth.login (function at auth.py:12) calls token.validate (function at token.py:3)" in text
+    assert "Structural impact:" in text
+
+
+@pytest.mark.asyncio
+async def test_context_search_shadows_modified_codegraph_base_source(tmp_path, monkeypatch):
+    repo = init_repo(tmp_path / "repo")
+    (repo / "base.py").write_text("def base():\n    return 'worktree auth'\n")
+    cfg = MagicMock()
+    cfg.storage_path = str(tmp_path / "storage")
+    cfg.output_compression = "off"
+    cfg.compression_level = "off"
+    cfg.retrieval_confidence_threshold = 0.0
+    cfg.retrieval_marginal_ratio = 0.0
+    cfg.structural_provider = "codegraph"
+    monkeypatch.chdir(repo)
+
+    _, backend, _ = _runtime_storage_backend(cfg, repo)
+    await backend.ingest(
+        [_embedded_chunk("overlay", "base.py", "def base():\n    return 'worktree auth'\n")],
+        [],
+        [],
+    )
+    server = _make_server(tmp_path)
+    server._config = cfg
+    server._project_dir = str(repo)
+    server._backend = backend
+    server._retriever = HybridRetriever(backend=backend, embedder=_StubEmbedder())
+    server._compressor = MagicMock()
+    server._compressor.compress = AsyncMock(side_effect=lambda chunks, _level: chunks)
+    server._session_capture = MagicMock()
+    server._session_capture.touch_files = MagicMock()
+    server._session_capture.get_session_snapshot = MagicMock(return_value={
+        "decisions": [],
+        "code_areas": [],
+        "touched_files": {},
+    })
+    server._persist_current_session = MagicMock()
+    server._record = MagicMock()
+    server._append_audit_log = MagicMock()
+    server._session_id = "test-session"
+    server._structural_provider = _StubStructuralProvider(StructuralContext(
+        sources=[SourceRange("base.py", 1, 2, "def base():\n    return 'base auth'")],
+        provider="codegraph",
+    ))
+
+    result = await server._handle_context_search({"query": "auth", "top_k": 5})
+    text = result[0].text
+
+    assert "worktree auth" in text
+    assert "base auth" not in text
+
+
+@pytest.mark.asyncio
+async def test_context_search_degrades_when_codegraph_unavailable(tmp_path, monkeypatch):
+    repo = init_repo(tmp_path / "repo")
+    cfg = MagicMock()
+    cfg.storage_path = str(tmp_path / "storage")
+    cfg.output_compression = "off"
+    cfg.compression_level = "off"
+    cfg.retrieval_confidence_threshold = 0.0
+    cfg.retrieval_marginal_ratio = 0.0
+    cfg.structural_provider = "codegraph"
+    monkeypatch.chdir(repo)
+
+    _, backend, _ = _runtime_storage_backend(cfg, repo)
+    await backend._base.ingest(
+        [_embedded_chunk("semantic", "base.py", "def base():\n    return 'semantic'\n")],
+        [],
+        [],
+    )
+    server = _make_server(tmp_path)
+    server._config = cfg
+    server._project_dir = str(repo)
+    server._backend = backend
+    server._retriever = HybridRetriever(backend=backend, embedder=_StubEmbedder())
+    server._compressor = MagicMock()
+    server._compressor.compress = AsyncMock(side_effect=lambda chunks, _level: chunks)
+    server._session_capture = MagicMock()
+    server._session_capture.touch_files = MagicMock()
+    server._session_capture.get_session_snapshot = MagicMock(return_value={
+        "decisions": [],
+        "code_areas": [],
+        "touched_files": {},
+    })
+    server._persist_current_session = MagicMock()
+    server._record = MagicMock()
+    server._append_audit_log = MagicMock()
+    server._session_id = "test-session"
+    server._structural_provider = _StubStructuralProvider(
+        StructuralContext(),
+        available=False,
+    )
+
+    result = await server._handle_context_search({"query": "semantic", "top_k": 5})
+    text = result[0].text
+
+    assert "def base()" in text
+    assert "Structural sources:" not in text
+
+
+@pytest.mark.asyncio
+async def test_runtime_backend_refreshes_diff_after_worktree_change(tmp_path):
+    repo = init_repo(tmp_path / "repo")
+    cfg = MagicMock()
+    cfg.storage_path = str(tmp_path / "storage")
+    _, backend, refresh_diff = _runtime_storage_backend(cfg, repo)
+    await backend._base.ingest(
+        [_embedded_chunk("base-old", "base.py", "def base():\n    return 'base value'\n")],
+        [],
+        [],
+    )
+
+    assert await backend.get_chunk_by_id("base-old") is not None
+
+    (repo / "base.py").write_text("def base():\n    return 'worktree value'\n")
+    assert refresh_diff is not None
+    refresh_diff()
+
+    assert await backend.get_chunk_by_id("base-old") is None
+
+
+@pytest.mark.asyncio
+async def test_run_index_uses_runtime_storage_base_for_git_repositories(tmp_path, monkeypatch):
+    repo = init_repo(tmp_path / "repo")
+    cfg = MagicMock()
+    cfg.storage_path = str(tmp_path / "storage")
+    expected_storage = _runtime_storage_base(cfg, repo)
+    indexing_kwargs: list[dict] = []
+
+    async def fake_run_indexing(*args, **kwargs):
+        from context_engine.indexer.pipeline import IndexResult
+
+        indexing_kwargs.append(kwargs)
+        return IndexResult()
+
+    monkeypatch.setattr("context_engine.indexer.pipeline.run_indexing", fake_run_indexing)
+
+    await _run_index(cfg, str(repo))
+
+    assert indexing_kwargs[0]["storage_base_override"] == expected_storage
 
 
 def test_apply_output_compression_appends_directive(tmp_path):

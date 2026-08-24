@@ -35,6 +35,10 @@ retrieval:
   marginal_ratio: 0.75    # Stop adding results once score drops below this fraction of the
                            # top score. 0 disables (always fill to top_k). Default 0.75.
 
+structural:
+  provider: off           # off | codegraph
+  codegraph_executable: codegraph
+
 embedding:
   model: BAAI/bge-small-en-v1.5  # Embedding model (fastembed-compatible)
 
@@ -136,6 +140,22 @@ At runtime, Claude can pass `top_k` and `max_tokens` directly to `context_search
 ```
 context_search(query="payment processing", top_k=5, max_tokens=3000)
 ```
+
+## Structural Context
+
+Enable CodeGraph structural context in global or project config:
+
+```yaml
+structural:
+  provider: codegraph
+  codegraph_executable: codegraph
+```
+
+When enabled, `context_search` adds CodeGraph-derived structural sources,
+relationships, and impact items to the normal semantic chunks. All structural
+items include file/line provenance when CodeGraph provides it. If CodeGraph is
+missing, uninitialized, indexing, or degraded, `context_search` falls back to
+semantic-only retrieval.
 
 ---
 

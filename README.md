@@ -519,6 +519,7 @@ All other text files are chunked by line range. Binary files are skipped.
 | [How It Works](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/How-It-Works.md) | Full 9-stage pipeline |
 | [CLI Reference](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/CLI-Reference.md) | Every command with output |
 | [Configuration](https://github.com/elara-labs/code-context-engine/blob/main/docs/wiki/Configuration.md) | All config options |
+| [CodeGraph Worktree Integration Discovery](docs/codegraph-worktree-integration-discovery.md) | Phase 0 discovery for shared base plus worktree overlay integration |
 
 ---
 
