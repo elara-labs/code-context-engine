@@ -86,6 +86,12 @@ def test_trailing_slash_only_matches_dirs():
     assert matches_any("src/build", is_dir=True, patterns=p)
 
 
+def test_trailing_slash_matches_root_dot_directory():
+    p = [".playwright/"]
+    assert matches_any(".playwright", is_dir=True, patterns=p)
+    assert matches_any("./.playwright", is_dir=True, patterns=p)
+
+
 # ── Empty / no-match guards ────────────────────────────────────────────────
 
 def test_empty_patterns_matches_nothing():
@@ -110,18 +116,21 @@ def test_pipeline_walk_respects_cceignore(tmp_path):
     (p / "trace.log").write_text("noisy\n")
     (p / "scratch").mkdir()
     (p / "scratch" / "data.txt").write_text("temp\n")
+    (p / ".playwright").mkdir()
+    (p / ".playwright" / "state.json").write_text("{}\n")
     (p / "src").mkdir()
     (p / "src" / "lib.py").write_text("def lib(): pass\n")
 
     files = list(_iter_project_files(
         p, ignore_set=set(), skip_extensions=_SKIP_EXTENSIONS,
-        cceignore_patterns=["*.log", "scratch/"],
+        cceignore_patterns=["*.log", "scratch/", ".playwright/"],
     ))
     names = sorted(f.name for f in files)
     assert "main.py" in names
     assert "lib.py" in names
     assert "trace.log" not in names
     assert "data.txt" not in names  # parent dir excluded by `scratch/`
+    assert "state.json" not in names
 
 
 def test_pipeline_no_cceignore_means_no_filter(tmp_path):
