@@ -65,7 +65,7 @@ def matches_any(rel_path: str, is_dir: bool, patterns: list[str]) -> bool:
     if not patterns:
         return False
     # Normalise: forward slashes, no leading "./"
-    rel = rel_path.replace("\\", "/").lstrip("./")
+    rel = rel_path.replace("\\", "/").removeprefix("./")
     name = rel.rsplit("/", 1)[-1]
     for pat in patterns:
         # Trailing slash → directory-only pattern.
