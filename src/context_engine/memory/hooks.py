@@ -312,7 +312,15 @@ async def handle_post_tool_use(request: web.Request) -> web.Response:
 
     tool_name = data.get("tool_name", "unknown")
     tool_input = data.get("tool_input") or data.get("tool_input_json") or {}
-    tool_output = data.get("tool_output") or data.get("tool_output_json") or ""
+    # Claude Code's PostToolUse payload names the result `tool_response`
+    # (often an object, e.g. {"stdout": ..., "stderr": ...} for Bash); the
+    # installed hook script forwards it unchanged.
+    tool_output = (
+        data.get("tool_output")
+        or data.get("tool_output_json")
+        or data.get("tool_response")
+        or ""
+    )
     prompt_number = data.get("prompt_number")
 
     raw_input = tool_input if isinstance(tool_input, str) else json.dumps(tool_input)

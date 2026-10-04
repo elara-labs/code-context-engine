@@ -254,6 +254,35 @@ async def test_post_tool_use_inserts_event_and_payload(hook_app, aiohttp_client)
     assert payload["size_bytes"] > 0
 
 
+async def test_post_tool_use_stores_claude_code_tool_response(hook_app, aiohttp_client):
+    """Claude Code's own PostToolUse payload carries the result as
+    `tool_response` (an object for Bash), not `tool_output`; it must still
+    land in raw_output instead of being stored empty."""
+    app, conn = hook_app
+    client = await aiohttp_client(app)
+    await client.post(
+        "/hooks/UserPromptSubmit", json={"session_id": "abc", "prompt": "run it"},
+    )
+    resp = await client.post(
+        "/hooks/PostToolUse",
+        json={
+            "session_id": "abc",
+            "transcript_path": "/tmp/abc.jsonl",
+            "cwd": "/tmp",
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo hello", "description": "Say hello"},
+            "tool_response": {"stdout": "hello", "stderr": "", "interrupted": False},
+        },
+    )
+    assert resp.status == 200
+    payload = conn.execute(
+        "SELECT p.raw_output FROM tool_events e "
+        "JOIN tool_event_payloads p ON p.id = e.payload_id"
+    ).fetchone()
+    assert '"stdout": "hello"' in payload["raw_output"]
+
+
 async def test_stop_enqueues_turn_compression(hook_app, aiohttp_client):
     app, conn = hook_app
     client = await aiohttp_client(app)
