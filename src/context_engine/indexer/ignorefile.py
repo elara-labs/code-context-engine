@@ -64,8 +64,13 @@ def matches_any(rel_path: str, is_dir: bool, patterns: list[str]) -> bool:
     """
     if not patterns:
         return False
-    # Normalise: forward slashes, no leading "./"
-    rel = rel_path.replace("\\", "/").lstrip("./")
+    # Normalise: forward slashes, no leading "./" or "/". Not `lstrip("./")`:
+    # that strips a character *set*, so ".env" became "env" and dotted
+    # patterns never matched root-level entries (#165).
+    rel = rel_path.replace("\\", "/")
+    while rel.startswith("./"):
+        rel = rel[2:]
+    rel = rel.lstrip("/")
     name = rel.rsplit("/", 1)[-1]
     for pat in patterns:
         # Trailing slash → directory-only pattern.

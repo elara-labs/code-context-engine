@@ -92,6 +92,23 @@ def test_empty_patterns_matches_nothing():
     assert not matches_any("anything.txt", is_dir=False, patterns=[])
 
 
+@pytest.mark.parametrize("rel,is_dir,pattern", [
+    (".pytest-tmp-ci", True, ".pytest-tmp*/"),
+    (".env", False, ".env"),
+    (".mcp.json", False, ".mcp.json"),
+    (".claude/settings.local.json", False, ".claude/settings.local.json"),
+    ("./.env", False, ".env"),
+])
+def test_dotted_patterns_match_root_entries(rel, is_dir, pattern):
+    """`lstrip("./")` stripped every leading dot, so `.env` was matched as
+    `env` and dotted patterns never matched at the root (#165)."""
+    assert matches_any(rel, is_dir=is_dir, patterns=[pattern])
+
+
+def test_leading_dot_is_not_dropped_from_the_name():
+    assert not matches_any(".env", is_dir=False, patterns=["env"])
+
+
 def test_anchored_leading_slash_is_treated_as_root_relative():
     """Leading `/` is stripped — patterns are root-relative anyway."""
     p = ["/main.py"]

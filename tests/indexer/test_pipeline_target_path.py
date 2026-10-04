@@ -83,6 +83,27 @@ async def test_target_path_respects_cceignore(project):
 
 
 @pytest.mark.asyncio
+async def test_directory_target_respects_cceignore(project):
+    """`cce index --path <dir>` must not bypass a rule matching <dir> or an
+    ancestor, nor evaluate root-relative rules against <dir>-relative
+    paths (#165)."""
+    project_dir, config = project
+    (project_dir / ".cceignore").write_text("data/\nsrc/gen/\n")
+    for rel in ("data/notes.py", "data/sub/more.py", "src/gen/out.py", "src/ok.py"):
+        path = project_dir / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("def f():\n    return 1\n")
+
+    for target in ("data", "data/sub"):
+        result = await run_indexing(config, str(project_dir), target_path=target)
+        assert result.indexed_files == [], f"{target} should have been ignored"
+        assert not result.errors
+
+    result = await run_indexing(config, str(project_dir), target_path="src")
+    assert [f.replace("\\", "/") for f in result.indexed_files] == ["src/ok.py"]
+
+
+@pytest.mark.asyncio
 async def test_target_path_normal_file_still_indexed(project):
     """Sanity: the filters must not over-block ordinary files."""
     project_dir, config = project

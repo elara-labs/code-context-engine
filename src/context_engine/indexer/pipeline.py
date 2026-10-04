@@ -186,6 +186,7 @@ def _iter_project_files(
     *,
     redact_secrets: bool = True,
     cceignore_patterns: list[str] | None = None,
+    relative_to: Path | None = None,
 ) -> Iterable[Path]:
     """Yield files under `root` respecting ignore list, skipping symlinks.
 
@@ -199,16 +200,21 @@ def _iter_project_files(
 
     `cceignore_patterns` (typically loaded from `.cceignore`) supplements
     the name-only `ignore_set` with gitignore-style globs evaluated
-    against the path relative to `root`.
+    against the path relative to `relative_to` (default: `root`). A walk
+    started below the project root must pass the project root here, or
+    root-relative patterns (`vendor/`, `data/`) are matched against the
+    wrong path.
     """
     from context_engine.indexer.secrets import is_secret_file as _is_secret_file
     from context_engine.indexer.ignorefile import matches_any as _ignore_matches
     patterns = cceignore_patterns or []
     seen: set[Path] = set()
 
+    base = relative_to if relative_to is not None else root
+
     def _rel(entry: Path) -> str:
         try:
-            return str(entry.relative_to(root)).replace("\\", "/")
+            return str(entry.relative_to(base)).replace("\\", "/")
         except ValueError:
             return entry.name
 
@@ -421,11 +427,30 @@ async def _run_indexing_locked(
             else:
                 file_iter = [target]
         elif target.is_dir():
-            file_iter = list(_iter_project_files(
-                target, ignore_set, _SKIP_EXTENSIONS,
-                redact_secrets=getattr(config, "indexer_redact_secrets", True),
-                cceignore_patterns=cceignore_patterns,
-            ))
+            # A directory target must not bypass exclusions that apply to
+            # the directory itself or one of its ancestors (#165): the walk
+            # below only tests entries *inside* it.
+            rel = str(target.relative_to(project_dir))
+            rel_posix = rel.replace("\\", "/")
+            parts = [] if rel_posix in ("", ".") else rel_posix.split("/")
+            from context_engine.indexer.ignorefile import matches_any
+            if any(part in ignore_set for part in parts) or (
+                cceignore_patterns and any(
+                    matches_any("/".join(parts[:i]), True, cceignore_patterns)
+                    for i in range(1, len(parts) + 1)
+                )
+            ):
+                if log_fn:
+                    log_fn(f"  [skip] {rel} (ignored directory)")
+                result.skipped_files.append(rel)
+                file_iter = []
+            else:
+                file_iter = list(_iter_project_files(
+                    target, ignore_set, _SKIP_EXTENSIONS,
+                    redact_secrets=getattr(config, "indexer_redact_secrets", True),
+                    cceignore_patterns=cceignore_patterns,
+                    relative_to=project_dir,
+                ))
         else:
             # Not on disk. The watcher enqueues deletions through the same
             # code path — if the manifest still tracks this file, prune its
