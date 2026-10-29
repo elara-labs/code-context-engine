@@ -3505,6 +3505,17 @@ async def _run_index(
     stats_path.write_text(json.dumps(stats), encoding="utf-8")
 
 
+# Headless agent runs (e.g. `claude -p` workers) need the MCP tools but not
+# live capture, and their host may kill the server without cleanup. With this
+# set, `cce serve` starts no hook listener, so it never publishes, overwrites
+# or deletes serve.port and the long-running sessions keep their rendezvous.
+NO_HOOK_SERVER_ENV = "CCE_NO_HOOK_SERVER"
+
+
+def _hook_server_disabled() -> bool:
+    return os.environ.get(NO_HOOK_SERVER_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+
+
 async def _run_serve(config) -> None:
     """Start MCP server with live file watcher."""
     import logging
@@ -3645,13 +3656,16 @@ async def _run_serve(config) -> None:
     # (capture is a non-critical feature; retrieval still works without it).
     hook_runner = None
     hook_port = None
-    try:
-        from context_engine.memory.hook_server import start_hook_server
-        hook_runner, hook_port = await start_hook_server(
-            storage_base=storage_base, project_name=project_name,
-        )
-    except Exception as exc:
-        _log.warning("Memory hook server failed to start: %s", exc)
+    if _hook_server_disabled():
+        _log.info("Memory hook server disabled by %s", NO_HOOK_SERVER_ENV)
+    else:
+        try:
+            from context_engine.memory.hook_server import start_hook_server
+            hook_runner, hook_port = await start_hook_server(
+                storage_base=storage_base, project_name=project_name,
+            )
+        except Exception as exc:
+            _log.warning("Memory hook server failed to start: %s", exc)
 
     # Memory compression worker — drains pending_compressions in the background.
     # Each iteration opens a thread-local SQLite connection inside

@@ -56,3 +56,19 @@ def test_serve_reloads_config_from_project_dir(runner, tmp_path):
         "serve --project-dir loaded config from launch cwd, not the target "
         "project — the project's .context-engine.yaml was ignored."
     )
+
+
+@pytest.mark.parametrize(
+    ("value", "disabled"),
+    [(None, False), ("", False), ("0", False), ("1", True), ("true", True), (" Yes ", True), ("on", True)],
+)
+def test_hook_server_disabled_by_env(monkeypatch, value, disabled):
+    """Headless agent runs set CCE_NO_HOOK_SERVER so their `cce serve` never
+    touches serve.port (their host may kill it without cleanup)."""
+    from context_engine import cli
+
+    if value is None:
+        monkeypatch.delenv(cli.NO_HOOK_SERVER_ENV, raising=False)
+    else:
+        monkeypatch.setenv(cli.NO_HOOK_SERVER_ENV, value)
+    assert cli._hook_server_disabled() is disabled
