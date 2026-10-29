@@ -9,6 +9,7 @@ process). Stopped gracefully on shutdown.
 """
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 import os
@@ -167,6 +168,35 @@ def _publish_port(
                 log.warning("serve.port write failed for %s: %s", f, exc)
 
 
+def _release_port_files(
+    port_files: list[Path], own: int | None, lock_path: Path, registry: Path
+) -> None:
+    """Remove, or hand over to a live peer, the port files still holding `own`."""
+    # Compare-and-delete under the same lock as publication, so a peer
+    # cannot write its port between the read and the unlink.
+    with _port_files_lock(lock_path) as held:
+        if not held and own is not None:
+            # Unknown state: leave the files rather than risk deleting a
+            # peer's rendezvous (a stale file is caught by the hook's
+            # socket-liveness probe).
+            return
+        if own is not None:
+            (registry / str(own)).unlink(missing_ok=True)
+        successor = _live_successor(registry, own)
+        for f in port_files:
+            try:
+                if own is not None and f.read_text(encoding="utf-8").strip() != str(own):
+                    continue
+                if successor is not None:
+                    f.write_text(str(successor), encoding="utf-8")
+                    continue
+                f.unlink(missing_ok=True)
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                log.warning("serve.port cleanup failed for %s: %s", f, exc)
+
+
 def _find_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
@@ -233,30 +263,14 @@ async def start_hook_server(
         # server started after a long-running one (e.g. a headless agent run
         # next to an interactive session) would leave the survivor without
         # a rendezvous on exit.
-        own = bound.get("port")
-        # Compare-and-delete under the same lock as publication, so a peer
-        # cannot write its port between the read and the unlink.
-        with _port_files_lock(lock_path) as held:
-            if not held and own is not None:
-                # Unknown state: leave the files rather than risk deleting a
-                # peer's rendezvous (a stale file is caught by the hook's
-                # socket-liveness probe).
-                return
-            if own is not None:
-                (registry / str(own)).unlink(missing_ok=True)
-            successor = _live_successor(registry, own)
-            for f in app.get("_port_files", []):
-                try:
-                    if own is not None and f.read_text(encoding="utf-8").strip() != str(own):
-                        continue
-                    if successor is not None:
-                        f.write_text(str(successor), encoding="utf-8")
-                        continue
-                    f.unlink(missing_ok=True)
-                except FileNotFoundError:
-                    pass
-                except OSError as exc:
-                    log.warning("serve.port cleanup failed for %s: %s", f, exc)
+        #
+        # The lock wait (up to _PORT_LOCK_TIMEOUT_S) and the peer probes are
+        # blocking, so they run in a worker thread to keep the event loop
+        # free for the other cleanup handlers.
+        await asyncio.to_thread(
+            _release_port_files,
+            app.get("_port_files", []), bound.get("port"), lock_path, registry,
+        )
 
     app.on_cleanup.append(_close_db)
     app.on_cleanup.append(_unlink_port_files)
@@ -269,7 +283,9 @@ async def start_hook_server(
     await site.start()
     bound["port"] = port
 
-    _publish_port([port_file, default_rendezvous], port, lock_path, registry)
+    await asyncio.to_thread(
+        _publish_port, [port_file, default_rendezvous], port, lock_path, registry
+    )
 
     log.info("Memory hook server listening on 127.0.0.1:%d", port)
     return runner, port

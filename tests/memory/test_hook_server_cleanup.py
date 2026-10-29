@@ -4,6 +4,7 @@ Issue #66: stale serve.port files survived `cce serve` exits, and the next
 session's hooks would POST to a dead port. The on_cleanup hook now unlinks
 both the storage_base and rendezvous port files.
 """
+import asyncio
 import threading
 from pathlib import Path
 
@@ -230,3 +231,46 @@ async def test_start_prunes_registry_entries_of_dead_peers(tmp_path, monkeypatch
     finally:
         await second.cleanup()
         await first.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_waiting_on_busy_lock_does_not_block_event_loop(tmp_path, monkeypatch):
+    """The port-files lock is polled with time.sleep: cleanup must wait for it
+    in a worker thread, or a peer holding the lock freezes the event loop."""
+    fake_home = tmp_path / "fake_home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    storage_base = tmp_path / "storage"
+    storage_base.mkdir()
+
+    runner, _ = await start_hook_server(storage_base=storage_base, project_name="proj_loop")
+
+    locked, release = threading.Event(), threading.Event()
+
+    def hold_lock():
+        with hook_server._port_files_lock(storage_base / hook_server.PORT_LOCK_NAME):
+            locked.set()
+            release.wait(timeout=5)
+
+    holder = threading.Thread(target=hold_lock)
+    holder.start()
+    assert locked.wait(timeout=5)
+    ticks = 0
+
+    async def ticker():
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.01)
+            ticks += 1
+
+    tick_task = asyncio.create_task(ticker())
+    cleanup = asyncio.create_task(runner.cleanup())
+    await asyncio.sleep(0.3)
+    ticks_while_waiting = ticks
+    release.set()
+    await cleanup
+    tick_task.cancel()
+    holder.join(timeout=5)
+
+    assert ticks_while_waiting >= 5
+    assert not (storage_base / "serve.port").exists()
